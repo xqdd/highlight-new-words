@@ -49,6 +49,7 @@ import {
   type WordRow,
 } from './model';
 import { usePopupData } from './usePopupData';
+import { createSyncAllRunner, syncAllOpenState } from './syncAllRunner';
 // 预设切换与选项页共用同一实现（切换时按新样式重新着色“按词书分色”），避免两处行为不一致
 import { applyPreset, presetGroups } from '../options/lib/appearance';
 
@@ -560,22 +561,38 @@ async function syncChannel(c: SyncChannel) {
   }
 }
 
-/** 全部同步：后台支持 syncAll 时一次完成并给出汇总文案；否则逐个调用 */
-async function syncAll() {
-  setSyncing('all', true);
-  try {
-    const res = await sendToBackground('syncAll', {}).catch(() => undefined);
-    if (res) {
-      data.statusSummary.value = res.summary;
-      showToast(res.message || (res.ok ? '已全部同步' : '部分同步失败'));
-    } else {
-      for (const c of syncChannels.value) await syncChannel(c);
-    }
-  } finally {
-    setSyncing('all', false);
+/**
+ * 全部同步：后台受理（syncAll background=true）后立即返回，popup 按约 1.5 秒轮询 getStatusSummary().syncAll，
+ * 完成后 toast 显示后台汇总文案；开启欧路时整轮可能要 1 分多钟，期间关闭 popup 不影响后台同步。
+ * 后台不支持 syncAll（旧版本）时退回逐个同步。流程细节见 syncAllRunner。
+ */
+const syncAllRunner = createSyncAllRunner({
+  requestSyncAll: (d) => sendToBackground('syncAll', d),
+  getSummary: () => sendToBackground('getStatusSummary', {}),
+  onSummary: (s) => (data.statusSummary.value = s),
+  onRunningChange: (on) => setSyncing('all', on),
+  onDone: (message, ok) => {
+    showToast(message || (ok ? '已全部同步' : '部分同步失败'));
     data.refreshSummary(0);
-  }
+  },
+  fallback: async () => {
+    for (const c of syncChannels.value) await syncChannel(c);
+  },
+});
+function syncAll() {
+  void syncAllRunner.start();
 }
+// popup 打开后首次拿到总状态：后台仍在“全部同步”则接着显示进行中并轮询；刚完成不久则提示上次结果
+const stopWatchSyncAllOnOpen = watch(
+  () => data.statusSummary.value,
+  (summary) => {
+    if (!summary) return;
+    stopWatchSyncAllOnOpen();
+    const st = syncAllOpenState(summary.syncAll, Date.now());
+    if (st?.kind === 'running') syncAllRunner.resume(summary);
+    else if (st?.kind === 'recent') showToast(st.text);
+  },
+);
 
 /** 关闭升级提示（后台清除 updateNotice） */
 function dismissUpdate() {
@@ -627,6 +644,8 @@ onBeforeUnmount(() => {
   removeEventListener('offline', onOffline);
   clearTimeout(toastTimer);
   clearTimeout(confirmTimer);
+  // 只停 popup 侧轮询，后台同步继续
+  syncAllRunner.stop();
 });
 </script>
 
@@ -1036,6 +1055,7 @@ h2 { margin: 0; font-size: 14px; font-weight: 650; }
 }
 .look-current { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .look-name { font-size: 13px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.look-toggle h2 { flex: none; white-space: nowrap; }
 .look-toggle .caret { flex: none; color: var(--text-2); transition: transform .15s; }
 .look.open .look-toggle .caret { transform: rotate(90deg); }
 .divider { width: 1px; align-self: stretch; margin: 6px 2px; background: var(--border); flex: none; }
