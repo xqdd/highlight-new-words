@@ -137,8 +137,8 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
       deletableBooks: books.filter((b) => b.kind === 'source' && !!getProviderInfo(b.providerId ?? '')?.capabilities.delete),
     };
     view.open(mark, data);
-    // 自动发音（background 根据 settings.tts.enabled 决定是否朗读；unavailable 时页面内兜底）
-    void speakWord(lemma, false, settings.tts);
+    // 自动发音读页面实际词形（ran 读 ran，与卡片发音按钮一致）；background 根据 settings.tts.enabled 决定是否朗读，unavailable 时页面内兜底
+    void speakWord(data.surface, false, settings.tts);
     const entry = await dictionary.lookup(lemma);
     if (view.anchor === mark) view.update({ ...data, entry });
   }
