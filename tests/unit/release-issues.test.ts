@@ -38,12 +38,11 @@ describe('release: 已修复条目的 platform 垫片接入点', () => {
     expect(src).not.toMatch(/browser\.tts/);
   });
 
-  it('#5 TtsSection 用 getPlatformVoices，“获取更多声音”仅 chrome 显示', () => {
+  it('#5 TtsSection 用 getPlatformVoices；SpeakIt 已从商店下架，不再放“获取更多声音”链接', () => {
     const src = read('src/entrypoints/options/sections/TtsSection.vue');
     expect(src).toMatch(/getPlatformVoices\(/);
     expect(src).not.toMatch(/browser\.tts/);
-    expect(src).toMatch(/getBrowserFamily\(\) === 'chrome'/);
-    expect(src).toMatch(/<a v-if="isChrome"[^>]*speakit/);
+    expect(src).not.toMatch(/speakit/i);
   });
 
   it('#6 popup 与欢迎页接入网站访问权限检测', () => {
