@@ -27,6 +27,22 @@ export const ATTR_TR_MODE = 'data-hnw-tr';
 export const ATTR_TR_TEXT = 'data-tr';
 /** hnw-mark 上的标记：所在上下文为深色背景（按父元素文字颜色亮度判断），样式据此换用提亮后的颜色 */
 export const ATTR_ON_DARK = 'data-hnw-dark';
+/** hnw-mark 上的标记：位于链接内（文字色类样式改为“保留链接色 + 同色浅底”，避免与链接色混淆） */
+export const ATTR_IN_LINK = 'data-hnw-link';
+/**
+ * hnw-mark 上的标记：位于受限容器（单行 nowrap / ellipsis / line-clamp / overflow:hidden 的单行盒 / 按钮类控件）。
+ * 行内译文在这里退化为不占位的悬停浮层，不撑破容器、不改变布局。
+ */
+export const ATTR_TIGHT = 'data-hnw-tight';
+/** hnw-mark 上的标记：位于代码（pre/code/语法高亮容器）中，永远不插入占位译文 */
+export const ATTR_CODE = 'data-hnw-code';
+/**
+ * hnw-mark 上的标记：低置信度（首字母大写却不在句首，或单独成段的大写词，多为专有名词/界面标签，如导航里的 “Premium”）。
+ * 仍然高亮，但不显示行内译文（卡片照常可看完整释义）。
+ */
+export const ATTR_LOW_CONFIDENCE = 'data-hnw-lowconf';
+/** hnw-tr 上的标记：模糊自测模式下已点开 */
+export const ATTR_REVEALED = 'data-hnw-revealed';
 /** hnw-mark 上的标记：卡片当前锚定的单词（激活态，由 card 分片设置并提供样式） */
 export const ATTR_ACTIVE = 'data-hnw-active';
 
@@ -67,11 +83,60 @@ export const SKIP_TAGS = new Set([
  * 元素（及其子树）是否应跳过：黑名单标签、可编辑区域。
  * 注意不要按 translate="no" 跳过：不少站点在 <html> 上声明它来禁用浏览器翻译。
  */
-export function shouldSkipElement(el: Element): boolean {
-  if (SKIP_TAGS.has(el.tagName.toUpperCase())) return true;
+export function shouldSkipElement(el: Element, opts?: ScanOptions): boolean {
+  const tag = el.tagName.toUpperCase();
+  if (SKIP_TAGS.has(tag)) {
+    // 代码开关打开时放行 pre/code（编辑器仍在下面跳过）
+    if (!(opts?.codeEnabled && CODE_TAGS.has(tag))) return true;
+  }
   if ((el as HTMLElement).isContentEditable || el.getAttribute('contenteditable') === 'true') return true;
+  // 在线代码编辑器（虚拟渲染的行，不是 contenteditable，但改动其 DOM 会破坏编辑器）始终跳过
+  const cls = el.classList;
+  if (cls && cls.length > 0) for (const c of EDITOR_CLASSES) if (cls.contains(c)) return true;
+  // 站点适配层注册的额外规则（如 YouTube 播放器控件），未注册时为空数组
+  for (const rule of siteSkipRules) if (rule(el)) return true;
   return false;
 }
+
+/**
+ * 站点适配层（src/content/sites）注册的额外跳过规则：返回 true 时该元素整棵子树不标注。
+ * 规则在扫描每个元素与增量处理时逐个祖先调用，必须是 O(1) 的轻量判断（不要用 closest/:has 之类的子树查询）。
+ */
+const siteSkipRules: Array<(el: Element) => boolean> = [];
+
+/** 注册站点跳过规则，返回注销函数（youtube 模块新增，见 architecture.md“站点适配层”） */
+export function registerSiteSkipRule(rule: (el: Element) => boolean): () => void {
+  siteSkipRules.push(rule);
+  return () => {
+    const i = siteSkipRules.indexOf(rule);
+    if (i >= 0) siteSkipRules.splice(i, 1);
+  };
+}
+
+/** 扫描选项（代码块开关等），由 engine 按设置传入 */
+export interface ScanOptions {
+  /** 代码块中标注生词：放行 pre/code（v8） */
+  codeEnabled?: boolean;
+  /** 代码范围：comments=只处理注释与字符串 */
+  codeScope?: 'comments' | 'all';
+}
+
+/** 代码开关打开时可以进入的标签 */
+export const CODE_TAGS = new Set(['CODE', 'PRE']);
+
+/** 在线编辑器根元素类名：Monaco、CodeMirror 5/6、Ace */
+const EDITOR_CLASSES = ['monaco-editor', 'CodeMirror', 'cm-editor', 'ace_editor'];
+
+/**
+ * 语法高亮库中“注释与字符串”的类名选择器：GitHub（pl-c/pl-s）、highlight.js、Prism、Pygments/Rouge（GitLab、Jekyll 等）。
+ * Shiki 只输出内联颜色，无法识别注释，属于“识别不了 → 不处理”。
+ */
+export const CODE_COMMENT_STRING_SELECTOR = [
+  '.pl-c', '.pl-s', '.pl-pds',
+  '.hljs-comment', '.hljs-string', '.hljs-quote', '.hljs-doctag',
+  '.token.comment', '.token.string', '.token.docstring', '.token.template-string', '.token.prolog',
+  '.c', '.c1', '.cm', '.cs', '.ch', '.cd', '.sd', '.s', '.s1', '.s2', '.sb', '.sc', '.sh', '.sx',
+].join(',');
 
 /** 节点是否位于我们自己注入的元素内部（mark / 翻译 / 卡片宿主） */
 export function isInsideOwnNode(node: Node): boolean {

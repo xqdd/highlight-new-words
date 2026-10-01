@@ -32,7 +32,9 @@ import { applyPageStyle, removePageStyle } from './engine/style';
 export async function startContentApp(): Promise<void> {
   const doc = document;
   const lemmatizer = createLemmatizer();
-  await lemmatizer.init?.();
+  // 内容脚本在 document_start 注入：词形数据、设置、词书与页面解析并行加载，DOM 就绪时尽快处理首屏，
+  // 争取在首次绘制/用户开始阅读前完成首屏标注（首屏插入词后译文造成的布局推移在首次绘制前不计入 CLS）
+  const lemmaReady = Promise.resolve(lemmatizer.init?.());
 
   let settings = await getSettings();
   let registry: DefaultWordBookRegistry;
@@ -51,9 +53,12 @@ export async function startContentApp(): Promise<void> {
   /** 加载启用的词书与熟词本，构造 matcher 与组合词典 */
   async function buildMatcher(): Promise<WordMatcher> {
     registry = new DefaultWordBookRegistry(createExtensionLoaders());
-    const books = await Promise.all(settings.books.enabled.map((id) => registry.load(id)));
+    const [books, known] = await Promise.all([
+      Promise.all(settings.books.enabled.map((id) => registry.load(id))),
+      getKnownWords(),
+      lemmaReady,
+    ]);
     loadedBooks = books.filter((b): b is WordBook => !!b && b.size > 0);
-    const known = await getKnownWords();
     knownSnapshot = known;
     const userBooks = loadedBooks.filter((b) => b.meta.kind !== 'builtin');
     userKeysSnapshot = new Set(userBooks.flatMap((b) => [...b.words()].map((w) => `${b.meta.id}\n${w}`)));
@@ -110,9 +115,13 @@ export async function startContentApp(): Promise<void> {
 
   async function startEngine(): Promise<void> {
     const matcher = await buildMatcher();
+    await domReady(doc);
+    // frameset 等没有 body 的文档不处理
+    if (!doc.body) return;
     applyPageStyle(doc, settings);
     ensureCard();
     if (engine) {
+      engine.setCode(settings.code);
       engine.rebuild(matcher, dictionary);
       return;
     }
@@ -121,6 +130,8 @@ export async function startContentApp(): Promise<void> {
       matcher,
       dictionary,
       inlineTranslation: settings.inlineTranslation.mode,
+      translationBlur: !!settings.inlineTranslation.blur,
+      code: settings.code,
       onLemmasChanged: (lemmas) => void sendToBackground('reportPageWords', { lemmas }).catch(() => {}),
     });
     engine.start();
@@ -151,7 +162,9 @@ export async function startContentApp(): Promise<void> {
       if (wasActive) stopEngine();
       return;
     }
-    const booksChanged = prev.books.enabled.join() !== settings.books.enabled.join();
+    // 代码块开关/范围变化会改变扫描范围，需要重扫
+    const booksChanged =
+      prev.books.enabled.join() !== settings.books.enabled.join() || JSON.stringify(prev.code) !== JSON.stringify(settings.code);
     const knownChanged = !!changes[STORAGE_KEYS.knownWords];
     // 只关心启用的用户词书的数据键（索引键变化仅影响元数据，不必重扫）
     const userBooksChanged = settings.books.enabled.some(
@@ -173,7 +186,7 @@ export async function startContentApp(): Promise<void> {
     }
     applyPageStyle(doc, settings);
     card?.setStyle(resolveCardStyle(settings));
-    engine?.setInlineTranslation(settings.inlineTranslation.mode);
+    engine?.setInlineTranslation(settings.inlineTranslation.mode, !!settings.inlineTranslation.blur);
   });
 
   if (isTop) {
@@ -188,4 +201,10 @@ export async function startContentApp(): Promise<void> {
 
   // 便于调试：控制台可查看当前实例（隔离世界中，不会暴露给页面脚本）
   (globalThis as Record<string, unknown>).__hnw = { get engine() { return engine; }, get settings(): Settings { return settings; } };
+}
+
+/** 等待 DOM 解析完成（document_start 注入时 body 尚不存在） */
+function domReady(doc: Document): Promise<void> {
+  if (doc.readyState !== 'loading') return Promise.resolve();
+  return new Promise((resolve) => doc.addEventListener('DOMContentLoaded', () => resolve(), { once: true }));
 }

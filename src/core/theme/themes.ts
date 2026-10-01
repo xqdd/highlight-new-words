@@ -8,6 +8,17 @@
 
 export type UnderlineStyle = 'none' | 'solid' | 'wavy' | 'dotted' | 'dashed';
 
+/** 背景形态（v5）：整块底色 / 马克笔（下半部色带）/ 圆角胶囊（视觉留白不占位） */
+export type BackgroundKind = 'block' | 'marker' | 'pill';
+/** 边框（v5）：用 outline 绘制，不占布局空间，不影响等宽对齐与换行 */
+export type BorderStyle = 'none' | 'solid' | 'dashed' | 'dotted';
+/** 字重（v5）：inherit 不改；medium=500；bold=700（会让单词变宽，可能改变换行） */
+export type MarkFontWeight = 'inherit' | 'medium' | 'bold';
+
+/**
+ * 生词样式：四个可组合维度（装饰线 / 文字 / 背景 / 边框），全部为空/none 时为“无样式”（只靠行内译文提示）。
+ * v5 新增字段全部可选，缺省时与旧版渲染一致（旧设置、旧主题无需迁移）。
+ */
 export interface MarkStyle {
   /** 高亮背景色，空串=无背景 */
   background: string;
@@ -16,6 +27,44 @@ export interface MarkStyle {
   underline: UnderlineStyle;
   /** 下划线颜色，空串=currentColor */
   underlineColor: string;
+  /** 双线（v5）：underline 非 none 时改为 text-decoration-style:double（CSS 只有一种线型，双线不能与波浪同时使用） */
+  underlineDouble?: boolean;
+  /** 装饰线粗细 px（v5，缺省：实线 2、其他 1.5） */
+  underlineThickness?: number;
+  /** 装饰线与文字基线的偏移 px（v5，缺省 3） */
+  underlineOffset?: number;
+  /** 字重（v5，缺省 inherit） */
+  fontWeight?: MarkFontWeight;
+  /** 斜体（v5） */
+  italic?: boolean;
+  /** 背景形态（v5，缺省 block；background 为空时无效） */
+  backgroundKind?: BackgroundKind;
+  /** 背景不透明度倍率 0–1（v5，缺省 1；与颜色自带的 alpha 相乘） */
+  backgroundOpacity?: number;
+  /** 边框（v5，缺省 none） */
+  border?: BorderStyle;
+  /** 边框颜色，空串=跟随装饰线色/文字色 */
+  borderColor?: string;
+  /** 边框/背景圆角（v5，缺省 true：.22em；pill 总是全圆角） */
+  rounded?: boolean;
+}
+
+/** 行内译文模式：关闭 / 词后括注 / 词上方（ruby）/ 仅悬停时浮现（不占位） */
+export type InlineTranslationMode = 'off' | 'after' | 'ruby' | 'hover';
+
+/**
+ * 行内译文样式（v5，与生词样式相互独立）。所有字段可选，缺省值见 TRANSLATION_STYLE_DEFAULTS。
+ * 存于 Settings.inlineTranslation（与 mode 同级），预设可携带一份建议值（HighlightTheme.translation）。
+ */
+export interface TranslationStyle {
+  /** 模糊自测：译文模糊显示，点按译文后才清晰（再点恢复） */
+  blur?: boolean;
+  /** 译文颜色，空串=继承正文色 */
+  color?: string;
+  /** 不透明度 0.2–1 */
+  opacity?: number;
+  /** 字号相对正文的比例 0.5–1 */
+  fontScale?: number;
 }
 
 export interface CardStyle {
@@ -31,6 +80,13 @@ export interface HighlightTheme {
   nameEn: string;
   mark: MarkStyle;
   card: CardStyle;
+  /**
+   * 预设建议的行内译文（v5，可选）：如“仅括号译文”需要 after 模式。
+   * 主题与译文设置相互独立，只有用户在预设画廊中选择该预设时才应用（见 resolve.ts#applyThemePreset）。
+   */
+  translation?: { mode: InlineTranslationMode } & TranslationStyle;
+  /** 一句话说明（v5 预设画廊用） */
+  desc?: string;
 }
 
 /** 自定义主题 id：使用 Settings.style.custom 的颜色 */
@@ -142,6 +198,116 @@ export const BUILTIN_THEMES: readonly HighlightTheme[] = [
     mark: { background: 'rgba(163, 230, 53, 0.35)', color: '', underline: 'none', underlineColor: '' },
     card: { ...lightCard, accent: '#4d7c0f' },
   },
+  // ---- v5 组合样式预设（engine 第二阶段）：多维组合 + 建议的行内译文；都已在亮色页、暗色页、正文链接中核对可读性 ----
+  // 颜色避开常见链接蓝（#0645ad/#1a0dab/#0969da），文字色类样式在链接内自动改为“保留链接色 + 同色浅底”（见 engine/style.ts）
+  {
+    id: 'highlighter',
+    name: '荧光笔',
+    nameEn: 'Highlighter',
+    desc: '下半部黄色马克笔，像在纸上划重点',
+    mark: { background: 'rgba(255, 213, 0, 0.55)', backgroundKind: 'marker', color: '', underline: 'none', underlineColor: '' },
+    card: { ...lightCard, accent: '#a16207' },
+  },
+  {
+    id: 'wavy-line',
+    name: '波浪线',
+    nameEn: 'Wavy line',
+    desc: '珊瑚色波浪下划线，醒目但不遮字',
+    mark: { background: '', color: '', underline: 'wavy', underlineColor: '#f43f5e', underlineThickness: 1.5, underlineOffset: 4 },
+    card: { ...lightCard, accent: '#be123c' },
+  },
+  {
+    id: 'underline-gloss',
+    name: '下划线 + 括号译文',
+    nameEn: 'Underline + gloss',
+    desc: '橙色下划线，词后灰色括号短释义',
+    mark: { background: '', color: '', underline: 'solid', underlineColor: '#f97316', underlineThickness: 2, underlineOffset: 3 },
+    card: { ...lightCard, accent: '#c2410c' },
+    translation: { mode: 'after' },
+  },
+  {
+    id: 'gloss-only',
+    name: '仅括号译文',
+    nameEn: 'Gloss only',
+    desc: '生词不加任何标记，只在词后显示译文',
+    mark: { background: '', color: '', underline: 'none', underlineColor: '' },
+    card: lightCard,
+    translation: { mode: 'after' },
+  },
+  {
+    id: 'bold-accent',
+    name: '粗体强调',
+    nameEn: 'Bold accent',
+    desc: '加粗 + 赭石色文字（会让单词略变宽）',
+    mark: { background: '', color: '#c2410c', underline: 'none', underlineColor: '', fontWeight: 'bold' },
+    card: { ...lightCard, accent: '#c2410c' },
+  },
+  {
+    id: 'soft-tint',
+    name: '柔和底色',
+    nameEn: 'Soft tint',
+    desc: '很淡的杏色圆角底，长时间阅读不累眼',
+    mark: { background: 'rgba(251, 146, 60, 0.18)', color: '', underline: 'none', underlineColor: '' },
+    card: { ...lightCard, accent: '#c2410c' },
+  },
+  {
+    id: 'dark-friendly',
+    name: '暗色模式友好',
+    nameEn: 'Dark-mode friendly',
+    desc: '青绿浅底 + 点线，深浅色网页都清楚',
+    mark: { background: 'rgba(45, 212, 191, 0.2)', color: '', underline: 'dotted', underlineColor: '#14b8a6', underlineThickness: 2, underlineOffset: 3 },
+    card: { ...lightCard, accent: '#0f766e' },
+  },
+  {
+    id: 'pill',
+    name: '胶囊',
+    nameEn: 'Pill',
+    desc: '淡紫色圆角胶囊，留白不挤占排版',
+    mark: { background: 'rgba(139, 92, 246, 0.2)', backgroundKind: 'pill', color: '', underline: 'none', underlineColor: '' },
+    card: { ...lightCard, accent: '#6d28d9' },
+  },
+  {
+    id: 'dashed-box',
+    name: '虚线框',
+    nameEn: 'Dashed box',
+    desc: '青色虚线圆角框，不改文字颜色',
+    mark: { background: '', color: '', underline: 'none', underlineColor: '', border: 'dashed', borderColor: '#0d9488' },
+    card: { ...lightCard, accent: '#0f766e' },
+  },
+  {
+    id: 'double-underline',
+    name: '双下划线',
+    nameEn: 'Double underline',
+    desc: '紫色细双线，和链接的单下划线区分开',
+    mark: { background: '', color: '', underline: 'solid', underlineDouble: true, underlineColor: '#8b5cf6', underlineThickness: 1, underlineOffset: 2 },
+    card: { ...lightCard, accent: '#6d28d9' },
+  },
+  {
+    id: 'ruby-gloss',
+    name: '词上注释',
+    nameEn: 'Ruby gloss',
+    desc: '琥珀点线 + 单词上方小字释义',
+    mark: { background: '', color: '', underline: 'dotted', underlineColor: '#d97706', underlineThickness: 2, underlineOffset: 3 },
+    card: { ...lightCard, accent: '#b45309' },
+    translation: { mode: 'ruby' },
+  },
+  {
+    id: 'quiz-blur',
+    name: '模糊自测',
+    nameEn: 'Blur quiz',
+    desc: '译文模糊，先想再点开核对',
+    mark: { background: '', color: '', underline: 'dashed', underlineColor: '#8b5cf6', underlineThickness: 1.5, underlineOffset: 3 },
+    card: { ...lightCard, accent: '#6d28d9' },
+    translation: { mode: 'after', blur: true },
+  },
+  {
+    id: 'italic-dotted',
+    name: '斜体点线',
+    nameEn: 'Italic dotted',
+    desc: '斜体 + 灰绿点线，书卷气、最安静',
+    mark: { background: '', color: '', underline: 'dotted', underlineColor: '#65a30d', underlineThickness: 1.5, underlineOffset: 3, italic: true },
+    card: { ...lightCard, accent: '#4d7c0f' },
+  },
   // ---- 旧版配色方案（popup 中 Light/Green/Red/Blue/Sky）----
   {
     id: 'legacy-light',
@@ -181,6 +347,30 @@ export const BUILTIN_THEMES: readonly HighlightTheme[] = [
 ];
 
 export const DEFAULT_THEME_ID = 'amber';
+
+/** v5 组合样式预设 id（预设画廊推荐展示的一组，按展示顺序） */
+export const V5_PRESET_IDS: readonly string[] = [
+  'highlighter',
+  'wavy-line',
+  'underline-gloss',
+  'gloss-only',
+  'bold-accent',
+  'soft-tint',
+  'dark-friendly',
+  'pill',
+  'dashed-box',
+  'double-underline',
+  'ruby-gloss',
+  'quiz-blur',
+  'italic-dotted',
+];
+
+/** 行内译文样式缺省值（按模式区分：词后括注较大、ruby 注解较小） */
+export const TRANSLATION_STYLE_DEFAULTS = {
+  color: '',
+  opacity: { after: 0.58, ruby: 0.7, hover: 1 },
+  fontScale: { after: 0.88, ruby: 0.55, hover: 0.8 },
+} as const;
 
 export function findTheme(id: string): HighlightTheme | undefined {
   return BUILTIN_THEMES.find((t) => t.id === id);
