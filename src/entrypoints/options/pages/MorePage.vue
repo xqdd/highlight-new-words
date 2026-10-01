@@ -52,7 +52,7 @@ async function reset() {
     <div class="links">
       <button type="button" class="btn" @click="navigate('welcome')"><AppIcon name="sparkle" :size="16" />重新运行快速设置引导</button>
       <button type="button" class="btn" @click="notesOpen = true"><AppIcon name="file" :size="16" />更新说明</button>
-      <a class="btn" href="https://github.com/XQDD/highlight_new_words" target="_blank" rel="noopener"><AppIcon name="link" :size="16" />使用说明</a>
+      <a class="btn" href="https://github.com/xqdd/highlight-new-words" target="_blank" rel="noopener"><AppIcon name="link" :size="16" />使用说明</a>
     </div>
     <div v-if="confirmReset" class="confirm">
       <span>恢复默认设置？已导入的词书、云端生词本与熟词本不受影响。</span>

@@ -54,7 +54,7 @@ MORE
 - Page text is matched locally and never uploaded. The extension has no developer server and no analytics.
 
 Privacy policy: <privacy policy URL>
-Feedback: https://github.com/xqdd/highlight_new_words/issues
+Feedback: https://github.com/xqdd/highlight-new-words/issues
 ```
 
 ## 3. Detailed Description - Microsoft Edge Add-ons
@@ -84,7 +84,7 @@ learn English words
 | Field | Chrome | Edge |
 | --- | --- | --- |
 | Category | Education | Education |
-| Website / support | https://github.com/xqdd/highlight_new_words | same |
+| Website / support | https://github.com/xqdd/highlight-new-words | same |
 | Mature content | No | No |
 | Screenshots | store/images/screenshots-en, 1280x800; upload `1` to `5` (max 5) | upload all six in the same folder (max 6) |
 | Small promo tile | store/images/promo-small-440x280.png (required) | same (optional) |

@@ -28,5 +28,5 @@ How to test (no account needed):
 Optional word book sources: no cloud source is connected after installation (Youdao and Eudic are both off), so the extension sends no request to dict.youdao.com or Eudic. When the user turns a source on under "word book sources" in the settings, it syncs once right away and shows the result (if not logged in, the reason and a login link), then syncs at most once a day. Youdao uses only the user's existing Youdao login cookie in the browser. Nothing else is sent anywhere. Eudic uses an API token the user generates on the Eudic website.
 
 No remote code: all scripts are bundled; built-in word lists and dictionary data are JSON files in the package's data/ folder. The UI is in Simplified Chinese.
-Source code: https://github.com/xqdd/highlight_new_words
+Source code: https://github.com/xqdd/highlight-new-words
 ```

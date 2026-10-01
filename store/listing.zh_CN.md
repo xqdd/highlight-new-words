@@ -54,7 +54,7 @@
 · 界面为简体中文。
 
 隐私政策：<隐私政策网址>
-问题反馈：https://github.com/xqdd/highlight_new_words/issues
+问题反馈：https://github.com/xqdd/highlight-new-words/issues
 ```
 
 ## 三、详细描述 - Microsoft Edge 加载项
@@ -88,7 +88,7 @@
 | --- | --- | --- |
 | 分类 | 教育（Education） | 教育（Education） |
 | 语言 | 中文（简体）为主，英文为辅 | 中文（简体）、English 各填一份 |
-| 官网 / 支持 | https://github.com/xqdd/highlight_new_words | 同左 |
+| 官网 / 支持 | https://github.com/xqdd/highlight-new-words | 同左 |
 | 成人内容 | 否 | 否 |
 | 截图 | [store/images/screenshots-zh](images/screenshots-zh) 1280x800，上传 `1`–`5` 号（最多 5 张） | 同目录 6 张全部上传（最多 6 张） |
 | 小宣传图 | [promo-small-440x280.png](images/promo-small-440x280.png)（必填） | 同左（可选） |

@@ -104,11 +104,11 @@ flowchart TD
 
 两家商店都要求可公开访问的隐私政策网址。推荐 GitHub Pages：
 
-1. 仓库 Settings → Pages，来源选默认分支的 `/`（或 `/docs`），启用后得到 `https://xqdd.github.io/highlight_new_words/`；
+1. 仓库 Settings → Pages，来源选默认分支的 `/`（或 `/docs`），启用后得到 `https://xqdd.github.io/highlight-new-words/`；
 2. 隐私政策地址为 `.../store/privacy-policy`（中文）与 `.../store/privacy-policy.en`（英文），以 Pages 实际生成的路径为准，在浏览器中确认可打开；
 3. 把网址填入两家商店的隐私表单，并替换描述中的 `<隐私政策网址>` / `<privacy policy URL>`。
 
-也可直接用 GitHub 文件页面地址（`https://github.com/xqdd/highlight_new_words/blob/master/store/privacy-policy.md`），前提是该文件已推送到公开仓库的默认分支。
+也可直接用 GitHub 文件页面地址（`https://github.com/xqdd/highlight-new-words/blob/master/store/privacy-policy.md`），前提是该文件已推送到公开仓库的默认分支。
 
 ## 八、商店图片
 

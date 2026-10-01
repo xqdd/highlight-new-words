@@ -2,7 +2,7 @@
 
 Effective date: October 1, 2026 (applies to version 3.0.0 and later)
 
-"Highlight New Words" (the "extension") is an open-source browser extension; the source code is at https://github.com/xqdd/highlight_new_words . The extension **has no developer server, and does not collect, sell or share any personal data. It contains no analytics or ad tracking.**
+"Highlight New Words" (the "extension") is an open-source browser extension; the source code is at https://github.com/xqdd/highlight-new-words . The extension **has no developer server, and does not collect, sell or share any personal data. It contains no analytics or ad tracking.**
 
 ## 1. Data processed on your device
 
@@ -39,4 +39,4 @@ The purpose of each browser permission is documented in `store/permissions.md` i
 
 ## 5. Changes and contact
 
-When this policy changes, this page and its effective date will be updated, and changes to how data is handled will be noted in the extension's release notes. Questions and feedback: https://github.com/xqdd/highlight_new_words/issues
+When this policy changes, this page and its effective date will be updated, and changes to how data is handled will be noted in the extension's release notes. Questions and feedback: https://github.com/xqdd/highlight-new-words/issues
