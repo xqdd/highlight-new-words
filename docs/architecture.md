@@ -64,7 +64,7 @@ flowchart LR
 | engine | `src/content/engine/**`、`src/content/app.ts` | `WordMatcher`、`Dictionary`、`dom.ts` 常量 |
 | card | `src/content/card/**` | `CardView`/`CardData`/`CardActions`、`CardStyle` |
 | options | `src/entrypoints/options/**`（含导入 UI `LocalBooksSection`、熟词管理 UI `KnownSection`、来源 `SourcesSection`、同步 `SyncSection`）、`src/ui/components/**`（与 popup 共享，新增组件为主）、`src/core/import/parse.ts`（解析实现） | `Settings`、`useSettings`、`useBooks`、`BUILTIN_THEMES`、`ImportFormat`/`parseWordList`、user-store、known store、`SyncStatus` |
-| popup | `src/entrypoints/popup/**` | 同上 + `getTabWords`/`getPageState`/`syncSourceBooks` 消息 |
+| popup | `src/entrypoints/popup/**` | 同上 + `getTabWords`/`getPageState`/`syncSourceBooks`/`getStatusSummary`/`syncAll` 消息（总状态不可用时用本地 `syncState`/`webdavSyncState`/来源索引兜底）、platform `hasAllSitesAccess`/`requestAllSitesAccess`、预设切换复用 options 的 `applyPreset`/`presetGroups`（`options/lib/appearance.ts`，改签名需同步 popup） |
 | background | `src/background/**`（含来源 provider `src/background/sources/**`、熟词流程 `known.ts`）、`src/entrypoints/background.ts`、`src/core/sync/**`（storage.sync 同步层） | `BackgroundProtocol`、`SourceProvider`、settings/known/user-store |
 
 **共享契约（改动需协调）**：`src/core/settings/**`、`src/core/messaging/**`、`src/core/storage/**`、`src/core/theme/**`、`src/core/match/**`、`src/core/source/**`、`src/core/known/**`、`src/core/wordbook/{ids,types,user-store,user-book,registry}.ts`（registry 加载实现仍归 data 分片完善）、`src/core/import/types.ts`、`src/core/sync/types.ts`、各模块 `types.ts`、`src/ui/composables/**`、`src/ui/tokens.css`、`wxt.config.ts`、`package.json`。
@@ -82,8 +82,9 @@ flowchart LR
 | `updatedAt` | 最近修改时间，`saveSettings` 自动刷新（只改本机字段 `sync`/`apiToken` 时不刷新，避免新设备刚配好同步就用默认设置覆盖远端）；各同步后端按此 LWW |
 | `enabled` | 总开关（旧 `toggle`） |
 | `books.enabled` | 启用词书 id 数组，三类词书可任意组合；顺序即优先级（id 规则见 4.2） |
-| `style.themeId` / `style.custom` / `style.perBook` | 全局主题、自定义颜色（含旧版 4 个颜色）、按词书覆盖 |
-| `inlineTranslation.mode` | `off` / `after`（词后）/ `ruby`（词上方，CSS `display:ruby`） |
+| `style.themeId` / `style.custom` / `style.perBook` / `style.saved?` | 全局主题、自定义颜色（含旧版 4 个颜色）、按词书覆盖；`saved` 为用户另存的样式库（`SavedMarkStyle[]`，options 第二阶段新增，可选，渲染不读取） |
+| `inlineTranslation` | `mode`：`off` / `after`（词后）/ `ruby`（词上方，CSS `display:ruby`）/ `hover`（仅悬停浮现，不占位；engine 第二阶段新增）；译文样式（v5，可选）：`blur` 模糊自测、`color`、`opacity`（0.2–1）、`fontScale`（0.5–1），缺省值见 `TRANSLATION_STYLE_DEFAULTS`，解析用 `resolveTranslationStyle` |
+| `code` | 代码块中标注生词（v8，engine 新增）：`enabled`（默认 false）、`scope` `comments`（默认，只处理语法高亮标出的注释和字符串）/ `all`、`display` `hover`（默认，代码中不显示译文）/ `float`（单词上方浮动小标注，不占位） |
 | `card.trigger` | `auto`（桌面悬停 + 触屏点按）/ `hover` / `click` |
 | `tts` | 自动发音开关、`voice`（`chrome.tts.speak` 选项）、语速 |
 | `sources[providerId]` | 按来源配置 `SourceSettings`：`enabled`、`autoSync`（每天）、`deleteOnKnown`（默认 false，`wordActions.knownRemoveFrom='auto'` 时生效）、可选 `apiToken`（本机字段；只有勾选 `credentialSync["token:<id>"]` 时才作为凭据随同步上传） |
@@ -108,6 +109,8 @@ flowchart LR
 | `webdavSyncState` | `BackendSyncStatus`（WebDAV 阶段/错误/上次同步/设备 id/retryAt/recheckAt） | background |
 | `webdavLock` | `WebDavHeldLock { url, token, at }`：本机持有的 WebDAV 写锁令牌，LOCK 成功时写入、UNLOCK 后删除；SW 持锁时被回收，重启后第一次写入先用它 UNLOCK（第 5 轮新增） | background |
 | `syncCredStamps` | 凭据修改时间戳 `id → { at, h 值摘要 }`（凭据合并用） | background |
+| `uiNotesSeen` | 选项页已读“更新说明”版本（字符串，见 options `lib/release-notes.ts`；全新安装记为已读不弹出） | options |
+| `updateNotice` | `UpdateNotice { from, to, at }`：扩展从旧版本升级（`onInstalled reason=update`，版本号不同）时写入，options/popup 展示简短“更新说明”后发 `dismissUpdateNotice` 清除（第二阶段新增） | background |
 
 `storage.session` 中 `tabWords` 用于徽章；`storage.sync` 键见 4.9。
 
@@ -141,8 +144,8 @@ v2.0.1 旧键 `toggle/ttsToggle/ttsVoices/highlight*/bubble*/dictionaryType/auto
 - 打包数据格式：
   - `data/books/index.json`：`BookCatalog { version: 2, books: CatalogBookMeta[] }`，已按 分类 → 难度 排序；增量书带 `delta { of, minus }`
   - `data/books/<id>.json`：`BookDataFile { id, words: string[], extends?: BookId[] }`（小写原形、已排序）。级别/词频书是包含关系，只存比 `extends` 多出的词，`DefaultWordBookRegistry` 加载时递归合并并缓存共享文件
-  - 词典两层分片（首字母 `a-z`）：短表 `data/dict/<c>.json` = `{ word: { p 音标, s 行内短释义(单义项、无词性、≤8 字), g 考试标签, l 级别 1–6, r 词频排名 } }`；全表 `data/dict/full/<c>.json` = `{ word: { f 完整释义(每行一个词性), x 词形 "s:widths/p:…" } }`。旧格式（f 在短表）仍兼容
-- `Dictionary`（[dict/types.ts](../src/core/dict/types.ts)）：`DictEntry { word, phonetic, short, full, tags, level?, rank?, forms? }`。**`lookupMany` 只读短表**（整页行内翻译，不含 full/forms），**`lookup` 额外加载全表**（卡片/详情用）；`CompositeDictionary.lookup` 逐来源调用 `lookup`。辅助：`cefrLabel(level)`、`DICT_FORM_LABELS`。内容脚本使用 `CompositeDictionary([UserBooksDictionary(启用的用户词书), PackagedDictionary])`，用户词书自带释义优先（按启用顺序取第一本有释义的）。
+  - 词典两层分片（首字母 `a-z`）：短表 `data/dict/<c>.json` = `{ word: { p 音标, s 行内短释义(单义项、无词性、≤8 字，约 97% 为 2–6 字), v 动词短释义(可选，见下), g 考试标签, l 级别 1–6, r 词频排名 } }`；全表 `data/dict/full/<c>.json` = `{ word: { f 完整释义(每行一个词性), x 词形 "s:widths/p:…" } }`。旧格式（f 在短表）仍兼容
+- `Dictionary`（[dict/types.ts](../src/core/dict/types.ts)）：`DictEntry { word, phonetic, short, shortVerb?, full, tags, level?, rank?, forms? }`。**`lookupMany` 只读短表**（整页行内翻译，不含 full/forms），**`lookup` 额外加载全表**（卡片/详情用）；`CompositeDictionary.lookup` 逐来源调用 `lookup`。辅助：`cefrLabel(level)`、`DICT_FORM_LABELS`。内容脚本使用 `CompositeDictionary([UserBooksDictionary(启用的用户词书), PackagedDictionary])`，用户词书自带释义优先（按启用顺序取第一本有释义的）。
 
 内置词书（`BookCategory` 新增 `level`；`popup` 等按分类穷举的 `Record<BookCategory, …>` 需补该键）：
 
@@ -152,6 +155,11 @@ v2.0.1 旧键 `toggle/ttsToggle/ttsVoices/highlight*/bubble*/dictionaryType/auto
 | `exam` 考试 | `zk gk cet4 cet6 kaoyan tem4 ielts toefl sat tem8 gre` | ECDICT 标签（SAT/专四/专八取 KyleBing 词表），变形词归原形、去专有名词/叹词/缩写，再按书去掉低于考试起点的 CEFR 基础词（高考去 A1，四级去 A1–A2，六级/考研/雅思/托福/专四去 A1–B1，SAT/专八/GRE 去 A1–B2） |
 | `exam` 增量（`delta`） | `gk-new cet4-new cet6-new kaoyan-new ielts-new toefl-new gre-new` | 如六级新增 = 六级 − 中考/高考/四级原始词表 |
 | `frequency` 词频 | `coca-3k coca-5k coca-8k coca-12k` | COCA（缺失用 BNC）排名前 N 之外、级别 ≥ B1 的词 |
+
+- **行内短释义的选取**（`build-data.mjs#shortOf`）：跨词性给每个候选义项打分——ECDICT、ECDICT-ultimate（有道简明释义，权重最高）与各 KyleBing 教材词表按“该义项在本词性内的位次”投票，票数按词性常用度（ultimate 词性占比 + CEFR-J 词性）缩放；带专业/语体标注（[医]、(商)、<计>、〔尤指〕、古/俚）的义项、单字义项、超过 6 字的义项降权；同一义项取最自然的写法（动词去“使”“对…/把…”，形容词带“的”，副词去“地”）。仍不合常用义的高频多义词在 [short-overrides.tsv](../scripts/data/short-overrides.tsv) 人工覆盖（约 300 词，如 project→项目、phase→阶段、premium→高级的）。金标与格式约束见 `tests/unit/data.test.ts`「行内短释义质量」。
+- **`shortVerb`（短表 `v`，data 第二阶段新增，可选）**：`short` 取的是名词/形容词义项、而该词有动词变形且动词用法不罕见时提供动词释义（advocate：提倡者 / 提倡，约 870 词）。页面词形是动词变形（advocating、advocated）时行内翻译宜改用它（**engine 待接入**）。`CompositeDictionary` 合并时，前面的来源（用户词书）给了 `short` 就不再混入打包词典的 `shortVerb`。
+- **误匹配防护**：词书只收纯字母单词，页面分词按连字符切开复合词，所以用户词书里的短语（give up）与连字符词（well-known）只会漏标、不会把组成部分误标（单测覆盖）。构建时排除：连字符前缀与伪单词（re/non/mid/micro/bio…、vs/etc/km、罗马数字，`NOT_WORDS`）；只有 BNC 排名、没有 COCA 排名的词（多为人名地名，chelsea/marx/hong/kong，英式拼写除外）不按词频进入级别/词频书。本身也是单词的构词前缀（auto-、vice-、self-）由 [hyphen.ts](../src/core/dict/hyphen.ts) `isHyphenPrefix` 提供给 engine，在 `词-词` 结构中跳过前半部分（**engine 待接入**）。
+- **编程熟词**（需求 v8）：[code-words.ts](../src/core/dict/code-words.ts) `CODE_KNOWN_WORDS` / `isCodeKnownWord`，收录主流语言关键字、内置类型与常见缩写（if/return/const/func/str/init/args/ctx/impl…），engine 在代码上下文中对标识符拆分后的子词调用，命中则视为熟词。
 
 默认启用的 `cet6` 在 [article.html](../tests/fixtures/article.html) 上标出约 86 个不同原形（Relingo B2 约 79 个），对照 Relingo B2 判定的回归见 `tests/unit/data.test.ts`。
 
@@ -200,14 +208,37 @@ flowchart LR
   - 主题样式只作用于 `hnw-w`，释义不被染上高亮背景/下划线；释义文本放在 `data-tr` 属性、由 `::before` 渲染，不进入页面 textContent（复制、查找、页面脚本不受影响），读取释义用 `getAttribute('data-tr')`，读取原词用 `markSurface`。
   - `data-hnw-dark`：engine 按 mark 父元素的计算文字色判断深色上下文（浅色文字≈深色背景），文字色类主题在深色上下文自动提亮到 4.5:1；页面切换明暗（html/body 属性、`prefers-color-scheme`）时重算。
   - `data-hnw-active`：卡片锚定单词，由 card 分片设置并提供样式。
-  - `<html data-hnw-tr="off|after|ruby">` 控制行内翻译：`after` 为词后灰色括注 `(译)`（inline-block 不断行）；`ruby` 为原生 CSS ruby（`display:ruby`，注解居中、最小 10px，只在需要的行增加行高、不与上一行重叠）。样式由 `buildPageCss` 生成。
-- 扫描：`createTextWalker` 用 TreeWalker，跳过 script/style/code/pre/textarea/input/select/svg/contenteditable 及自身节点；engine 逐个 `nextNode()` 边取边处理，可在任意节点处让出主线程。
+  - `<html data-hnw-tr="off|after|ruby|hover">` 控制行内翻译：`after` 为词后灰色括注 `(译)`（inline-block，mark 不换行，词与括注总在同一行）；`ruby` 为原生 CSS ruby（`display:ruby`，注解居中、最小 10px，只在需要的行增加行高、不与上一行重叠）；`hover` 为悬停时在单词上方浮现的小标签（绝对定位，不占位）。样式由 `buildPageCss` 生成。
+  - mark 上的上下文标记（engine 第二阶段新增，均在每片“先写后读”的读阶段统一计算）：
+    - `data-hnw-link`：位于链接内。只改文字色的样式在链接里改为“保留链接色 + 主题色浅底”，避免和链接色混淆。
+    - `data-hnw-tight`：受限容器（按钮类控件、`white-space:nowrap/pre`、`text-overflow:ellipsis`、line-clamp、`overflow:hidden` 且只有一行高）。`after`/`ruby` 的译文在这里退化为悬停浮层，不撑破容器、不改布局（不做导航/正文区域识别，所有可见文本统一处理）。浮层会被 `overflow:hidden` 容器裁掉，此时靠卡片查看。
+    - `data-hnw-code="identifier|prose"`：代码中的生词（prose = 注释和字符串），永远不插入占位译文。
+    - `data-hnw-lowconf`：低置信度。首字母大写却不在句首（如 “Upgrade to Premium”），或文本节点只有这一个大写词（导航、按钮等标签），多为专有名词或界面标签。照常高亮，但不显示 `after`/`ruby` 译文。
+  - `hnw-tr[data-hnw-revealed]`：模糊自测中已点开的译文。engine 在 window 捕获阶段拦截对模糊译文的点按/悬停，不触发卡片和链接。
+  - 行内释义优先查页面词形自己的词条，没有再用原形。派生词在词典中一般有独立词条（committee=委员会），用原形会译错（commit）。
+  - 复制不带译文：译文只存在于 `::before`、浮层与 ruby 注解中，也不进入 textContent（已在 Chromium 中用 Selection 验证正文和代码）。
+- 扫描：`createTextWalker` 用 TreeWalker，跳过 script/style/code/pre/textarea/input/select/svg/contenteditable、在线编辑器（`.monaco-editor`/`.CodeMirror`/`.cm-editor`/`.ace_editor`）及自身节点；engine 逐个 `nextNode()` 边取边处理，可在任意节点处让出主线程。
+- 代码块（v8，`settings.code`）：开启后 `ScanOptions.codeEnabled` 放行 pre/code。`scope=comments` 时只处理带注释/字符串类名的文本，类名清单见 `CODE_COMMENT_STRING_SELECTOR`（GitHub `pl-c/pl-s`、highlight.js、Prism、Pygments/Rouge）。Shiki 只输出内联颜色，识别不了，因此不处理；没有高亮类名的行内 `code` 也不处理。代码文本用 `tokenizeCode` 拆分 camelCase/PascalCase/snake_case/kebab-case/数字，高亮可以只落在子串上（`getElementById` 的 Element）。代码本体中的编程熟词（[code-words.ts](../src/core/dict/code-words.ts) 的 `isCodeKnownWord`：关键字、内置类型、常见缩写）不高亮，注释和字符串不受这条限制。
 - 包裹：`highlightTextNode` 用 `splitText` 从后往前切分。**不变式：页面原始文本节点永远留在原位置**（首词命中时切成空串），其后的 mark 与剩余文本登记为它的“切分组”片段（`restoreGroup`/`dropGroup`）。框架改写原节点 `nodeValue` → 丢弃旧片段重做；框架删除/移动原节点 → 片段文字拼回原节点并移除片段；`removeChild(原节点)` 不会抛错。
-- 增量：`HighlightEngine` 用 MutationObserver（childList + characterData），队列在 `requestIdleCallback` 中按 4–12ms 时间片处理，每片先写后统一读计算样式；自身改动通过 `takeRecords()` 丢弃。
+- 增量：`HighlightEngine` 用 MutationObserver（childList + characterData），队列在 `requestIdleCallback` 中按 4–12ms 时间片处理，每片先写后统一读计算样式；自身改动通过 `takeRecords()` 丢弃。启动时的首个切片（24ms）直接执行，不等空闲回调。
+- 启动时机（engine 第二阶段）：内容脚本改在 `document_start` 注入（[content.ts](../src/entrypoints/content.ts)）。设置、词书、熟词、词形数据与页面解析并行加载，DOM 就绪后立即处理首屏。
+- 行内译文与 CLS：
+  - 懒插入：译文用 IntersectionObserver（视口上下各一屏）在接近视口时写入。视口外的写入一次完成，被推移的内容不可见，不计入 CLS；视口内的按段落分帧写入（一帧一段），比一次写入的 CLS 分数低。
+  - `ruby` 预留行高：创建 mark 的同一帧插入无释义的占位注解，行高一次到位，释义到达时只换文字。
+  - 重做切分组时（认识、删词）直接用缓存写入，不走懒插入，避免闪烁。
+  - 已知限制：维基百科首屏 `after` 模式 CLS 约 0.068（改造前 0.077，Relingo 0.095）。首屏推移发生在首次绘制（约 140ms，早于 DOMContentLoaded）之后，要降到 0.02 以下，需要在解析期间完成首屏标注并预载释义，见 backlog。
 - 熟词即时生效：`removeLemma(lemma)` 先把词条加入抑制集合，再同步重做含该词条的切分组（所有词形一起消失，释义取缓存不闪烁），存储写入后 `refreshMatches` 复核。
 - 数据变化：启用词书变化 → `rebuild` 全量重扫；新增熟词/用户词书删词（只减少命中）→ `refreshMatches` 原地复核；用户词书新增词 → 全量重扫；样式/翻译模式 → 仅更新样式。只监听 `settings`、`knownWords`、`srcBook:*`、`localBook:*`，忽略 `syncState` 等后台元数据写入。
 - 卡片：`CardView` 接口（[card/types.ts](../src/content/card/types.ts)）；`CardData.deletableBooks` 为命中的、provider 支持删除的来源词书；`CardActions` 为 `markKnown(lemma, surface) → MarkKnownResult`、`unmarkKnown(lemma)`（撤销）、`deleteFromSources(lemma, bookIds)`，均转发 background 消息。当前实现 `ShadowCardView`（open 模式 Shadow DOM，便于测试穿透）：视口 ≤ 600px 或无悬停能力的触屏设备显示底部卡片（近全宽、可下滑关闭、触控目标 ≥ 44px，单词被遮挡时自动滚到卡片上方），否则为贴词浮层（滚动时跟随单词，单词离开视口关闭）；暗色页面自动换暗色卡片；“认识”后关闭卡片并弹出可撤销 toast；来源删除为两步确认。打开期间给锚点加 `data-hnw-active` 属性，并由卡片注入 `<style id="hnw-card-active-style">` 显示激活态（叠加渐变，不覆盖 engine 的高亮样式）。纯函数（词形关系说明、释义分行、音标规范化、外部词典链接）在 [word-info.ts](../src/content/card/word-info.ts)。触发逻辑 `bindCardTrigger`：鼠标悬停 100ms 打开、触屏点按打开并阻止链接跳转（再次点按放行）；鼠标在外部按下 / 触屏在外部点按（滑动滚动不关闭）/ Esc 关闭，页面滚动不再由 trigger 关闭。
-- 卡片可选契约（向后兼容，入口未接入时不显示）：`CardData.collected?: boolean` + `CardActions.setCollected?(lemma, surface, collected)` 用于“加入/移出生词本”（收藏）按钮。background 已提供消息：`getWordState`（收藏状态）、`addWord`/`removeWord`（收藏/取消，目标按 `wordActions` 配置）、`previewWordAction`（执行前预览，`needsConfirm=true` 时卡片应列出将从来源删除的词让用户确认），由 `app.ts` 注入。
+- 卡片单词操作（card 第二阶段）：卡片自己持有 `CardBackend`（[word-actions.ts](../src/content/card/word-actions.ts)，`ShadowCardView` 构造的第三个参数，缺省为转发 background 消息的运行时实现），入口无需改动：
+  - 打开卡片时并行取 `getWordState`、`previewWordAction`（add/known）、加入候选目标（读 storage 的设置与词书索引，`buildAddTargets`）、来源词书删除能力；都只读本地缓存。
+  - 底栏：“认识”｜“加入生词本 ▾”（分段按钮，下拉为卡片内联面板，可临时改选目标，本页有效）｜来源删除（两步确认）。下方说明行写明“加入写到哪里 / 认识记入哪里、会从哪些生词本移除哪些词形”，不支持的目标（有道非默认分组、欧路“已掌握”只读、来源不可删）置灰并显示原因，点按置灰按钮给出原因 toast。
+  - 认识：预览含不可撤销的远端删除或同形异义词形时先在卡片内确认（同形异义默认保留，勾选后带 `confirmed` 再调一次 `markKnown`）；结果 toast 写明记入的熟词本、删除/跳过/失败情况，带“撤销”（`unmarkKnown` 的 message 原样展示）。加入/移出生词本的 toast 同样写明去向并可撤销（撤销加入 = `removeWord` 加入的书；撤销移出 = 带 `targets` 的 `addWord`）。
+  - `addWord` 的可选 `targets` 由 card 新增到协议，background 第二阶段第 2 轮已实现：传入时完全取代 `addTargets`（含撤销移出后的重新加入），规则见消息表 `addWord` 一行。
+  - `CardData.collected` 可不传（卡片自行查询）；`CardActions.setCollected` 已废弃不再使用；`CardActions.unmarkKnown` 可返回 background 结果以显示详细撤销说明。
+  - 渲染全部用 DOM API（[h.ts](../src/content/card/h.ts)），不使用 innerHTML。强调色取单词实际渲染的高亮颜色（装饰线 > 马克笔渐变 > 底色 > 边框 > 文字色，`markAccent`），与主题 `CardStyle.accent` 同色系时用主题色，再按卡片底色调整明度到 4.5:1（`fitContrast`），因此跟随 v5 样式与按词书样式。
+  - 底部卡片打开时 toast 显示在顶部；桌面悬停卡片在卡片内点按过后不再因鼠标移出而关闭（`bindCardTrigger`）。
+  - 朗读兜底：`sendToBackground('tts')` 已在后台无引擎时于页面内用 Web Speech 朗读（见 4.6），卡片发音按钮无需额外处理。
 
 ### 4.6 消息契约
 
@@ -221,7 +252,7 @@ flowchart LR
 | → background | `deleteSourceWords` | `{word, bookIds?, forms?}` → `DeleteWordsResult`（远端成功才移除本地缓存；`forms` 只含屈折词形） |
 | → background | `markKnown` | `{word, lemma, confirmed?}` → `MarkKnownResult`（按 `wordActions` 写熟词本 + 从生词本移除屈折词形；`written`/`removedLocal`/`fullyUndoable` 为第 2 轮新增；第 3 轮新增 `confirmed` 与 `withheld`：同形异义词形的远端删除未确认时不执行，见 4.9） |
 | → background | `unmarkKnown` | `{lemma}` → `{ok, restored?, message?}`（10 分钟内撤销：本地词书完整恢复，来源词书加回可写的原书，不可写时加回同来源可写书并在 message 说明；记录存 `storage.session` 的 `knownUndo`） |
-| → background | `addWord` | `{word, lemma, trans?, phonetic?}` → `AddWordResult`（写入 `addTargets`，移出 `addRemoveFromKnown`） |
+| → background | `addWord` | `{word, lemma, trans?, phonetic?, targets?}` → `AddWordResult`（写入 `addTargets`，移出 `addRemoveFromKnown`；`targets` 为卡片临时目标（card 第二阶段新增，background 第 2 轮实现）：传入时完全取代 `addTargets`，未知 id 与本地熟词本过滤，只读目标（欧路“已掌握”、有道非默认分组）跳过并在 `added` 写明原因；`[]` 或过滤后为空视为非法，返回 `ok=false` 且不写入、不回退默认目标） |
 | → background | `removeWord` | `{lemma, bookIds?}` → `RemoveWordResult`（移出生词本；10 分钟内会把加入时移出的熟词加回） |
 | → background | `previewWordAction` | `{action:'add'\|'known', word, lemma}` → `WordActionPreview`（只读本地缓存，列出写入目标和各书将移除的词形，`needsConfirm` 表示含远端删除；`remove[].homographs` 为需确认的同形异义词形） |
 | → background | `getWordState` | `{lemma}` → `{collected, collectedIn, known}` |
@@ -233,9 +264,23 @@ flowchart LR
 | → background | `exportBackup` | `{includeSourceBooks?, includeCredentials?, compress?}` → `BackupExport`（凭据默认不写入备份，第 4 轮新增 `includeCredentials`；`content` 为 JSON 文本或 gzip 的 base64，`fileName` 已带 .json/.json.gz） |
 | → background | `previewBackupImport` | `{content, mode:'merge'\|'overwrite'}` → `BackupImportPreview`（新增/删除/更新/冲突计数 + `summary` 中文） |
 | → background | `importBackup` | `{content, mode}` → `BackupImportResult` |
+| → background | `getStatusSummary` | `{}` → `StatusSummary`（总状态，只读不发网络请求，见下文“总状态”；第二阶段新增） |
+| → background | `syncAll` | `{background?}` → `SyncAllResult { summary, sources, ok, complete?, accepted?, message }`（并行同步已启用的 storage.sync、WebDAV 与全部启用来源，任一失败不影响其他项；`message` 分“已同步 / 等待同步（约 N 秒后自动完成）/ 仍在同步 / 失败 / 未完成”，有启用项时不为空；`ok`=无失败与未完成，`complete`=`ok` 且无等待/进行中项。`background=true`（第 2 轮新增）立即返回 `accepted=true`，同步在后台继续，popup 关闭不影响，调用方轮询 `getStatusSummary().syncAll`；同一 SW 内重复调用复用进行中的那一次） |
+| → background | `dismissUpdateNotice` | `{}` → void（清除 `updateNotice`） |
 | → background | `reportPageWords` | `{lemmas}`（本 frame 全量）→ void，用于徽章 |
 | → background | `getTabWords` | `{tabId}` → `{lemmas}` |
 | → content（顶层 frame） | `getPageState` | `{}` → `PageState` |
+| → content（被点击的 frame） | `actionNotice` | `{action:'add'\|'known', word, lemma, ok, message}` → void：右键菜单执行结果，内容脚本**可选**实现（用卡片 toast 展示 message）；未实现时后台只在徽章上闪 ✓/!（第二阶段新增） |
+
+**总状态 `StatusSummary`**（[background/status.ts](../src/background/status.ts)）：popup 状态条与 options 概览共用，避免各页面自己拼 `syncState`/`webdavSyncState`/`sourceBooks`。
+
+- `items: StatusItem[]`：`storage-sync`、`webdav`、每个启用来源 `source:<providerId>` 各一项，含 `name`、`level`、一句中文 `text`、`lastSyncAt`、`retryAt?`、`href`（选项页位置：浏览器账号同步 `#sync/sync`、WebDAV `#sync/webdav`、来源 `#sources`）。
+- `level` 严重程度 `error > busy > pending > never > ok > off`，总 `level` 取最严重项，总 `text` 如“已全部同步”“欧路词典：授权失效…”“正在同步 WebDAV…”。**从未成功同步过的来源失败**（如默认启用有道但用户从没登录）记为 `never` 并附原因，不显示为红色错误；成功过之后再失败才是 `error`。
+- storage.sync 已同步时 `text` 带用量与超配额取舍说明（“1 本本地词书超出配额未同步”/“只同步了单词”）。
+- `permissions { allSites, webdavOrigin?, text? }`：`allSites=false` 时页面不会高亮（platform `hasAllSitesAccess`）；授权按钮仍须由页面在点击处理里第一句调用 `requestAllSitesAccess()`（后台无法发起授权）。
+- `updateNotice?`：见存储键 `updateNotice`。
+- `syncAll?: { running, startedAt, result? }`（第 2 轮新增）：“立即同步全部”进行中 / 本 SW 生命周期内最近一次的结果（`ok`、`complete`、`message`、`finishedAt`），popup 重新打开时据此显示进度或结果；SW 被回收后丢失，此时以各项 `busy` 为准。
+- `permissions.text`：`allSites=false` 时为“未授权访问全部网站，只在已授权的网站上高亮”。
 
 新增消息：在对应 Protocol 接口加一项，TS 会强制接收方 handlers 实现。
 
@@ -243,13 +288,28 @@ flowchart LR
 
 [themes.ts](../src/core/theme/themes.ts) 定义 `MarkStyle`/`CardStyle`/`HighlightTheme` 和 `BUILTIN_THEMES`（含旧版 5 套配色），`resolveMarkStyle`/`resolveCardStyle`/`markStyleToCss` 在内容脚本与 options 预览中共用。已有主题 id 不可修改（用户设置中保存的是 id）。
 
+**v5 可组合样式（engine 第二阶段扩展，全部为可选字段，旧设置与旧主题无需迁移，缺省时渲染与旧版完全一致）**：
+
+| 维度 | `MarkStyle` 字段 | 说明 |
+| --- | --- | --- |
+| 装饰线 | `underline`（none/solid/dashed/dotted/wavy）、`underlineDouble`、`underlineColor`、`underlineThickness`（px）、`underlineOffset`（px） | 双线用 `underlineDouble`，没有扩展 `UnderlineStyle` 联合类型，避免已有按线型穷举的代码失效 |
+| 文字 | `color`、`fontWeight`（inherit/medium/bold）、`italic` | 粗体会让单词略变宽，是唯一可能改变换行的维度 |
+| 背景 | `background`、`backgroundKind`（block/marker/pill）、`backgroundOpacity`（与颜色 alpha 相乘，用 `color-mix`）、`rounded` | 马克笔用 `background-image` 只画下半部；胶囊用同色 `box-shadow` 做留白，不占位 |
+| 边框 | `border`（none/solid/dashed/dotted）、`borderColor` | 用 `outline` 画，不占布局空间 |
+| 无样式 | 全部为空/none | 配合行内译文即“仅括号译文” |
+
+- 渲染：`markStyleParts(s)` 返回 `{ decls, bgImage }`，`markStyleToCss(s)` 拼成一串声明，`MarkPreview` 等预览直接使用。页面规则由 engine 的 `buildPageCss` 生成，在此基础上加悬停叠色（与马克笔色带一起写进 background-image）、深色上下文修正（文字色/线色/边框色提亮，半透明背景的不透明度压到 0.32 以下）和链接内修正（`isTextOnlyStyle` 为真时保留链接色并加主题色浅底）。
+- 行内译文与生词样式相互独立，见 4.1 的 `inlineTranslation`。`HighlightTheme.translation` 是预设建议的译文设置，`applyThemePreset(settings, id)` 在设置主题的同时应用它（options 预设画廊点选时调用）；只改 `style.themeId` 不会动译文设置。
+- 按词书设样式：沿用 `style.perBook[id].mark`（`Partial<MarkStyle>`，v5 字段同样可以覆盖）。
+- v5 预设：`V5_PRESET_IDS` 共 13 套，顺序即推荐的画廊顺序，每套带 `desc` 一句话说明：荧光笔 `highlighter`、波浪线 `wavy-line`、下划线 + 括号译文 `underline-gloss`、仅括号译文 `gloss-only`、粗体强调 `bold-accent`、柔和底色 `soft-tint`、暗色模式友好 `dark-friendly`、胶囊 `pill`、虚线框 `dashed-box`、双下划线 `double-underline`、词上注释 `ruby-gloss`、模糊自测 `quiz-blur`、斜体点线 `italic-dotted`。颜色都避开常见链接蓝。单测 `tests/unit/engine-styles.test.ts` 校验亮/暗页对比度；在 [engine-styles.html](../tests/fixtures/engine-styles.html)（亮色段、链接段、暗色段、受限容器、代码块）上逐套截图核对过。
+
 **选项页外观约定（options 分片）**：
 
-- 内置预设新增 `orange-text`/`teal-text`/`dashed-orange`/`wavy-red`/`underline-tint`/`marker-lime`（只追加，不改旧 id）；`legacy-*` 在 UI 中折叠为“旧版配色”。
-- 自定义样式 = “样式类型 × 主色”（[palette.ts](../src/ui/components/palette.ts) 的 `buildMark`/`tintMark`/`markKind`），按词书分色时 `perBook[id].mark` 存与全局同类型、不同颜色的完整 `MarkStyle`；全局样式类型变化时由 options 按各自主色重新着色（`retintPerBook`）。
-- 实时预览（`LivePreview`）直接调用 engine 的 `highlightTextNode`/`setMarkTranslation`/`buildPageCss` 生成 DOM 与样式（把 `html[data-hnw-tr=…]` 替换为容器属性选择器），engine 调整 DOM 结构或样式时预览自动一致，请保持这三个导出的签名。
+- 内置预设新增 `orange-text`/`teal-text`/`dashed-orange`/`wavy-red`/`underline-tint`/`marker-lime`（只追加，不改旧 id）。预设画廊按 `presetGroups()` 分为组合预设（带 `desc`）、我的样式（`style.saved`）、单色样式与折叠的旧版配色；选预设走 engine 的 `applyThemePreset`（带建议译文的预设同时设置译文模式）。
+- 样式编辑器（`StyleEditor`）按装饰线 / 文字 / 背景 / 边框四个维度编辑完整 `MarkStyle`；改全局样式即切到 `custom`。按词书三种方式（`lib/appearance.ts#bookStyleMode`）：跟随全局（无覆盖）、只换颜色（`perBook[id] = { mark }`，全局形态变化时 `retintPerBook` 按各自主色重新着色）、独立样式（`perBook[id] = { themeId: 'custom', mark: 完整样式 }`，不随全局变化）。`tintMark` 保持形态只换色，背景 + 文字色组合保留文字色。
+- 实时预览（`LivePreview`）直接调用 engine 的 `highlightTextNode`/`setMarkTranslation`/`buildPageCss` 生成 DOM 与样式（把 `html[data-hnw-tr=…]` 替换为容器属性选择器），engine 调整 DOM 结构或样式时预览自动一致，请保持这三个导出的签名（engine 第二阶段只给 `highlightTextNode` 追加了可选的第 4 个参数，并新增 `hover` 模式选择器，同样是 `html[data-hnw-tr="hover"]` 写法；预览要展示链接内效果时可以给 mark 加 `data-hnw-link`）。
 - [tokens.css](../src/ui/tokens.css) 支持 `:root[data-theme="light|dark"]` 强制主题，新增 `--success/--warn/--danger-soft/--overlay/--radius-lg` 令牌。
-- 选项页路由为 hash：`#books`/`#appearance`/`#sources`/`#known`/`#more`，可带页内锚点（如 `#appearance/per-book`、`#sources/import`）；`#welcome` 为首次使用引导，background 可在 `onInstalled(reason=install)` 时打开 `options.html#welcome`。
+- 选项页路由为 hash：`#books`/`#appearance`/`#sources`/`#known`/`#sync`/`#more`，可带页内锚点（如 `#appearance/per-book`、`#sources/word-actions`、`#sync/webdav`）；旧链接 `#more/sync`（及 `webdav`/`backup`/`credentials` 锚点）自动转到 `#sync`；`#welcome` 为首次使用引导，background 可在 `onInstalled(reason=install)` 时打开 `options.html#welcome`。
 
 ### 4.8 生词本来源（Source Provider）
 
@@ -304,6 +364,8 @@ sequenceDiagram
 - `knownRemoveFrom='auto'`（默认）等同旧开关：启用的来源中开启 `deleteOnKnown` 的全部生词本。
 - **撤销**（10 分钟，记录在 `storage.session` 的 `knownUndo`，键为 `known:<lemma>` / `add:<lemma>`）：本地词书完整恢复；来源词书原书可加词时加回原书，否则加回同来源可写的书（有道默认分组）并说明，都不行时在文案中列出无法加回的词；撤销认识时还会删除写入来源熟词本的词。
 - “加入生词本”默认写入“我的生词本”（`local:mine`，首次加入时自动创建并放到 `books.enabled` 最前），并从本地熟词本移除该词的屈折词形；词仍在启用的只读来源熟词本中时，文案提示“仍不会高亮”。
+
+**选中文本右键菜单**（[background/context-menu.ts](../src/background/context-menu.ts)，第二阶段新增，manifest 权限 `contextMenus`，无安装警告）：桌面浏览器选中单词后右键“加入生词本：“…””/“标记为熟词：“…””，与卡片按钮走同一个 `addWord`/`markKnown`（目标按 `wordActions`），原形取屈折还原（running→run，不取派生词根）；选中的不是单个英文单词时提示“请只选中一个英文单词”，含非英文字母的拉丁词（café、fiancé）不截断、直接拒绝并提示；`markKnown` 不带 `confirmed`，同形异义词形的远端删除保留并在 message 说明。结果通过 `actionNotice` 发给内容脚本，同时徽章闪 ✓/!。没有 `contextMenus` API 的浏览器（Edge/Chrome Android）不注册，菜单与徽章初始化失败都不影响 SW 其余初始化（有单测覆盖 `contextMenus=undefined`）。
 
 熟词本存储见 [known/store.ts](../src/core/known/store.ts)：`getKnownData`（本地熟词本）、`getKnownWords`（生效并集）、`setKnownWords`、`replaceKnownWords`（文本编辑，删除的记墓碑）、`importKnownWords`、`exportKnownWords('txt'|'csv')`。合并规则见 `mergeKnownWords`。
 
@@ -378,7 +440,7 @@ flowchart LR
 | `npm run typecheck` | `vue-tsc --noEmit` |
 | `npm test` | Vitest 单测 |
 | `npm run qa:shot -- --ext <dir> ...` | 视觉 QA 截图 |
-| `scripts/data/fetch-raw.sh .cache/data-raw [--with-ultimate]` 后 `node scripts/data/build-data.mjs --raw .cache/data-raw` | 生成内置词书/词典数据（约 6 秒，输出确定性；`--with-ultimate` 用 ECDICT-ultimate 改善短释义排序） |
+| `scripts/data/fetch-raw.sh .cache/data-raw [--with-ultimate]` 后 `node scripts/data/build-data.mjs --raw .cache/data-raw` | 生成内置词书/词典数据（约 6 秒，输出确定性；`--with-ultimate` 用 ECDICT-ultimate 改善短释义排序，**仓库中的 `public/data` 带该参数生成**，不带时短释义会退化；短释义人工覆盖表为 `scripts/data/short-overrides.tsv`） |
 
 **OUT_DIR**：多个 agent 并行构建时，各自设置不同输出根目录，避免互相覆盖：
 
@@ -404,7 +466,7 @@ stdout 输出每页统计 JSON（高亮数、不同词条数、行内翻译数�
 
 ## 七、已知缺口
 
-- 内置短释义不看上下文（present→介绍、concrete→混凝土的），按多来源义项位次投票选取；ECDICT 考试标签不是官方大纲（四级约 3.8k 词，少于官方 4.5k）；ECDICT 小写词条与人名同形（tom）在 C2 书中可能误标首字母大写的人名。
+- 内置短释义不看上下文（thread 只给“线”，不会因技术页面变成“线程”；remains 给“残余”），按多来源义项打分 + 人工覆盖表选取，在 Relingo 行内注解采集（article/dark/dynamic 与 3 个维基页面，Relingo 是上下文相关的）上忽略“的/地”后约一半一致；ECDICT 考试标签不是官方大纲（四级约 3.8k 词，少于官方 4.5k）；有 COCA 排名的人名同形词（如 tom、ken）仍可能在 C2/考试书中误标首字母大写的人名。
 - 词形还原不带词性：同形异义词按数据取最常见原形（leaves → leave, leaf 都作候选）；派生关系靠 ECDICT 释义做语义校验，个别派生词因释义不重叠而漏还原（unhappiness、sailor），前缀派生（un-/re-）不还原。
 - popup/options 文案仅中文，未接入 `_locales` 国际化；卡片暂无例句；收藏（加入我的生词本）按钮待 background/engine 接入 `setCollected`。
 - 欧路 OpenAPI 已用调试账号 token 实测（分类、拉词、已掌握、在“测试”分组加词/删词）；cookie 模式沿用旧版接口，未登录判断（非 JSON / 重定向到登录页）为推断，未实测。
