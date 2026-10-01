@@ -575,4 +575,4 @@ stdout 输出每页统计 JSON（高亮数、不同词条数、行内翻译数�
 - WebDAV 只用本地 docker（bytemark/webdav，Apache mod_dav）实测，坚果云/Nextcloud 未实测（是否支持 LOCK 未验证）。并发写入：支持 LOCK 时真实两 profile 并发 0/72 轮丢失；不支持 LOCK（用拒绝 LOCK 的代理模拟）时写后回读校验 + 复查 0/20 轮丢失，对方 PUT 比本机回读还慢落地时远端会暂时缺本机的词，5–15s 复查补推；复查前 SW 被回收时由持久化的 `recheckAt` 在下次 SW 启动时立即补做（合并幂等，不会永久丢失本机数据）。
 - storage.sync 的防抖/退避计时器在 SW 被回收后丢失，未推送的改动在 SW 下次启动时由启动同步补推（没有使用 alarms 权限）。
 - 徽章：background 在 URL（不含 hash）变化时清零（含 SPA 路由），依赖内容脚本在路由切换后按页面实际高亮重新全量上报。
-- TODO 更多发音来源：目前只有浏览器/系统语音（`chrome.tts`、Web Speech），手机上取决于系统语音引擎，部分国产系统英文语音缺失或较差。可选方案：有道真人发音 `https://dict.youdao.com/dictvoice?audio=<词>&type=1|2`（英/美，非官方接口，2026-10 实测可用）作为可选来源，默认仍用系统语音，失败时回退。页面 CSP 会拦截外站音频，Chrome/Edge 需用 offscreen 文档播放（新增 `offscreen` 权限，Edge Android 支持情况待实测），隐私政策要补充“开启后朗读的单词会发送给有道”。
+- 发音来源（`settings.tts.source`）：系统语音（默认，`chrome.tts`/Web Speech）或有道、欧路真人发音（美音/英音；有道 `dictvoice`、欧路 `speakweb`，都是非官方接口，可能失效）。在线音频由后台 `background/tts.ts#fetchVoiceAudio` 下载（不带 cookie，内存缓存 60 条），调用方用 Web Audio 解码播放（`core/platform/audio.ts`），不受页面 CSP 限制、无需 `offscreen` 权限；下载失败或浏览器不允许自动播放（页面尚无用户交互时的悬停自动发音）时退回系统语音。真人录音不套用语速设置。

@@ -208,6 +208,9 @@ export interface BookStyleOverride {
   mark?: Partial<MarkStyle>;
 }
 
+/** 发音来源，见 Settings.tts.source */
+export type TtsSource = 'system' | 'youdao-us' | 'youdao-uk' | 'eudic-us' | 'eudic-uk';
+
 export interface Settings {
   schemaVersion: number;
   /** 最近一次修改时间 ms（saveSettings 自动维护），多设备同步时按此做 LWW */
@@ -260,6 +263,11 @@ export interface Settings {
     /** chrome.tts.speak 的选项子集（旧 ttsVoices，默认 {lang:'en'}） */
     voice: { voiceName?: string; lang?: string; extensionId?: string };
     rate: number;
+    /**
+     * 发音来源：system 浏览器/系统语音（默认）；youdao-* / eudic-* 有道、欧路真人发音（美音/英音，需联网，
+     * 朗读的单词会发给对应词典；失败时自动退回系统语音）。缺省视为 system
+     */
+    source?: TtsSource;
   };
   /** 按来源 provider id 的配置；未知 provider 的项保留不动（便于新增来源） */
   sources: Record<string, SourceSettings>;

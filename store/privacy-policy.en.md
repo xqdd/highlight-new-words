@@ -20,6 +20,7 @@ Requests go directly from your browser to the services below, never through an i
 | --- | --- | --- | --- |
 | Youdao word book source | Youdao Dictionary `dict.youdao.com` | Your Youdao login cookie, attached automatically by the browser; the word being removed or re-added | Read your Youdao word books; remove or re-add words as you configured |
 | Eudic word book source | Eudic `api.frdic.com`, `my.eudic.net`, `dict.eudic.net` | The Eudic API token you entered, or your Eudic login cookie attached by the browser; the word being added or removed | Read your Eudic word books and categories; add or remove words as you configured |
+| Recorded pronunciation (when Youdao or Eudic is chosen as the pronunciation source) | Youdao Dictionary `dict.youdao.com` or Eudic `api.frdic.com`, as you chose | The word to be pronounced (no login data) | Download the recorded pronunciation of that word |
 | WebDAV sync | The WebDAV server you entered | Your WebDAV credentials; sync data (settings, known words, imported word books, and credentials only if you chose so) | Back up and sync on your own server |
 | Browser account sync | Your browser vendor's sync service (e.g. Google or Microsoft account) | Compressed sync data (as above) | Sync between devices signed in to the same browser account |
 

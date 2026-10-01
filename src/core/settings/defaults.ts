@@ -47,7 +47,7 @@ export function createDefaultSettings(): Settings {
     youtube: { captions: true, hoverPause: false, captionTranslation: 'above' },
     floatBall: { enabled: true, hiddenSites: [] },
     card: { trigger: 'auto', modifier: 'alt', hoverDelay: 250, showUserTrans: true, tapOpen: true },
-    tts: { enabled: true, voice: { lang: 'en' }, rate: 1 },
+    tts: { enabled: true, voice: { lang: 'en' }, rate: 1, source: 'system' },
     // 云端来源默认全部关闭：新用户安装后不向任何第三方（有道、欧路）发请求，由用户在选项页主动连接（开启即同步一次）；
     // 旧版用过云端生词本的用户由 migrateLegacy 按旧数据启用对应来源，不受此默认值影响
     sources: {

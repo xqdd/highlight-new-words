@@ -6,3 +6,4 @@ export * from './capabilities';
 export * from './permissions';
 export * from './content-scripts';
 export * from './tts';
+export * from './audio';

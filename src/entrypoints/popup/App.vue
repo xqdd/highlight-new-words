@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { browser } from 'wxt/browser';
 import { sendToBackground } from '@/core/messaging';
 import { requestAllSitesAccess, speakText } from '@/core/platform';
+import { speakOnline } from '@/content/card/speak';
 import { INLINE_MODE_LABELS, INLINE_TRANSLATION_NAME, INLINE_TRANSLATION_SHORT_NAME } from '@/core/settings/inline-translation-labels';
 import type { BookId, InlineTranslationMode } from '@/core/settings/schema';
 import { isSiteDisabled } from '@/core/settings/store';
@@ -393,6 +394,8 @@ function openDetail(word: string) {
  */
 async function speak(word = detailWord.value) {
   if (!word) return;
+  // 选了在线真人发音时先用它，失败再走系统语音
+  if (settings.value && (await speakOnline(word, settings.value.tts))) return;
   const res = await sendToBackground('tts', { text: word, force: true }).catch(() => undefined);
   if (res?.spoken) return;
   if (!res || res.reason === 'unavailable') {

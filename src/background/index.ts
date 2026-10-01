@@ -11,7 +11,7 @@ import { addWord, getLemmatizer, getWordState, markKnown, previewWordAction, rem
 import { setupPrehideRegistration } from './prehide';
 import { autoSyncIfDue, deleteFromSources, recoverInterruptedSyncs, refreshSourceBooks, syncSourceBooks } from './sources/service';
 import { dismissUpdateNotice, getStatusSummary, recordUpdate, syncAll } from './status';
-import { speak } from './tts';
+import { fetchVoiceAudio, speak } from './tts';
 
 /**
  * 后台（MV3 service worker）：迁移旧数据、来源生词本同步/删词、熟词、跨设备同步（storage.sync / WebDAV / 手动备份）、TTS、徽章计数。
@@ -34,6 +34,7 @@ export function setupBackground(): void {
 
   handleBackgroundMessages({
     tts: ({ text, force }) => speak(text, force),
+    ttsAudio: ({ word, source }) => fetchVoiceAudio(word, source),
     refreshSourceBooks: async ({ providerId }) => {
       await ready;
       return refreshSourceBooks(providerId);

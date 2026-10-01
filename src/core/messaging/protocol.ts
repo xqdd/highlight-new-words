@@ -1,4 +1,4 @@
-import type { BookId } from '../settings/schema';
+import type { BookId, TtsSource } from '../settings/schema';
 import type { SourceBookState } from '../wordbook/types';
 import type {
   BackendSyncStatus,
@@ -226,6 +226,12 @@ export interface BackgroundProtocol {
      */
     fallback?: { text: string; lang?: string; voiceName?: string; rate?: number };
   };
+
+  /**
+   * 取在线真人发音音频（有道 dictvoice / 欧路 speakweb，mp3），返回 base64；失败时 audio 为空，调用方退回系统语音。
+   * 由后台下载（扩展的站点权限不受页面 CORS/CSP 限制），调用方用 Web Audio 解码播放（core/platform/audio.ts）
+   */
+  ttsAudio(data: { word: string; source: Exclude<TtsSource, 'system'> }): { audio?: string };
 
   // ---- 来源生词本 ----
   /** 刷新某来源的远端生词本列表（调用 provider.listRemoteBooks），新发现的书登记到索引（status=never），返回该来源全部书的状态 */
