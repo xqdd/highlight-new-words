@@ -156,29 +156,42 @@ export function hasFragments(t: Text): boolean {
 /**
  * 还原切分组：把片段文字按顺序拼回原文本节点并移除片段，DOM 恢复为高亮前的样子。
  * 原节点已被页面移走/移动时同样适用：片段从旧位置移除，原节点带着完整文字（若被重新插入，engine 会再处理）。
+ * 返回被移除的 mark，调用方据此停止对它们的懒插入观察（IntersectionObserver.unobserve）。
  */
-export function restoreGroup(original: Text): void {
+export function restoreGroup(original: Text): Element[] {
   const fragments = fragmentsOf.get(original);
-  if (!fragments) return;
+  if (!fragments) return [];
   fragmentsOf.delete(original);
   let text = '';
+  const marks: Element[] = [];
   for (const f of fragments) {
     ownerOf.delete(f);
-    text += f.nodeType === Node.TEXT_NODE ? (f as Text).data : markSurface(f as Element);
+    if (f.nodeType === Node.TEXT_NODE) text += (f as Text).data;
+    else {
+      text += markSurface(f as Element);
+      marks.push(f as Element);
+    }
     (f as ChildNode).remove();
   }
   if (text) original.data += text;
+  return marks;
 }
 
-/** 丢弃切分组的片段但不拼回文字（页面已改写原节点内容时使用，旧片段已过时） */
-export function dropGroup(original: Text): void {
+/**
+ * 丢弃切分组的片段但不拼回文字（页面已改写原节点内容时使用，旧片段已过时）。
+ * 返回被移除的 mark（与 restoreGroup 相同），调用方据此停止对它们的懒插入观察。
+ */
+export function dropGroup(original: Text): Element[] {
   const fragments = fragmentsOf.get(original);
-  if (!fragments) return;
+  if (!fragments) return [];
   fragmentsOf.delete(original);
+  const marks: Element[] = [];
   for (const f of fragments) {
     ownerOf.delete(f);
+    if (f.nodeType === Node.ELEMENT_NODE) marks.push(f as Element);
     (f as ChildNode).remove();
   }
+  return marks;
 }
 
 /**

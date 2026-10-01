@@ -289,7 +289,7 @@ export class HighlightEngine {
     const newMarks: HTMLElement[] = [];
     this.withoutObserving(() => {
       for (const o of owners) {
-        restoreGroup(o);
+        this.unobserveMarks(restoreGroup(o));
         newMarks.push(...this.highlight(o));
       }
       this.markContexts(newMarks);
@@ -300,12 +300,14 @@ export class HighlightEngine {
   }
 
   private onMutations(records: MutationRecord[]): void {
+    // 重新插入文档的、尚未写入译文的 mark（见下方 addedNodes 分支）
+    const reattached: HTMLElement[] = [];
     for (const r of records) {
       if (r.type === 'characterData') {
         const t = r.target as Text;
         if (hasFragments(t)) {
           // 页面（框架）改写了原文本节点：旧片段已过时，丢弃后按新内容重做
-          this.withoutObserving(() => dropGroup(t));
+          this.withoutObserving(() => this.unobserveMarks(dropGroup(t)));
         } else if (ownerTextOf(t) || isInsideOwnNode(t)) {
           continue;
         }
@@ -316,16 +318,30 @@ export class HighlightEngine {
       for (const n of r.removedNodes) {
         // 原文本节点被页面删除或移动：把片段文字拼回原节点并移除片段，避免残留重复文字
         if (n.nodeType === Node.TEXT_NODE && hasFragments(n as Text)) {
-          this.withoutObserving(() => restoreGroup(n as Text));
+          this.withoutObserving(() => this.unobserveMarks(restoreGroup(n as Text)));
           this.processed.delete(n as Text);
+        } else if (n.nodeType === Node.ELEMENT_NODE && !n.isConnected) {
+          // 页面删除了含 mark 的子树：尚未进入视口的 mark 仍被懒插入观察者持有，停止观察以便回收。
+          // 仍在文档中的（被移动到别处）保留观察，否则译文永远不会写入
+          const el = n as Element;
+          if (el.localName === TAG_MARK) this.unobserveMarks([el]);
+          else this.unobserveMarks(el.querySelectorAll(TAG_MARK));
         }
       }
       for (const n of r.addedNodes) {
         if (n.nodeType !== Node.ELEMENT_NODE && n.nodeType !== Node.TEXT_NODE) continue;
+        if (n.nodeType === Node.ELEMENT_NODE && n.isConnected) {
+          // 页面把摘下的子树重新挂回（虚拟列表、keep-alive、跨任务重挂载）：其中的 mark 在删除分支已停止观察，
+          // 重扫文本不会再处理它们（已高亮），需重新交给懒插入，否则永远拿不到译文。已写入译文/占位的不受影响
+          const el = n as HTMLElement;
+          const marks = el.localName === TAG_MARK ? [el] : el.querySelectorAll<HTMLElement>(TAG_MARK);
+          for (const m of marks) if (!m.querySelector(TAG_TRANSLATION)) reattached.push(m);
+        }
         if (isInsideOwnNode(n) || ownerTextOf(n)) continue;
         this.enqueue(n);
       }
     }
+    if (reattached.length > 0) void this.fillTranslations(reattached);
     if (records.some((r) => r.type === 'childList' && r.removedNodes.length > 0)) this.scheduleRecount();
   }
 
@@ -414,6 +430,13 @@ export class HighlightEngine {
   }
 
   /** 执行 DOM 改动期间丢弃自身产生的 mutation，保留之前页面产生的 mutation */
+  /** 停止观察已移出文档的 mark（行内译文懒插入），避免 IntersectionObserver 长期持有被页面删除的节点 */
+  private unobserveMarks(marks: Iterable<Element>): void {
+    const io = this.translationObserver;
+    if (!io) return;
+    for (const m of marks) io.unobserve(m);
+  }
+
   private withoutObserving(fn: () => void): void {
     const pending = this.observer?.takeRecords() ?? [];
     fn();
@@ -583,7 +606,7 @@ export class HighlightEngine {
     if (targets.length === 0) return;
     const missing = new Set<string>();
     for (const m of targets) {
-      for (const key of translationKeys(m)) if (!this.translations.has(key)) missing.add(key);
+      for (const key of translationKeys(m, this.opts.matcher)) if (!this.translations.has(key)) missing.add(key);
     }
     if (missing.size > 0) {
       const found = await this.opts.dictionary.lookupMany(missing);
@@ -654,11 +677,11 @@ export class HighlightEngine {
   }
 
   /**
-   * mark 的短释义：相邻词构成固定搭配时用搭配义（core/dict/collocation）；否则优先页面词形自己的词条，没有再用原形（见 translationKeys）；
-   * 页面词形是动词变形（-ing/-ed）而原形的首选义项不是动词时，改用原形的动词释义（advocating → 提倡，而不是“提倡者”）。
+   * mark 的短释义：相邻词构成固定搭配时用搭配义（core/dict/collocation）；否则依次取页面词形、屈折原形、匹配原形的词条（见 translationKeys）；
+   * 页面词形是动词变形（-ing/-ed）而屈折原形的首选义项不是动词时，改用其动词释义（advocating → 提倡，而不是“提倡者”）。
    */
   private translationOf(m: Element): string | null {
-    const keys = translationKeys(m);
+    const keys = translationKeys(m, this.opts.matcher);
     const lemma = keys[keys.length - 1]!;
     // 固定搭配中的义项优先（vicious cycle → 恶性的，concrete structures → 混凝土）
     const colloc = collocationOf(m, lemma);
@@ -666,9 +689,15 @@ export class HighlightEngine {
     if (keys.length > 1) {
       const own = this.translations.get(keys[0]!);
       if (own) return own;
+      // 动词释义取屈折原形的（没有屈折原形时 keys[1] 即匹配原形）
       if (VERB_INFLECTION.test(keys[0]!)) {
-        const verb = this.verbTranslations.get(lemma);
+        const verb = this.verbTranslations.get(keys[1]!);
         if (verb) return verb;
+      }
+      // 屈折原形自己的词条（projections → projection 预测，而不是词根 project 的“项目”）
+      if (keys.length > 2) {
+        const inflected = this.translations.get(keys[1]!);
+        if (inflected) return inflected;
       }
     }
     return this.translations.get(lemma) ?? null;
@@ -820,14 +849,18 @@ function adjacentWord(m: Element, prev: boolean): string | undefined {
 }
 
 /**
- * 查释义用的词：先页面词形（小写），再原形。
+ * 查释义用的词：页面词形（小写）→ 屈折原形 → 匹配原形，去重。
  * 派生词在词典里通常有自己的词条（committee=委员会、carelessly=粗心地），用原形（commit=犯罪、careless）会译错；
- * 屈折变化（proposals、citing）词典没有单独词条，自然回退到原形。
+ * 页面词形是派生词的屈折变化、借词根命中词书时（projections 命中 project、consequences 命中 consequent），
+ * 屈折原形（projection=预测、consequence=后果）才是正确词条，排在匹配原形之前；
+ * 普通屈折变化（proposals、citing）词典没有单独词条，屈折原形即匹配原形，自然回退到原形。
  */
-function translationKeys(m: Element): string[] {
+function translationKeys(m: Element, matcher: WordMatcher): string[] {
   const lemma = m.getAttribute(ATTR_LEMMA)!;
   const surface = markSurface(m).toLowerCase().replace(/['’]s$/, '');
-  return surface && surface !== lemma ? [surface, lemma] : [lemma];
+  if (!surface || surface === lemma) return [lemma];
+  const inflection = matcher.inflectionOf(surface);
+  return inflection && inflection !== surface && inflection !== lemma ? [surface, inflection, lemma] : [surface, lemma];
 }
 
 /**

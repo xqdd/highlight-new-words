@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SimpleLemmatizer } from '@/core/lemma/simple';
 import { WordMatcher } from '@/core/match/matcher';
 import { createDefaultSettings } from '@/core/settings/defaults';
@@ -159,5 +159,89 @@ describe('shortenTranslation', () => {
     expect(shortenTranslation('vt. (使)开化; 使文明')).toBe('开化');
     expect(shortenTranslation('n. 口语用法很长很长的一个义项')).toBe('口语用法很长…');
     expect(shortenTranslation('[计] ')).toBe('');
+  });
+});
+
+describe('页面删除未进入视口的 mark：懒插入观察者停止持有（E4）', () => {
+  /** 记录被观察节点的 IntersectionObserver 替身：永不回调（模拟一直在视口外） */
+  class RecordingIO {
+    static held = new Set<Element>();
+    observe = vi.fn((el: Element) => RecordingIO.held.add(el));
+    unobserve = vi.fn((el: Element) => RecordingIO.held.delete(el));
+    disconnect() {
+      RecordingIO.held.clear();
+    }
+  }
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    RecordingIO.held.clear();
+  });
+
+  it('大量删除含 mark 的子树后，observer 不再持有这些节点；被移动（仍在文档中）的保留观察', async () => {
+    vi.stubGlobal('IntersectionObserver', RecordingIO);
+    const paras = Array.from({ length: 200 }, (_, i) => `<p>item ${i}: abandon the premise</p>`).join('');
+    document.body.innerHTML = `<div id="feed">${paras}</div><div id="keep"><p>scrutinize it</p></div><section id="dst"></section>`;
+    engine = startEngine();
+    // 扫描按时间片分批进行，等全部处理完
+    for (let i = 0; i < 50 && document.querySelectorAll('#feed hnw-mark').length < 400; i++) await flush();
+    await flush();
+    const feedMarks = [...document.querySelectorAll('#feed hnw-mark')];
+    expect(feedMarks.length).toBe(400);
+    expect(feedMarks.every((m) => RecordingIO.held.has(m))).toBe(true);
+    const kept = document.querySelector('#keep hnw-mark')!;
+    expect(RecordingIO.held.has(kept)).toBe(true);
+
+    document.getElementById('feed')!.remove();
+    // 移动：同一批 mutation 中先删后插，节点仍在文档中，译文之后还要写入
+    document.getElementById('dst')!.appendChild(document.getElementById('keep')!);
+    await flush();
+    expect(feedMarks.some((m) => RecordingIO.held.has(m))).toBe(false);
+    expect(RecordingIO.held.has(kept)).toBe(true);
+    expect(RecordingIO.held.size).toBe(1);
+  });
+
+  it('页面直接删除/改写原文本节点（还原/丢弃切分组）时同样停止观察片段中的 mark', async () => {
+    vi.stubGlobal('IntersectionObserver', RecordingIO);
+    document.body.innerHTML = '<p id="a">They abandon it.</p><p id="b">A premise here.</p>';
+    engine = startEngine();
+    await flush();
+    await flush();
+    const [ma, mb] = [document.querySelector('#a hnw-mark')!, document.querySelector('#b hnw-mark')!];
+    expect(RecordingIO.held.has(ma) && RecordingIO.held.has(mb)).toBe(true);
+    // 框架删除自己持有的原文本节点（片段被拼回、mark 被移除）
+    (document.getElementById('a')!.firstChild as Text).remove();
+    // 框架改写原文本节点内容（旧片段被丢弃）
+    (document.getElementById('b')!.firstChild as Text).data = 'nothing to see';
+    await flush();
+    expect(RecordingIO.held.has(ma)).toBe(false);
+    expect(RecordingIO.held.has(mb)).toBe(false);
+  });
+
+  it('摘下的子树在下一批 mutation 后重新挂回：未写入译文的 mark 恢复观察，已写入的不重复观察', async () => {
+    vi.stubGlobal('IntersectionObserver', RecordingIO);
+    document.body.innerHTML = '<p id="near">They abandon it.</p><div id="far"><p>A premise and scrutinize.</p></div>';
+    engine = startEngine();
+    await flush();
+    await flush();
+    const near = document.querySelector('#near hnw-mark')!;
+    const farMarks = [...document.querySelectorAll('#far hnw-mark')];
+    expect(farMarks).toHaveLength(2);
+    // 模拟 #near 已进入视口并写入译文
+    RecordingIO.held.delete(near);
+    near.appendChild(document.createElement('hnw-tr'));
+
+    // 虚拟列表 / keep-alive：先摘下（下一批 mutation 才挂回）
+    const far = document.getElementById('far')!;
+    far.remove();
+    await flush();
+    expect(farMarks.some((m) => RecordingIO.held.has(m))).toBe(false);
+    document.body.appendChild(far);
+    // 已写入译文的 mark 随父节点一同被挂回时不应被重新观察
+    const nearP = document.getElementById('near')!;
+    nearP.remove();
+    document.body.appendChild(nearP);
+    await flush();
+    expect(farMarks.every((m) => RecordingIO.held.has(m))).toBe(true);
+    expect(RecordingIO.held.has(near)).toBe(false);
   });
 });

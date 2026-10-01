@@ -43,6 +43,15 @@ export class WordMatcher {
     return result && { ...result, surface };
   }
 
+  /**
+   * 页面词形的屈折原形（projections -> projection、citing -> cite；不含派生词根）。
+   * 用于查释义：派生词借词根命中词书时（projections 命中 project），释义应取屈折原形自己的词条，而不是词根的。
+   * 词形还原器不提供 analyze 或没有屈折变化时返回 undefined。
+   */
+  inflectionOf(surface: string): string | undefined {
+    return this.opts.lemmatizer.analyze?.(surface).inflections[0];
+  }
+
   private compute(key: string): MatchResult | null {
     const { lemmatizer, books, known } = this.opts;
     if (books.length === 0) return null;

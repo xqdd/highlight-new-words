@@ -128,6 +128,11 @@ function styleRules(sel: string, attrSel: (attr: string) => string, style: MarkS
     const line = style.underline === 'none' ? `;text-decoration-line:underline;text-decoration-style:solid;text-decoration-color:${solid};text-decoration-thickness:max(2px,.07em);text-underline-offset:.14em` : '';
     out.push(`${HEADINGS} ${sel}>${W}{background-color:transparent;background-image:none;box-shadow:none${line}}`);
   }
+  // 受限容器（单行 overflow:hidden 等，data-hnw-tight）：盒子底边紧贴文字，大偏移的下划线、波浪线的波峰/双线的第二条
+  // 会被容器裁掉、只剩零星的点。下划线贴近基线（偏移 1px），波浪线/双线降为实线；放在最后，覆盖深色上下文等规则中的偏移
+  const tightDecls = ['text-underline-offset:1px'];
+  if (style.underline === 'wavy' || (style.underline !== 'none' && style.underlineDouble)) tightDecls.push('text-decoration-style:solid');
+  out.push(`${attrSel(ATTR_TIGHT)}>${W}{${tightDecls.join(';')}}`);
   return out;
 }
 
@@ -229,6 +234,16 @@ function translationRules(settings: Settings): string[] {
   // - 密度控制省略的（data-hnw-nogloss，见 engine 的 thinGlosses）
   const noGloss = [`${M}[${ATTR_LOW_CONFIDENCE}]`, `${M}[${ATTR_IN_LINK}]`, `${HEADINGS} ${M}`, `${M}[${ATTR_NO_GLOSS}]`];
   out.push(`${[mode('after'), mode('ruby')].flatMap((p) => noGloss.map((x) => `${p} ${x}>${TR}`)).join(',')}{display:none}`);
+  // 桌面端兜底：上述不显示括注的 mark 悬停时复用受限容器的不占位浮层显示短释义（触屏没有悬停，点按照常打开卡片）。
+  // 只对已有释义的（带 data-tr）生效，ruby 占位注解不弹空浮层；模糊自测不作用于浮层（浮层本就需要悬停才出现）
+  const noGlossMarks = [mode('after'), mode('ruby')].flatMap((p) => noGloss.map((x) => `${p} ${x}`));
+  out.push(
+    `@media (hover:hover){` +
+      `${noGlossMarks.join(',')}{position:relative}` +
+      `${noGlossMarks.map((x) => `${x}:hover>${TR}[${ATTR_TR_TEXT}]`).join(',')}{${float};filter:none!important;pointer-events:none!important}` +
+      `${noGlossMarks.map((x) => `${x}:hover>${TR}[${ATTR_TR_TEXT}]::before`).join(',')}{content:attr(${ATTR_TR_TEXT})}` +
+      `}`,
+  );
   // 代码中的装饰线：代码行距紧凑，波浪线/粗线/大偏移会压到下一行，统一收为 1px 直线、贴近基线
   out.push(`${M}[${ATTR_CODE}]>${W}{text-decoration-style:solid!important;text-decoration-thickness:1px!important;text-underline-offset:1px!important}`);
   // 模糊自测：译文模糊且可点按（engine 拦截点按，切换 data-hnw-revealed，不触发卡片/链接）

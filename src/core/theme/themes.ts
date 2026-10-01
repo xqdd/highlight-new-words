@@ -136,8 +136,9 @@ export const BUILTIN_THEMES: readonly HighlightTheme[] = [
   },
   {
     id: 'wavy',
-    name: '波浪线',
-    nameEn: 'Wavy underline',
+    // 与 v5 的 wavy-line（珊瑚色波浪线）区分：此预设是琥珀色波浪线，id 保持不变（旧设置引用它）
+    name: '琥珀波浪线',
+    nameEn: 'Amber wavy',
     mark: { background: '', color: '', underline: 'wavy', underlineColor: '#f59e0b' },
     card: { ...lightCard, accent: '#b45309' },
   },
