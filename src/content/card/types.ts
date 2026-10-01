@@ -58,5 +58,10 @@ export interface CardView {
   /** 事件目标是否位于卡片内（composedPath 判断，用于外部点击关闭） */
   contains(event: Event): boolean;
   setStyle(style: CardStyle): void;
+  /**
+   * 可选（v11 card 新增）：在已打开的卡片内显示一行一次性提示（如当前触发方式），卡片关闭或用户点“知道了”后消失。
+   * 由 bindCardTrigger 在 PC 端卡片首次出现时调用；未实现时不提示。
+   */
+  showHint?(text: string): void;
   destroy(): void;
 }

@@ -58,6 +58,14 @@ export const CARD_CSS = `
 /* ---------- 头部 ---------- */
 .head { padding: 10px 8px 10px 16px; border-bottom: 1px solid var(--line); flex: none; }
 .sheet .head { padding: 0 8px 10px 18px; touch-action: pan-x; }
+/* 一次性提示（PC 端首次出现时说明触发方式）：强调色浅底，一行说明 + “知道了” */
+.once-hint { flex: none; display: flex; align-items: flex-start; gap: 8px; margin: 10px 12px 0; padding: 8px 8px 8px 10px; border-radius: 10px; background: var(--accent-soft); color: var(--fg); font-size: 12.5px; line-height: 1.5; }
+.once-hint > svg { flex: none; width: 16px; height: 16px; margin-top: 1px; color: var(--accent); }
+.once-hint > span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.once-ok { flex: none; align-self: center; min-height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+.once-ok:hover { background: var(--hover); }
+.once-ok:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sheet .once-ok { min-height: 44px; }
 .row1 { display: flex; align-items: flex-start; gap: 2px; min-height: var(--hit); }
 .title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-right: auto; min-width: 0; padding-top: 2px; }
 .word { font-size: 20px; font-weight: 700; line-height: 1.25; letter-spacing: -.005em; overflow-wrap: anywhere; }

@@ -111,6 +111,8 @@ export class ShadowCardView implements CardView {
    * 因此 open 时无 entry 视为加载中（骨架屏），update 后视为已完成（无 entry 显示“暂无释义”）。
    */
   private awaitingEntry = false;
+  /** 一次性提示（v11：PC 端首次出现时说明当前触发方式），切换单词、关闭或点“知道了”后清除 */
+  private onceHint: string | null = null;
 
   constructor(
     private readonly doc: Document,
@@ -158,6 +160,7 @@ export class ShadowCardView implements CardView {
     // SPA 可能清理 documentElement 下的未知节点，打开前确保宿主仍在文档中
     if (!this.host.isConnected) this.doc.documentElement.appendChild(this.host);
     if (!sameWord) {
+      this.onceHint = null;
       this.expanded = false;
       this.hintsOpen = false;
       this.panel = 'none';
@@ -201,6 +204,7 @@ export class ShadowCardView implements CardView {
     this.setActiveAnchor(null);
     this.anchorRect = null;
     this.data = null;
+    this.onceHint = null;
     this.panel = 'none';
     this.ctxSeq++;
     this.resetDeleteConfirm();
@@ -210,6 +214,12 @@ export class ShadowCardView implements CardView {
 
   contains(event: Event): boolean {
     return event.composedPath().includes(this.host);
+  }
+
+  showHint(text: string): void {
+    if (!this.isOpen) return;
+    this.onceHint = text;
+    this.rerender();
   }
 
   setStyle(style: CardStyle): void {
@@ -362,8 +372,21 @@ export class ShadowCardView implements CardView {
       data.books.length > 0 && h(d, 'div', { class: 'tags' }, ...data.books.map((b) => bookTag(d, b))),
     );
 
+    // 一次性提示放在单词标题下方：首次出现时先看到“卡片是怎么打开的”，点“知道了”收起
+    const onceHint =
+      this.onceHint &&
+      this.panel === 'none' &&
+      h(
+        d,
+        'div',
+        { class: 'once-hint', role: 'note', lang: 'zh-CN' },
+        icon(d, 'info'),
+        h(d, 'span', {}, this.onceHint),
+        h(d, 'button', { class: 'once-ok', 'data-act': 'hint-ok' }, '知道了'),
+      );
+
     this.card.replaceChildren(
-      ...[h(d, 'div', { class: 'grab', 'aria-hidden': 'true' }, h(d, 'i')), head, body, this.renderPanel(data), this.renderFoot(data)].filter(
+      ...[h(d, 'div', { class: 'grab', 'aria-hidden': 'true' }, h(d, 'i')), head, onceHint || null, body, this.renderPanel(data), this.renderFoot(data)].filter(
         (n): n is HTMLElement => !!n,
       ),
     );
@@ -864,6 +887,10 @@ export class ShadowCardView implements CardView {
         break;
       case 'close':
         this.close();
+        break;
+      case 'hint-ok':
+        this.onceHint = null;
+        this.rerender();
         break;
       case 'expand':
         this.expanded = true;
