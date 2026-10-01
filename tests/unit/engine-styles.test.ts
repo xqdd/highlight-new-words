@@ -25,7 +25,7 @@ const flush = () => new Promise((r) => setTimeout(r, 30));
 describe('v5 样式契约', () => {
   it('旧主题 id 全部保留，新增至少 10 套命名预设且 id 唯一', () => {
     const ids = BUILTIN_THEMES.map((t) => t.id);
-    for (const old of ['amber', 'mint', 'sky', 'rose', 'violet', 'wavy', 'dotted', 'ink', 'orange-text', 'teal-text', 'dashed-orange', 'wavy-red', 'underline-tint', 'marker-lime', 'legacy-light', 'legacy-green', 'legacy-red', 'legacy-blue', 'legacy-sky']) {
+    for (const old of ['amber', 'mint', 'sky', 'rose', 'violet', 'wavy', 'dotted', 'ink', 'orange-text', 'teal-text', 'dashed-orange', 'wavy-red', 'underline-tint', 'marker-lime']) {
       expect(ids).toContain(old);
     }
     expect(new Set(ids).size).toBe(ids.length);

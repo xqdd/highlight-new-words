@@ -340,7 +340,7 @@ flowchart LR
 
 ### 4.7 主题
 
-[themes.ts](../src/core/theme/themes.ts) 定义 `MarkStyle`/`CardStyle`/`HighlightTheme` 和 `BUILTIN_THEMES`（含旧版 5 套配色），`resolveMarkStyle`/`resolveCardStyle`/`markStyleToCss` 在内容脚本与 options 预览中共用。已有主题 id 不可修改（用户设置中保存的是 id）。
+[themes.ts](../src/core/theme/themes.ts) 定义 `MarkStyle`/`CardStyle`/`HighlightTheme` 和 `BUILTIN_THEMES`，`resolveMarkStyle`/`resolveCardStyle`/`markStyleToCss` 在内容脚本与 options 预览中共用。已有主题 id 不可修改（用户设置中保存的是 id）。
 
 **v5 可组合样式（engine 第二阶段扩展，全部为可选字段，旧设置与旧主题无需迁移，缺省时渲染与旧版完全一致）**：
 
@@ -360,7 +360,7 @@ flowchart LR
 **选项页外观约定（options 分片）**：
 
 - 旧预设 `wavy`（琥珀色波浪线）显示名为“琥珀波浪线 / Amber wavy”，与 v5 的 `wavy-line`（波浪线）区分，id 不变。内置预设的中英文名都唯一（单测校验）。
-- 内置预设新增 `orange-text`/`teal-text`/`dashed-orange`/`wavy-red`/`underline-tint`/`marker-lime`（只追加，不改旧 id）。预设画廊按 `presetGroups()` 分为组合预设（带 `desc`）、我的样式（`style.saved`）、单色样式与折叠的旧版配色；选预设走 engine 的 `applyThemePreset`（带建议译文的预设同时设置译文模式）。
+- 内置预设新增 `orange-text`/`teal-text`/`dashed-orange`/`wavy-red`/`underline-tint`/`marker-lime`（只追加，不改旧 id）。预设画廊按 `presetGroups()` 分为组合预设（带 `desc`）、我的样式（`style.saved`）与单色样式；选预设走 engine 的 `applyThemePreset`（带建议译文的预设同时设置译文模式）。
 - 样式编辑器（`StyleEditor`）按装饰线 / 文字 / 背景 / 边框四个维度编辑完整 `MarkStyle`；改全局样式即切到 `custom`。按词书三种方式（`lib/appearance.ts#bookStyleMode`）：跟随全局（无覆盖）、只换颜色（`perBook[id] = { mark }`，全局形态变化时 `retintPerBook` 按各自主色重新着色）、独立样式（`perBook[id] = { themeId: 'custom', mark: 完整样式 }`，不随全局变化）。`tintMark` 保持形态只换色，背景 + 文字色组合保留文字色。
 - 实时预览（`LivePreview`）直接调用 engine 的 `highlightTextNode`/`setMarkTranslation`/`buildPageCss` 生成 DOM 与样式（把 `html[data-hnw-tr=…]` 替换为容器属性选择器），engine 调整 DOM 结构或样式时预览自动一致，请保持这三个导出的签名（engine 第二阶段只给 `highlightTextNode` 追加了可选的第 4 个参数，并新增 `hover` 模式选择器，同样是 `html[data-hnw-tr="hover"]` 写法；预览要展示链接内效果时可以给 mark 加 `data-hnw-link`）。
 - [tokens.css](../src/ui/tokens.css) 支持 `:root[data-theme="light|dark"]` 强制主题，新增 `--success/--warn/--danger-soft/--overlay/--radius-lg` 令牌。

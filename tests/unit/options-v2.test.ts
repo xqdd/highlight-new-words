@@ -83,8 +83,8 @@ describe('options：v5 样式', () => {
     expect(m.background.startsWith('#2563eb')).toBe(true);
     const box = tintMark(BUILTIN_THEMES.find((t) => t.id === 'dashed-box')!.mark, '#ef4444');
     expect(box).toMatchObject({ border: 'dashed', borderColor: '#ef4444' });
-    const legacy = tintMark(BUILTIN_THEMES.find((t) => t.id === 'legacy-red')!.mark, '#2563eb');
-    expect(legacy.color).toBe('#bf360c');
+    const solid = tintMark({ background: '#fbe9e7', color: '#bf360c', underline: 'none', underlineColor: '' }, '#2563eb');
+    expect(solid.color).toBe('#bf360c');
     for (const t of BUILTIN_THEMES) expect(markPrimaryColor(t.mark)).toMatch(/^#[0-9a-f]{6}$/);
   });
 
@@ -94,7 +94,7 @@ describe('options：v5 样式', () => {
     expect(s.inlineTranslation.mode).toBe('after');
     const g = presetGroups();
     expect(g.combos.length).toBeGreaterThanOrEqual(10);
-    expect(g.combos.length + g.singles.length + g.legacy.length).toBe(BUILTIN_THEMES.length);
+    expect(g.combos.length + g.singles.length).toBe(BUILTIN_THEMES.length);
   });
 
   it('按词书：只换颜色随全局形态重新着色，独立样式不受全局影响', () => {

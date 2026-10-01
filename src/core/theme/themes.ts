@@ -96,7 +96,7 @@ export const CUSTOM_THEME_ID = 'custom';
 const lightCard: CardStyle = { background: '#ffffff', color: '#1f2328', accent: '#2563eb' };
 
 /**
- * 内置预设。半透明背景在深浅色页面上都可读；最后 5 个为旧版 popup 的配色方案（保留兼容）。
+ * 内置预设。半透明背景在深浅色页面上都可读。
  * options 分片可以扩充此列表，但不要修改已存在的 id（用户设置里保存的是 id）。
  */
 export const BUILTIN_THEMES: readonly HighlightTheme[] = [
@@ -309,42 +309,6 @@ export const BUILTIN_THEMES: readonly HighlightTheme[] = [
     desc: '斜体 + 灰绿点线，书卷气、最安静',
     mark: { background: '', color: '', underline: 'dotted', underlineColor: '#65a30d', underlineThickness: 1.5, underlineOffset: 3, italic: true },
     card: { ...lightCard, accent: '#4d7c0f' },
-  },
-  // ---- 旧版配色方案（popup 中 Light/Green/Red/Blue/Sky）----
-  {
-    id: 'legacy-light',
-    name: '经典浅灰',
-    nameEn: 'Classic light',
-    mark: { background: '#f0f0f0', color: '#333333', underline: 'none', underlineColor: '' },
-    card: { background: '#f0f0f0', color: '#333333', accent: '#333333' },
-  },
-  {
-    id: 'legacy-green',
-    name: '经典绿',
-    nameEn: 'Classic green',
-    mark: { background: '#e8f5e9', color: '#1b5e20', underline: 'none', underlineColor: '' },
-    card: { background: '#e8f5e9', color: '#1b5e20', accent: '#1b5e20' },
-  },
-  {
-    id: 'legacy-red',
-    name: '经典红',
-    nameEn: 'Classic red',
-    mark: { background: '#fbe9e7', color: '#bf360c', underline: 'none', underlineColor: '' },
-    card: { background: '#fbe9e7', color: '#bf360c', accent: '#bf360c' },
-  },
-  {
-    id: 'legacy-blue',
-    name: '经典蓝',
-    nameEn: 'Classic blue',
-    mark: { background: '#eaeef6', color: '#2a5598', underline: 'none', underlineColor: '' },
-    card: { background: '#eaeef6', color: '#2a5598', accent: '#2a5598' },
-  },
-  {
-    id: 'legacy-sky',
-    name: '经典天蓝',
-    nameEn: 'Classic sky',
-    mark: { background: '#f5f5f5', color: '#35a3ff', underline: 'none', underlineColor: '' },
-    card: { background: '#f5f5f5', color: '#35a3ff', accent: '#35a3ff' },
   },
 ];
 

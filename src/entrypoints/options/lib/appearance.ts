@@ -99,13 +99,11 @@ export function autoAssignBookColors(settings: Settings) {
 }
 
 /**
- * 预设分组：combos 为多维组合预设（带一句话说明，v5）、singles 为单一颜色样式、legacy 为旧版配色（折叠）。
+ * 预设分组：combos 为多维组合预设（带一句话说明，v5）、singles 为单一颜色样式。
  * main = combos + singles（popup 快捷切换沿用）。
  */
 export function presetGroups() {
-  const legacy = BUILTIN_THEMES.filter((t) => t.id.startsWith('legacy-'));
-  const rest = BUILTIN_THEMES.filter((t) => !t.id.startsWith('legacy-'));
-  const combos = rest.filter((t) => !!t.desc);
-  const singles = rest.filter((t) => !t.desc);
-  return { combos, singles, main: [...combos, ...singles], legacy };
+  const combos = BUILTIN_THEMES.filter((t) => !!t.desc);
+  const singles = BUILTIN_THEMES.filter((t) => !t.desc);
+  return { combos, singles, main: [...combos, ...singles] };
 }

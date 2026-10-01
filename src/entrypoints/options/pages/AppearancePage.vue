@@ -36,17 +36,16 @@ import { showToast } from '../lib/toast';
 
 /**
  * 外观页（v5）：吸顶实时预览（真实句子 + 多本词书 + 行内译文 + 链接，亮/暗网页切换）→ 预设画廊（组合预设带缩略与说明、我的样式、
- * 单色样式、旧版配色）→ 样式编辑器（装饰线 / 文字 / 背景 / 边框四个维度，可另存为“我的样式”）→ 按词书设置（跟随全局 / 只换颜色 /
+ * 单色样式）→ 样式编辑器（装饰线 / 文字 / 背景 / 边框四个维度，可另存为“我的样式”）→ 按词书设置（跟随全局 / 只换颜色 /
  * 独立样式）→ 行内译文（模式 + 颜色/浓淡/字号/模糊自测）→ 释义卡片（电脑端打开方式 v11、卡片颜色；标题与卡片首次提示里的“设置 › 释义卡片”一致）。
  * 对标：沉浸式翻译的译文样式列表、Relingo 的分组设置与实时预览、Burning Vocabulary 的预设色块。
  */
 const { settings, books } = useOptions();
-const { combos, singles, legacy } = presetGroups();
+const { combos, singles } = presetGroups();
 
 const globalMark = computed(() => resolveMarkStyle(settings.value));
 const isCustom = computed(() => settings.value.style.themeId === CUSTOM_THEME_ID);
 const showSingles = ref(singles.some((t) => t.id === settings.value.style.themeId));
-const showLegacy = ref(legacy.some((t) => t.id === settings.value.style.themeId));
 const saved = computed(() => settings.value.style.saved ?? []);
 
 /** 编辑器修改全局样式：自动切到“自定义”（预设本身不可改，用户在预设基础上微调） */
@@ -231,12 +230,6 @@ const cardColor = computed({
     </button>
     <div v-if="showSingles" class="gallery small-grid" role="radiogroup" aria-label="单色样式">
       <PresetCard v-for="t in singles" :key="t.id" :mark="t.mark" :name="t.name" :checked="settings.style.themeId === t.id" compact @click="applyPreset(settings, t.id)" />
-    </div>
-    <button type="button" class="link" :aria-expanded="showLegacy" @click="showLegacy = !showLegacy">
-      旧版配色（{{ legacy.length }}）<AppIcon :name="showLegacy ? 'up' : 'down'" :size="16" />
-    </button>
-    <div v-if="showLegacy" class="gallery small-grid" role="radiogroup" aria-label="旧版配色">
-      <PresetCard v-for="t in legacy" :key="t.id" :mark="t.mark" :name="t.name" :checked="settings.style.themeId === t.id" compact @click="applyPreset(settings, t.id)" />
     </div>
   </SettingsSection>
 
