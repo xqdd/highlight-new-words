@@ -334,6 +334,12 @@ const cardColor = computed({
       @update:model-value="(v: boolean) => (settings.card.tapOpen = v)"
     />
     <ToggleSwitch
+      :model-value="settings.card.longPressOpen !== false"
+      label="手机、平板上长按单词打开卡片"
+      description="长按选中一个英文单词时直接弹出卡片（未高亮的词也能查），与悬浮球是否显示无关"
+      @update:model-value="(v: boolean) => (settings.card.longPressOpen = v)"
+    />
+    <ToggleSwitch
       :model-value="settings.card.showUserTrans !== false"
       label="显示生词本释义"
       description="单词在有道、欧路或导入的生词本里且带释义时，与词典不同的部分另起一行显示"

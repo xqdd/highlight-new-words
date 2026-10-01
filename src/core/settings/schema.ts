@@ -256,6 +256,8 @@ export interface Settings {
     showUserTrans?: boolean;
     /** 手机、平板上点按生词打开卡片；关闭后点按照常交给页面（链接跳转），仍可用悬浮球取词查词。缺省视为开启 */
     tapOpen?: boolean;
+    /** 手机、平板上长按选中一个英文单词时打开卡片（与悬浮球是否显示无关）。缺省视为开启 */
+    longPressOpen?: boolean;
   };
   tts: {
     /** 打开卡片时自动发音（旧 ttsToggle） */

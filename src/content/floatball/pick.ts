@@ -180,7 +180,7 @@ export class PickMode {
     this.ctx.openCard(box);
   }
 
-  // ---------------- 长按选词查词（触屏，常开） ----------------
+  // ---------------- 长按选词查词（触屏，开关 settings.card.longPressOpen） ----------------
 
   private longPressOn = false;
   private lastTouchAt = 0;
@@ -201,7 +201,7 @@ export class PickMode {
     this.ctx.doc.addEventListener('selectionchange', this.onSelectionChange);
   }
 
-  private disableLongPress(): void {
+  disableLongPress(): void {
     if (!this.longPressOn) return;
     this.longPressOn = false;
     clearTimeout(this.selTimer);

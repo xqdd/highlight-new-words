@@ -33,6 +33,7 @@ const RETIRE_MS = 5600;
  * - 位置按设备记在 storage.local `floatBallPos`（侧边 + 视口高度比例），上下避开系统状态栏与手势条
  * - 点按：取词模式中 → 退出取词；站点有 primary 功能项（YouTube 视频页“当前字幕”）→ 直接执行；否则展开菜单（底部抽屉）
  * - 显示条件随设置（floatBall.enabled / hiddenSites）与媒体特性变化实时切换
+ * - 长按选词查词（card.longPressOpen）与悬浮球是否显示无关：悬浮球关闭但长按开启时只藏起球，复用同一视图的取词能力
  * - 全屏时宿主迁入全屏元素（见 registry.ts followFullscreen）
  */
 export function startFloatBall(ctx: SiteContext): () => void {
@@ -44,19 +45,28 @@ export function startFloatBall(ctx: SiteContext): () => void {
   const shouldShow = (s: Settings) =>
     isTouchPrimary((q) => matchMedia(q).matches) && s.floatBall.enabled && !hostMatches(s.floatBall.hiddenSites, location.hostname);
 
+  /** 长按选词查词（settings.card.longPressOpen）：只看是否触屏，与悬浮球是否显示无关 */
+  const wantLongPress = (s: Settings) => isTouchPrimary((q) => matchMedia(q).matches) && s.card.longPressOpen !== false;
+
   let retireTimer: ReturnType<typeof setTimeout> | undefined;
   const sync = () => {
     if (stopped || !doc.body) return;
     const s = ctx.getSettings();
-    if (shouldShow(s)) {
+    const showBall = shouldShow(s);
+    const longPress = wantLongPress(s);
+    // 长按查词复用悬浮球视图的取词能力（取词框挂在同一浮层）：悬浮球关闭但长按开启时只藏起球，视图保留
+    if (showBall || longPress) {
       clearTimeout(retireTimer);
       retireTimer = undefined;
       ball ??= new FloatBallView(ctx);
-      ball.setBallHidden(false);
+      ball.setBallHidden(!showBall);
+      ball.setLongPress(longPress);
       ball.refresh(s);
     } else if (ball && retireTimer === undefined) {
       // 刚在菜单里隐藏悬浮球时，带“撤销”的 toast 还在显示（同一个 Shadow DOM）：先只藏起球，toast 结束后再销毁；期间撤销则直接恢复
       ball.setBallHidden(true);
+      // 长按查词立即停用，不等宿主销毁
+      ball.setLongPress(false);
       retireTimer = setTimeout(() => {
         retireTimer = undefined;
         ball?.destroy();
@@ -115,8 +125,6 @@ class FloatBallView {
       this.ball.setAttribute('aria-label', on ? '退出取词模式' : '生词高亮：打开菜单');
       this.wake();
     });
-    // 长按选词直接查词：与悬浮球同生命周期（只在触屏显示悬浮球时启用）
-    this.pick.enableLongPress();
     this.menu = new FloatMenu({
       ctx,
       overlay: this.overlay,
@@ -142,6 +150,12 @@ class FloatBallView {
   }
 
   /** 只藏起球本身（菜单、toast 仍可显示） */
+  /** 长按选词查词开关（settings.card.longPressOpen） */
+  setLongPress(on: boolean): void {
+    if (on) this.pick.enableLongPress();
+    else this.pick.disableLongPress();
+  }
+
   setBallHidden(hidden: boolean): void {
     this.ball.hidden = hidden;
     if (hidden) this.pick.exit();

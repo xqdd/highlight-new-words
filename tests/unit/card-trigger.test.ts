@@ -100,9 +100,9 @@ describe('trigger-config', () => {
   });
 
   it('旧设置补齐 card.modifier，旧 trigger 原样保留', () => {
-    expect(createDefaultSettings().card).toEqual({ trigger: 'auto', modifier: 'alt', hoverDelay: 250, showUserTrans: true, tapOpen: true });
+    expect(createDefaultSettings().card).toEqual({ trigger: 'auto', modifier: 'alt', hoverDelay: 250, showUserTrans: true, tapOpen: true, longPressOpen: true });
     const old = { ...createDefaultSettings(), card: { trigger: 'click' } };
-    expect(normalizeSettings(old).card).toEqual({ trigger: 'click', modifier: 'alt', hoverDelay: 250, showUserTrans: true, tapOpen: true });
+    expect(normalizeSettings(old).card).toEqual({ trigger: 'click', modifier: 'alt', hoverDelay: 250, showUserTrans: true, tapOpen: true, longPressOpen: true });
     // 悬停延迟只允许 100/250/400：写坏的值按默认
     expect(normalizeSettings({ card: { trigger: 'hover', hoverDelay: 400 } }).card.hoverDelay).toBe(400);
     expect(normalizeSettings({ card: { trigger: 'hover', hoverDelay: 7 } }).card.hoverDelay).toBe(250);
