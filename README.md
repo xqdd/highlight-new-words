@@ -41,3 +41,12 @@ chrome插件，根据有道词典导出的xml生词文件或有道和欧路网�
 >待研究
 >- https://github.com/waynecz/dadda-translate-crx
 >- https://github.com/cclient/chrome-extensions-youdaowithwordnode
+# 开发（v3）
+基于 WXT + TypeScript + Vue 3 重写，架构、目录分工与契约见 [docs/architecture.md](./docs/architecture.md)。
+
+```bash
+npm install
+npm run dev        # 开发模式
+npm run build      # 构建到 .output/chrome-mv3（可用 OUT_DIR 覆盖输出根目录）
+npm run typecheck && npm test
+```
