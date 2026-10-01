@@ -3,6 +3,9 @@ import { STORAGE_KEYS } from '../storage/keys';
 import { withStorageLock } from '../storage/lock';
 import { applyKnownChange, normalizeKnown } from './merge';
 import type { KnownExportFormat, KnownWordsData } from './types';
+import { normalizeSettings } from '../settings/migrate';
+import type { SourceBookIndex } from '../wordbook/types';
+import { enabledSourceKnownBookIds, readSourceKnownWords } from './sources';
 
 /**
  * 熟词本存储读写（任何上下文可读；写入请在 background 或扩展页面中进行，内容脚本通过 markKnown/unmarkKnown 消息）。
@@ -14,9 +17,18 @@ export async function getKnownData(): Promise<KnownWordsData> {
   return normalizeKnown(res[STORAGE_KEYS.knownWords]);
 }
 
-/** 当前熟词集合（小写原形），供 matcher 使用 */
+/**
+ * 当前生效的熟词集合（小写），供 matcher 使用：本地熟词本 ∪ 启用的来源熟词本（如欧路“已掌握”，见 known/sources.ts）。
+ * 只编辑本地熟词本的场景（options 熟词管理、storage.sync）请用 getKnownData，不要用本函数。
+ */
 export async function getKnownWords(): Promise<Set<string>> {
-  return new Set(Object.keys((await getKnownData()).words));
+  const res = await browser.storage.local.get([STORAGE_KEYS.knownWords, STORAGE_KEYS.settings, STORAGE_KEYS.sourceBooks]);
+  const words = new Set(Object.keys(normalizeKnown(res[STORAGE_KEYS.knownWords]).words));
+  const settings = normalizeSettings(res[STORAGE_KEYS.settings]);
+  const index = res[STORAGE_KEYS.sourceBooks] as SourceBookIndex | undefined;
+  const sourceIds = enabledSourceKnownBookIds(settings, index?.books ?? {});
+  for (const w of await readSourceKnownWords(sourceIds)) words.add(w);
+  return words;
 }
 
 export async function saveKnownData(data: KnownWordsData): Promise<void> {

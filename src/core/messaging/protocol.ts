@@ -20,6 +20,8 @@ export interface SourceSyncResult {
   /** 给用户看的提示文案（沿用旧版文案） */
   message: string;
   count?: number;
+  /** 请求成功但远端为空（ok=true，本地缓存未被覆盖；background 第 2 轮新增） */
+  empty?: boolean;
 }
 
 /** 单本来源词书的删词结果 */
@@ -38,14 +40,76 @@ export interface DeleteWordsResult {
   reports: SourceDeleteReport[];
 }
 
-/** markKnown 结果：熟词已写入；deleteOnKnown 开启时附带删除来源词的结果 */
+/** 单个写入/移除目标的执行结果（加入生词本、标记熟词写入熟词本等） */
+export interface WordTargetResult {
+  /** 目标 id：`local:…`、`src:…` 或 LOCAL_KNOWN_BOOK_ID */
+  bookId: BookId;
+  /** 目标显示名（如“有道 · 无标签”“本地熟词本”） */
+  name: string;
+  ok: boolean;
+  /** 实际写入/移除的单词（小写） */
+  words: string[];
+  /** 失败或跳过原因（如“欧路 OpenAPI 只提供读取已掌握单词的接口”） */
+  error?: string;
+  /** true = 因能力不足被跳过（未发请求） */
+  skipped?: boolean;
+}
+
+/** markKnown 结果：熟词已写入；配置了移除目标（或旧开关 deleteOnKnown）时附带删除生词本中词形的结果 */
 export interface MarkKnownResult {
   ok: boolean;
   /** 写入熟词本的原形 */
   lemma: string;
-  /** 未开启 deleteOnKnown 或没有可删除的来源时为空数组 */
+  /** 从来源生词本删除的结果；未配置移除目标或没有可删除的词时为空数组 */
   deleted: SourceDeleteReport[];
   message: string;
+  /** 写入各熟词本的结果（background 第 2 轮新增） */
+  written?: WordTargetResult[];
+  /** 从本地生词本移除的结果（本地移除可完整撤销） */
+  removedLocal?: WordTargetResult[];
+  /** 撤销时远端删除能否完整恢复：false 时卡片应提示“撤销不会恢复已从来源删除的词”或部分恢复 */
+  fullyUndoable?: boolean;
+}
+
+/** addWord 结果 */
+export interface AddWordResult {
+  ok: boolean;
+  /** 加入的原形 */
+  lemma: string;
+  /** 写入各生词本的结果 */
+  added: WordTargetResult[];
+  /** 从各熟词本移除的结果 */
+  removedKnown: WordTargetResult[];
+  message: string;
+}
+
+/** removeWord 结果（“移出生词本”/撤销加入） */
+export interface RemoveWordResult {
+  ok: boolean;
+  removed: WordTargetResult[];
+  message: string;
+}
+
+/** 预览中的一个目标 */
+export interface WordActionPreviewItem extends WordTargetResult {
+  /** 远端操作（来源词书）；删除远端单词无法完全撤销时 undoable=false */
+  remote: boolean;
+  undoable: boolean;
+}
+
+/**
+ * 执行前预览（卡片据此在确认框中列出“将从哪些生词本删除哪些词”，尤其是不可恢复的远端删除）。
+ * 预览只读本地缓存，不发网络请求；words 为空的目标不列出。
+ */
+export interface WordActionPreview {
+  action: 'add' | 'known';
+  lemma: string;
+  /** 将写入的目标 */
+  write: WordActionPreviewItem[];
+  /** 将移除的目标（含各书中将被移除的词形） */
+  remove: WordActionPreviewItem[];
+  /** 是否包含不可完全撤销的远端删除 */
+  needsConfirm: boolean;
 }
 
 export interface BackgroundProtocol {
@@ -64,20 +128,37 @@ export interface BackgroundProtocol {
    * 某来源尚无登记的书时先自动 refreshSourceBooks。各书独立执行，互不影响。
    */
   syncSourceBooks(data: { bookIds?: BookId[]; providerId?: string }): SourceSyncResult[];
-  /** 从来源生词本删除单词（卡片“从生词本删除”）：bookIds 不传则为包含该词的全部可删除来源词书；forms=true 时按原形删除全部词形 */
+  /**
+   * 从来源生词本删除单词（卡片“从生词本删除”）：bookIds 不传则为包含该词的全部可删除来源词书；
+   * forms=true 时删除该词的屈折词形（runs/ran/running，不含 runner 等派生词，见 background/forms.ts）
+   */
   deleteSourceWords(data: { word: string; bookIds?: BookId[]; forms?: boolean }): DeleteWordsResult;
 
   // ---- 熟词 ----
   /**
-   * 标记熟词：写入熟词本（lemma）；若某来源开启 deleteOnKnown 且支持删除，
-   * 在该来源各词书中删除与 lemma 原形相同的所有词形（远端 + 本地缓存）。word 为页面原词，仅用于日志/提示。
+   * 标记熟词：按 settings.wordActions.knownTargets 写入熟词本（默认本地熟词本），
+   * 按 knownRemoveFrom（'auto' = 各来源 deleteOnKnown）从生词本移除该词；sameLemma 开启时移除屈折词形（不含派生词）。
+   * word 为页面原词（同原形开关关闭时也会移除该词形本身）。
    */
   markKnown(data: { word: string; lemma: string }): MarkKnownResult;
   /**
-   * 撤销熟词（卡片“撤销”、熟词本管理）。若 10 分钟内 markKnown 因 deleteOnKnown 删除过来源单词，
-   * 且 provider 支持加词（有道、欧路 OpenAPI），会把这些词加回来源生词本，restored 为加回的单词（小写）。
+   * 撤销熟词（卡片“撤销”、熟词本管理）：移出本地熟词本；10 分钟内会撤回 markKnown 的其他写入/移除：
+   * 本地生词本完整恢复；来源生词本在 provider 可加词时加回（有道非默认分组只能加回默认分组，欧路 cookie 模式无法加回）。
+   * restored 为加回的单词（小写）。
    */
   unmarkKnown(data: { lemma: string }): { ok: boolean; restored?: string[]; message?: string };
+  /**
+   * 加入生词本（卡片收藏按钮、选中文本/右键菜单）：按 settings.wordActions.addTargets 写入（本地词书直接写；
+   * 来源词书调用 provider.addWords，不支持加词的跳过并说明），按 addRemoveFromKnown 从熟词本移除该词（及同原形词形）。
+   * “我的生词本”（MY_WORDS_BOOK_ID）不存在时自动创建并启用。trans/phonetic 可选，写入本地词书供释义显示。
+   */
+  addWord(data: { word: string; lemma: string; trans?: string; phonetic?: string }): AddWordResult;
+  /** 移出生词本（收藏按钮取消、撤销加入）：bookIds 不传则为 addTargets；10 分钟内撤销加入会把移出的熟词加回 */
+  removeWord(data: { lemma: string; bookIds?: BookId[] }): RemoveWordResult;
+  /** 执行 addWord / markKnown 前的预览（只读本地缓存），卡片在包含远端删除时据此弹确认 */
+  previewWordAction(data: { action: 'add' | 'known'; word: string; lemma: string }): WordActionPreview;
+  /** 单词状态：是否已在 addTargets 的某本生词本中（卡片收藏按钮状态）、是否为熟词（含来源熟词本） */
+  getWordState(data: { lemma: string }): { collected: boolean; collectedIn: BookId[]; known: boolean };
 
   // ---- storage.sync ----
   /** 读取跨设备同步状态与用量 */

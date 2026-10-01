@@ -19,10 +19,19 @@ import type { UserWord, UserWordMap } from '@/core/wordbook/types';
  *      page 从 0 开始最大 50，page_size 最大 100（单本最多可取 5100 词）
  *    - 删除：DELETE /studylist/words { language, category_id, words } -> 204
  *    - 加词：POST /studylist/words { language, category_id, words } -> 201（重复单词不会添加）
+ *    - 已掌握：GET /studylist/mastered_words?language=en&page&page_size -> { data: [{ word, exp:null, add_time }] }，只读，
+ *      作为 remoteId='mastered'、role=known 的来源熟词本（2026-10 用户提供 token 后实测）
  *    - 响应码：401 授权无效/过期；403 访问过于频繁（限流）；400 参数错误（message 字段）
  *    - 流量限制：1 分钟 30 次（超限封 1 小时）、30 分钟 500 次（超限封 24 小时）——因此所有 OpenAPI 请求全局串行并间隔 ≥ 2.1s
  */
 export const EUDIC_ALL_BOOK_ID = '-1';
+/**
+ * “已掌握单词”的 remoteId：OpenAPI 中它不是分类，而是独立的只读集合 GET /studylist/mastered_words
+ * （分类 id 都是数字字符串，不会与之冲突）。作为 role=known 的来源熟词本同步。
+ */
+export const EUDIC_MASTERED_BOOK_ID = 'mastered';
+const MASTERED_READONLY = '欧路 OpenAPI 只提供读取“已掌握单词”的接口，不能写入或删除';
+const COOKIE_READONLY = '网页登录（cookie）模式没有加词接口；配置 OpenAPI 授权后可加词';
 const OPENAPI_BASE = 'https://api.frdic.com/api/open/v1';
 const COOKIE_PAGE_DELAY_MS = 500;
 /** OpenAPI 请求最小间隔：60s / 30 次 = 2s，再留余量 */
@@ -107,7 +116,7 @@ export interface EudicCookieItem {
 export interface EudicApiWord {
   word: string;
   phon?: string;
-  exp?: string;
+  exp?: string | null;
   add_time?: string;
   star?: number;
 }
@@ -153,72 +162,94 @@ export const eudicProvider: SourceProvider = {
   ...getProviderInfo(EUDIC_PROVIDER_ID)!,
 
   async listRemoteBooks(ctx): Promise<RemoteBook[]> {
-    if (!authHeader(ctx)) return [{ remoteId: EUDIC_ALL_BOOK_ID, name: '全部生词' }];
+    if (!authHeader(ctx)) return [{ remoteId: EUDIC_ALL_BOOK_ID, name: '全部生词', canAdd: false, readOnlyReason: COOKIE_READONLY }];
     const { data } = await openApi<{ data?: { id: string | number; name: string }[] }>(ctx, 'GET', '/studylist/category?language=en');
-    return (data ?? []).map((c) => ({ remoteId: String(c.id), name: c.name || String(c.id) }));
+    const books: RemoteBook[] = (data ?? []).map((c) => ({ remoteId: String(c.id), name: c.name || String(c.id), canAdd: true }));
+    books.push({ remoteId: EUDIC_MASTERED_BOOK_ID, name: '已掌握单词', role: 'known', canAdd: false, canDelete: false, readOnlyReason: MASTERED_READONLY });
+    return books;
   },
 
   async fetchWords(remoteBookId, ctx) {
-    if (!useOpenApi(ctx, remoteBookId)) return fetchCookieWords();
-    const words: UserWordMap = {};
-    for (let page = 0; page <= OPENAPI_MAX_PAGE; page++) {
-      const q = `?language=en&category_id=${encodeURIComponent(remoteBookId)}&page=${page}&page_size=${OPENAPI_PAGE_SIZE}`;
-      const { data } = await openApi<{ data?: EudicApiWord[] }>(ctx, 'GET', '/studylist/words' + q);
-      for (const item of data ?? []) {
-        const word = item.word?.trim();
-        if (word) words[word.toLowerCase()] = toUserWord(word, item.phon, item.exp);
-      }
-      if (!data || data.length < OPENAPI_PAGE_SIZE) break;
-      if (page === OPENAPI_MAX_PAGE) console.warn('[hnw] 欧路 OpenAPI 单本最多返回', (OPENAPI_MAX_PAGE + 1) * OPENAPI_PAGE_SIZE, '词，已截断', remoteBookId);
+    if (remoteBookId === EUDIC_MASTERED_BOOK_ID) {
+      if (!authHeader(ctx)) throw new SourceError('同步“已掌握单词”需要先配置欧路 OpenAPI 授权', 'auth');
+      return fetchOpenApiPages(ctx, '/studylist/mastered_words?language=en', remoteBookId);
     }
-    return words;
+    if (!useOpenApi(ctx, remoteBookId)) return fetchCookieWords();
+    return fetchOpenApiPages(ctx, `/studylist/words?language=en&category_id=${encodeURIComponent(remoteBookId)}`, remoteBookId);
   },
 
   async deleteWords(remoteBookId, words: UserWord[], ctx): Promise<RemoteDeleteResult> {
-    const result: RemoteDeleteResult = { deleted: [], failed: [] };
-    if (useOpenApi(ctx, remoteBookId)) {
-      for (let i = 0; i < words.length; i += OPENAPI_BATCH) {
-        const batch = words.slice(i, i + OPENAPI_BATCH);
-        try {
-          await openApi(ctx, 'DELETE', '/studylist/words', { language: 'en', category_id: remoteBookId, words: batch.map((w) => w.ref ?? w.word) });
-          result.deleted.push(...batch.map((w) => w.word));
-        } catch (e) {
-          // 鉴权/限流错误对整批生效，直接抛给 service 统一提示
-          if (e instanceof SourceError && (e.code === 'auth' || e.code === 'ratelimit')) throw e;
-          result.failed.push(...batch.map((w) => ({ word: w.word, error: e instanceof Error ? e.message : String(e) })));
-        }
-      }
-      return result;
-    }
-    for (const w of words) {
-      try {
-        const res = await fetch('https://dict.eudic.net/Dicts/SetStarRating', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rating: -1, word: w.ref ?? w.word, lang: 'en' }),
-        });
-        // 未登录时会被重定向到登录页（最终 200 HTML），以 URL 判断
-        if (res.redirected && /login/i.test(res.url)) throw new SourceError('未登录欧路或登录已失效，请先登录 my.eudic.net', 'auth');
-        if (res.ok) result.deleted.push(w.word);
-        else result.failed.push({ word: w.word, error: `HTTP ${res.status}` });
-      } catch (e) {
-        if (e instanceof SourceError) throw e;
-        result.failed.push({ word: w.word, error: '网络错误' });
-      }
-    }
-    return result;
+    if (remoteBookId === EUDIC_MASTERED_BOOK_ID) throw new SourceError(MASTERED_READONLY, 'unsupported');
+    return deleteEudicWords(remoteBookId, words, ctx);
   },
 
-  /** 撤销时加回（仅 OpenAPI 模式；cookie 模式无公开加词接口，返回空） */
+  /** 加词（OpenAPI 分类；cookie 模式与“已掌握”不支持，service 按 SourceBookState.canAdd 不会调用） */
   async addWords(remoteBookId, words, ctx) {
-    if (!useOpenApi(ctx, remoteBookId)) return [];
+    if (remoteBookId === EUDIC_MASTERED_BOOK_ID) throw new SourceError(MASTERED_READONLY, 'unsupported');
+    if (!useOpenApi(ctx, remoteBookId)) throw new SourceError(COOKIE_READONLY, 'unsupported');
     const added: UserWord[] = [];
     for (let i = 0; i < words.length; i += OPENAPI_BATCH) {
       const batch = words.slice(i, i + OPENAPI_BATCH);
       await openApi(ctx, 'POST', '/studylist/words', { language: 'en', category_id: remoteBookId, words: batch.map((w) => w.ref ?? w.word) });
-      added.push(...batch);
+      added.push(...batch.map((w) => ({ ...w, ref: w.ref ?? w.word })));
     }
     return added;
   },
 };
+
+/**
+ * OpenAPI 分页拉取（words / mastered_words 结构相同）：page 从 0 到 50，page_size 100，不满一页即结束。
+ * pathWithQuery 已带 language（与分类参数），这里只追加分页参数。
+ */
+async function fetchOpenApiPages(ctx: SourceContext, pathWithQuery: string, remoteBookId: string): Promise<UserWordMap> {
+  const words: UserWordMap = {};
+  for (let page = 0; page <= OPENAPI_MAX_PAGE; page++) {
+    const { data } = await openApi<{ data?: EudicApiWord[] }>(ctx, 'GET', `${pathWithQuery}&page=${page}&page_size=${OPENAPI_PAGE_SIZE}`);
+    for (const item of data ?? []) {
+      const word = item.word?.trim();
+      if (word) words[word.toLowerCase()] = toUserWord(word, item.phon, item.exp ?? undefined);
+    }
+    if (!data || data.length < OPENAPI_PAGE_SIZE) break;
+    if (page === OPENAPI_MAX_PAGE) console.warn('[hnw] 欧路 OpenAPI 单本最多返回', (OPENAPI_MAX_PAGE + 1) * OPENAPI_PAGE_SIZE, '词，已截断', remoteBookId);
+  }
+  return words;
+}
+
+/**
+ * 删除：OpenAPI 按分类批量删除；cookie 模式逐词 SetStarRating（从整个生词本移除，不区分分类）。
+ * 鉴权/限流错误对整批生效，直接抛给 service 统一提示。
+ */
+async function deleteEudicWords(remoteBookId: string, words: UserWord[], ctx: SourceContext): Promise<RemoteDeleteResult> {
+  const result: RemoteDeleteResult = { deleted: [], failed: [] };
+  if (useOpenApi(ctx, remoteBookId)) {
+    for (let i = 0; i < words.length; i += OPENAPI_BATCH) {
+      const batch = words.slice(i, i + OPENAPI_BATCH);
+      try {
+        await openApi(ctx, 'DELETE', '/studylist/words', { language: 'en', category_id: remoteBookId, words: batch.map((w) => w.ref ?? w.word) });
+        result.deleted.push(...batch.map((w) => w.word));
+      } catch (e) {
+        if (e instanceof SourceError && (e.code === 'auth' || e.code === 'ratelimit')) throw e;
+        result.failed.push(...batch.map((w) => ({ word: w.word, error: e instanceof Error ? e.message : String(e) })));
+      }
+    }
+    return result;
+  }
+  for (const w of words) {
+    try {
+      const res = await fetch('https://dict.eudic.net/Dicts/SetStarRating', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: -1, word: w.ref ?? w.word, lang: 'en' }),
+      });
+      // 未登录时会被重定向到登录页（最终 200 HTML），以 URL 判断
+      if (res.redirected && /login/i.test(res.url)) throw new SourceError('未登录欧路或登录已失效，请先登录 my.eudic.net', 'auth');
+      if (res.ok) result.deleted.push(w.word);
+      else result.failed.push({ word: w.word, error: `HTTP ${res.status}` });
+    } catch (e) {
+      if (e instanceof SourceError) throw e;
+      result.failed.push({ word: w.word, error: '网络错误' });
+    }
+  }
+  return result;
+}

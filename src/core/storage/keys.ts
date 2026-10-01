@@ -15,6 +15,10 @@ export const STORAGE_KEYS = {
   localBooks: 'localBooks',
   /** storage.sync 同步状态：SyncStatus（用量/错误/时间），见 core/sync/types.ts；仅 background 写 */
   syncState: 'syncState',
+  /** WebDAV 同步状态：BackendSyncStatus（见 core/sync/types.ts）；仅 background 写 */
+  webdavSyncState: 'webdavSyncState',
+  /** 凭据随同步上传的版本戳：CredentialId -> { at 修改时间, h 值摘要 }（见 core/sync/credentials.ts）；仅 background 写 */
+  syncCredStamps: 'syncCredStamps',
 } as const;
 
 /** 单本来源词书数据键前缀：`srcBook:<bookId>` -> SourceBookData */

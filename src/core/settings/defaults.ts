@@ -1,6 +1,6 @@
 import { DEFAULT_THEME_ID } from '../theme/themes';
 import { EUDIC_PROVIDER_ID, YOUDAO_PROVIDER_ID } from '../source/providers';
-import { SETTINGS_SCHEMA_VERSION, type Settings, type SourceSettings } from './schema';
+import { LOCAL_KNOWN_BOOK_ID, MY_WORDS_BOOK_ID, SETTINGS_SCHEMA_VERSION, type Settings, type SourceSettings, type WordActionSettings } from './schema';
 
 /**
  * 新安装用户的默认词书：六级（data 分片确定最终 id 后可调整）。
@@ -11,6 +11,17 @@ export const DEFAULT_ENABLED_BOOKS = ['cet6'];
 /** 新来源的默认配置：不自动删除远端单词 */
 export function createDefaultSourceSettings(enabled = false): SourceSettings {
   return { enabled, autoSync: true, deleteOnKnown: false };
+}
+
+/** 单词操作默认配置：加入“我的生词本”并移出本地熟词本；认识时写本地熟词本，移除目标沿用各来源 deleteOnKnown 开关 */
+export function createDefaultWordActions(): WordActionSettings {
+  return {
+    sameLemma: true,
+    addTargets: [MY_WORDS_BOOK_ID],
+    addRemoveFromKnown: [LOCAL_KNOWN_BOOK_ID],
+    knownTargets: [LOCAL_KNOWN_BOOK_ID],
+    knownRemoveFrom: 'auto',
+  };
 }
 
 /**
@@ -39,7 +50,22 @@ export function createDefaultSettings(): Settings {
       [YOUDAO_PROVIDER_ID]: createDefaultSourceSettings(true),
       [EUDIC_PROVIDER_ID]: createDefaultSourceSettings(false),
     },
-    sync: { enabled: true, include: { settings: true, knownWords: true, localBooks: true } },
+    knownBooks: { enabled: [], roles: {} },
+    wordActions: createDefaultWordActions(),
+    sync: {
+      enabled: true,
+      include: { settings: true, knownWords: true, localBooks: true },
+      webdav: {
+        enabled: false,
+        url: '',
+        username: '',
+        password: '',
+        dir: 'highlight-new-words',
+        include: { settings: true, knownWords: true, localBooks: true, sourceBooks: false },
+        autoSync: { onChange: true, onStartup: true, intervalMinutes: 60 },
+      },
+    },
+    credentialSync: {},
     ui: { theme: 'auto' },
     sites: { disabled: [] },
   };

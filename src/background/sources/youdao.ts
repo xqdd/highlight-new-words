@@ -11,7 +11,8 @@ import type { UserWord, UserWordMap } from '@/core/wordbook/types';
  * - 单词：GET /wordbook/webapi/words?limit&offset[&bookId] -> { code:0, data:{ total, itemList:[{ itemId, bookId, bookName, word, trans, phonetic, modifiedTime }] } }
  *   不带 bookId 为全部单词；未登录时 total=0（不报错，必须另查登录状态）
  * - 删除：GET /wordbook/webapi/delete?itemId= -> { code:0 }；**未登录或 itemId 不存在也返回 code:0**，所以删除前必须先确认登录
- * - 加词：GET /wordbook/webapi/v2/ajax/add?word&lan=en -> { code:0 }，加入默认分组（bookId=0）
+ * - 加词：GET /wordbook/webapi/v2/ajax/add?word&lan=en -> { code:0 }，只能加入默认分组（bookId=0），所以只有该分组 canAdd
+ * - 同一单词可以有大小写不同的多个条目（各自 itemId），本地按小写合并并在 refs 中保留全部 itemId
  * - 登录状态：GET /login/acc/query/accountinfo -> 未登录 { code:2035, msg:'NO_LOGIN' }；已登录 code:0
  *
  * remoteId：分组 bookId；旧版迁移来的 'default' 表示“全部单词”（不带 bookId 拉取），刷新列表后被各分组取代（见 service.ts 孤儿书替换）。
@@ -72,9 +73,42 @@ export function youdaoItemToWord(item: YoudaoItem): UserWord {
   return w;
 }
 
+/**
+ * 把一个接口条目并入词条表。有道按原文区分条目：同一账号可同时收录 Collapse 与 collapse（调试账号实测有 28 组），
+ * 本地按小写合并为一个词条，但必须保留全部 itemId（refs），否则删除只删掉其中一条，重新同步后该词又出现。
+ * 词条展示取第一个条目的原文/释义，后续条目只补缺失的音标/释义。
+ */
+export function mergeYoudaoItem(words: UserWordMap, item: YoudaoItem): void {
+  const key = item.word.trim().toLowerCase();
+  const next = youdaoItemToWord(item);
+  const prev = words[key];
+  if (!prev) {
+    if (next.ref) next.refs = [next.ref];
+    words[key] = next;
+    return;
+  }
+  const refs = prev.refs ?? (prev.ref ? [prev.ref] : []);
+  if (next.ref && !refs.includes(next.ref)) refs.push(next.ref);
+  prev.refs = refs;
+  prev.ref ??= next.ref;
+  prev.phonetic ??= next.phonetic;
+  prev.trans ??= next.trans;
+}
+
+/** 词条的全部删除句柄（旧缓存只有 ref） */
+export function youdaoRefsOf(w: UserWord): string[] {
+  return w.refs?.length ? w.refs : w.ref ? [w.ref] : [];
+}
+
+/** 默认分组 bookId：有道加词接口只能加入该分组 */
+export const YOUDAO_DEFAULT_GROUP_ID = '0';
+const READONLY_GROUP_REASON = '有道的加词接口只能加入默认分组“无标签”，该分组只能同步和删除';
+
 export const youdaoProvider: SourceProvider = {
   ...getProviderInfo(YOUDAO_PROVIDER_ID)!,
   verifiesLoginOnEmpty: true,
+  // itemId 在账号内全局唯一：迁移来的“全部单词”与各分组中的同一条目 itemId 相同，删除时按 itemId 去重
+  globalRefs: true,
 
   async listRemoteBooks(): Promise<RemoteBook[]> {
     const body = await getJson<{ bookId: string; bookName: string; isDefault?: boolean }[]>('/wordbook/webapi/books');
@@ -83,9 +117,13 @@ export const youdaoProvider: SourceProvider = {
     // 未登录时分组列表为空（code 仍为 0），用登录状态区分“未登录”与“真的没有分组”
     if (books.length === 0) {
       await assertLoggedIn();
-      return [{ remoteId: '0', name: '无标签' }];
+      return [{ remoteId: YOUDAO_DEFAULT_GROUP_ID, name: '无标签', canAdd: true }];
     }
-    return books.map((b) => ({ remoteId: String(b.bookId), name: b.bookName || String(b.bookId) }));
+    return books.map((b) => {
+      const remoteId = String(b.bookId);
+      const canAdd = remoteId === YOUDAO_DEFAULT_GROUP_ID;
+      return { remoteId, name: b.bookName || remoteId, canAdd, ...(canAdd ? {} : { readOnlyReason: READONLY_GROUP_REASON }) };
+    });
   },
 
   async fetchWords(remoteBookId) {
@@ -97,7 +135,7 @@ export const youdaoProvider: SourceProvider = {
       const list = body.data.itemList ?? [];
       for (const item of list) {
         if (!item.word?.trim()) continue;
-        words[item.word.trim().toLowerCase()] = youdaoItemToWord(item);
+        mergeYoudaoItem(words, item);
       }
       if (list.length < PAGE_SIZE || offset + list.length >= body.data.total) break;
     }
@@ -111,17 +149,27 @@ export const youdaoProvider: SourceProvider = {
     const result: RemoteDeleteResult = { deleted: [], failed: [] };
     await assertLoggedIn();
     for (const w of words) {
-      if (!w.ref) {
+      const refs = youdaoRefsOf(w);
+      if (refs.length === 0) {
         result.failed.push({ word: w.word, error: '缺少 itemId，请先重新同步' });
         continue;
       }
-      try {
-        const body = await getJson<null>(`/wordbook/webapi/delete?itemId=${encodeURIComponent(w.ref)}`);
-        if (body.code === 0) result.deleted.push(w.word);
-        else result.failed.push({ word: w.word, error: body.msg ?? `code ${body.code}` });
-      } catch (e) {
-        result.failed.push({ word: w.word, error: e instanceof Error ? e.message : String(e) });
+      // 同一单词的多个条目（大小写不同）逐个删除，全部成功才算删除成功；部分失败时保留本地缓存，下次同步纠正
+      const errors: string[] = [];
+      for (const ref of refs) {
+        try {
+          const body = await getJson<null>(`/wordbook/webapi/delete?itemId=${encodeURIComponent(ref)}`);
+          if (body.code !== 0) errors.push(body.msg ?? `code ${body.code}`);
+        } catch (e) {
+          errors.push(e instanceof Error ? e.message : String(e));
+        }
       }
+      if (errors.length === 0) result.deleted.push(w.word);
+      else
+        result.failed.push({
+          word: w.word,
+          error: refs.length > 1 ? `${refs.length} 个条目中 ${errors.length} 个删除失败：${errors[0]}` : errors[0]!,
+        });
     }
     return result;
   },
@@ -130,7 +178,8 @@ export const youdaoProvider: SourceProvider = {
    * 撤销时加回：有道加词接口只能加入默认分组（bookId=0）。加词接口不返回 itemId，
    * 加完后读一次默认分组取新 itemId 作为删除句柄（旧 itemId 已失效，且有道删除不存在的 itemId 也返回成功，不能沿用）。
    */
-  async addWords(_remoteId, words) {
+  async addWords(remoteId, words) {
+    if (remoteId !== YOUDAO_DEFAULT_GROUP_ID) throw new SourceError(READONLY_GROUP_REASON, 'unsupported');
     await assertLoggedIn();
     const ok = new Set<string>();
     for (const w of words) {
@@ -138,8 +187,13 @@ export const youdaoProvider: SourceProvider = {
       if (body?.code === 0) ok.add(w.word.toLowerCase());
     }
     if (ok.size === 0) return [];
-    const fresh = await this.fetchWords('0', { settings: { enabled: true, autoSync: false, deleteOnKnown: false } });
+    const fresh = await this.fetchWords(YOUDAO_DEFAULT_GROUP_ID, { settings: { enabled: true, autoSync: false, deleteOnKnown: false } });
     // 找不到新条目时去掉 ref（宁可让下次删除提示“请先重新同步”，也不要用失效 itemId 误报删除成功）
-    return words.filter((w) => ok.has(w.word.toLowerCase())).map((w) => ({ ...w, ref: fresh[w.word.toLowerCase()]?.ref }));
+    return words
+      .filter((w) => ok.has(w.word.toLowerCase()))
+      .map((w) => {
+        const f = fresh[w.word.toLowerCase()];
+        return { ...w, ref: f?.ref, refs: f?.refs };
+      });
   },
 };

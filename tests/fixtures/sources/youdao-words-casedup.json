@@ -1,0 +1,28 @@
+{
+ "_note": "2026-10-01 调试账号实测：网页加词接口分别加入 zyzzyva 与 Zyzzyva 后，GET /wordbook/webapi/words?bookId=0 中两个条目各自独立（仅保留测试词条目，itemId 已替换为伪值）；测试后已删除",
+ "code": 0,
+ "msg": "SUCCESS",
+ "data": {
+  "total": 2,
+  "itemList": [
+   {
+    "itemId": "fake-casedup-item-1",
+    "bookId": "0",
+    "bookName": "无标签",
+    "word": "Zyzzyva",
+    "trans": "n.象鼻虫",
+    "phonetic": "",
+    "modifiedTime": 1790819935407
+   },
+   {
+    "itemId": "fake-casedup-item-2",
+    "bookId": "0",
+    "bookName": "无标签",
+    "word": "zyzzyva",
+    "trans": "n.象鼻虫",
+    "phonetic": "",
+    "modifiedTime": 1790819935366
+   }
+  ]
+ }
+}

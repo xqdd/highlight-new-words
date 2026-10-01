@@ -48,7 +48,7 @@ flowchart LR
 设计原则：
 
 - **设置类变更不走消息**：任何上下文直接写 storage，其他上下文用 `storage.onChanged` 感知（内容脚本见 `startContentApp`，Vue 见 `useSettings`/`useBooks`）。本地导入词书、熟词本文本编辑同样由扩展页面直接写。
-- **需要网络或跨数据协调的操作走 background 消息**：来源同步/删词、标记熟词（含 deleteOnKnown）、storage.sync 状态。
+- **需要网络或跨数据协调的操作走 background 消息**：来源同步/删词、标记熟词与加入生词本（含来源词书的写入与删除）、storage.sync 状态。
 - **匹配在内容脚本本地完成**：词书/词典按需从扩展包 fetch（`web_accessible_resources: data/*`），不逐词发消息。
 - **大数据与设置分离**：`settings` 只放小对象；用户词书按“索引键 + 每本一个数据键”拆分，熟词本单独成键。
 - **读改写加锁**：同一扩展源（background/扩展页面）的 storage 读改写走 `withStorageLock`（Web Locks API），内容脚本不做读改写。
@@ -86,7 +86,9 @@ flowchart LR
 | `inlineTranslation.mode` | `off` / `after`（词后）/ `ruby`（词上方，CSS `display:ruby`） |
 | `card.trigger` | `auto`（桌面悬停 + 触屏点按）/ `hover` / `click` |
 | `tts` | 自动发音开关、`voice`（`chrome.tts.speak` 选项）、语速 |
-| `sources[providerId]` | 按来源配置 `SourceSettings`：`enabled`、`autoSync`（每天）、`deleteOnKnown`（默认 false）、可选 `apiToken`（仅本机，不参与同步） |
+| `sources[providerId]` | 按来源配置 `SourceSettings`：`enabled`、`autoSync`（每天）、`deleteOnKnown`（默认 false，`wordActions.knownRemoveFrom='auto'` 时生效）、可选 `apiToken`（仅本机，不参与同步） |
+| `knownBooks` | 熟词本多来源：`enabled` 启用的来源熟词本 id（角色为 known 的来源词书，如欧路“已掌握单词”，首次同步成功自动加入）；`roles` 用户为来源词书指定的角色 `new`/`known`（覆盖 provider 声明）。本地熟词本始终生效，见 4.9 |
+| `wordActions` | 单词操作目标（见 4.9）：`sameLemma` 同原形开关（默认开）；`addTargets` 加入生词本写入的书（默认 `local:mine` “我的生词本”）；`addRemoveFromKnown` 加入时移出的熟词本（默认本地熟词本 `known:local`）；`knownTargets` 认识时写入的熟词本（默认 `known:local`）；`knownRemoveFrom` 认识时移除的生词本，`'auto'` = 沿用各来源 `deleteOnKnown` |
 | `sync` | storage.sync 开关与 `include.{settings,knownWords,localBooks}`（本机字段，不参与同步） |
 | `sites.disabled` | 禁用站点（含子域名，见 `isSiteDisabled`） |
 | `ui.theme` | 扩展页面（popup/options）界面主题 `auto`/`light`/`dark`（options 分片新增，默认 `auto`）；页面在根元素设置 `data-theme`，`auto` 时不设置、跟随系统 |
@@ -186,7 +188,7 @@ flowchart LR
 2. 按候选顺序取第一个出现在任一启用词书中的候选作为 `lemma`
 3. `bookIds` 为包含该 lemma 的启用词书（按优先级），首个决定样式
 
-`findWordFormsOfLemma(lemma, words, lemmatizer)`（[forms.ts](../src/core/match/forms.ts)）复用 WordMatcher 判定“原形相同的所有词形”，供 deleteOnKnown 使用，lemma 分片升级 Lemmatizer 后自动生效。
+`findWordFormsOfLemma(lemma, words, lemmatizer)`（[forms.ts](../src/core/match/forms.ts)）复用 WordMatcher 判定“高亮意义上同原形”的词形，**含派生词**（runner→run），只用于展示/统计。删除、移除一律用 background 的 `findInflectedForms`（[background/forms.ts](../src/background/forms.ts)），只认屈折变化，见 4.9。
 
 ### 4.5 内容引擎与卡片
 
@@ -201,7 +203,7 @@ flowchart LR
 - 熟词即时生效：`removeLemma(lemma)` 先把词条加入抑制集合，再同步重做含该词条的切分组（所有词形一起消失，释义取缓存不闪烁），存储写入后 `refreshMatches` 复核。
 - 数据变化：启用词书变化 → `rebuild` 全量重扫；新增熟词/用户词书删词（只减少命中）→ `refreshMatches` 原地复核；用户词书新增词 → 全量重扫；样式/翻译模式 → 仅更新样式。只监听 `settings`、`knownWords`、`srcBook:*`、`localBook:*`，忽略 `syncState` 等后台元数据写入。
 - 卡片：`CardView` 接口（[card/types.ts](../src/content/card/types.ts)）；`CardData.deletableBooks` 为命中的、provider 支持删除的来源词书；`CardActions` 为 `markKnown(lemma, surface) → MarkKnownResult`、`unmarkKnown(lemma)`（撤销）、`deleteFromSources(lemma, bookIds)`，均转发 background 消息。当前实现 `ShadowCardView`（open 模式 Shadow DOM，便于测试穿透）：视口 ≤ 600px 或无悬停能力的触屏设备显示底部卡片（近全宽、可下滑关闭、触控目标 ≥ 44px，单词被遮挡时自动滚到卡片上方），否则为贴词浮层（滚动时跟随单词，单词离开视口关闭）；暗色页面自动换暗色卡片；“认识”后关闭卡片并弹出可撤销 toast；来源删除为两步确认。打开期间给锚点加 `data-hnw-active` 属性，并由卡片注入 `<style id="hnw-card-active-style">` 显示激活态（叠加渐变，不覆盖 engine 的高亮样式）。纯函数（词形关系说明、释义分行、音标规范化、外部词典链接）在 [word-info.ts](../src/content/card/word-info.ts)。触发逻辑 `bindCardTrigger`：鼠标悬停 100ms 打开、触屏点按打开并阻止链接跳转（再次点按放行）；鼠标在外部按下 / 触屏在外部点按（滑动滚动不关闭）/ Esc 关闭，页面滚动不再由 trigger 关闭。
-- 卡片可选契约（向后兼容，入口未接入时不显示）：`CardData.collected?: boolean` + `CardActions.setCollected?(lemma, surface, collected)` 用于“加入/移出我的生词本”（收藏）按钮；需 background 提供对应消息与目标词书后由 `app.ts` 注入。
+- 卡片可选契约（向后兼容，入口未接入时不显示）：`CardData.collected?: boolean` + `CardActions.setCollected?(lemma, surface, collected)` 用于“加入/移出生词本”（收藏）按钮。background 已提供消息：`getWordState`（收藏状态）、`addWord`/`removeWord`（收藏/取消，目标按 `wordActions` 配置）、`previewWordAction`（执行前预览，`needsConfirm=true` 时卡片应列出将从来源删除的词让用户确认），由 `app.ts` 注入。
 
 ### 4.6 消息契约
 
@@ -212,9 +214,13 @@ flowchart LR
 | → background | `tts` | `{text, force?}` → `{spoken, reason?}`（`unavailable`=无 chrome.tts，调用方可退回页面 speechSynthesis；本机不存在的 voiceName 自动退回按 lang） |
 | → background | `refreshSourceBooks` | `{providerId}` → `SourceBookState[]`（列远端生词本，新书 status=never，消失的标 orphaned） |
 | → background | `syncSourceBooks` | `{bookIds?, providerId?}` → `SourceSyncResult[]`（逐本独立；无登记的书时先刷新列表） |
-| → background | `deleteSourceWords` | `{word, bookIds?, forms?}` → `DeleteWordsResult`（远端成功才移除本地缓存） |
-| → background | `markKnown` | `{word, lemma}` → `MarkKnownResult`（写熟词本 + deleteOnKnown 删除同原形词形） |
-| → background | `unmarkKnown` | `{lemma}` → `{ok, restored?, message?}`（10 分钟内撤销会把 deleteOnKnown 删掉的词加回支持 `addWords` 的来源，记录存 `storage.session` 的 `knownUndo`） |
+| → background | `deleteSourceWords` | `{word, bookIds?, forms?}` → `DeleteWordsResult`（远端成功才移除本地缓存；`forms` 只含屈折词形） |
+| → background | `markKnown` | `{word, lemma}` → `MarkKnownResult`（按 `wordActions` 写熟词本 + 从生词本移除屈折词形；`written`/`removedLocal`/`fullyUndoable` 为第 2 轮新增可选字段） |
+| → background | `unmarkKnown` | `{lemma}` → `{ok, restored?, message?}`（10 分钟内撤销：本地词书完整恢复，来源词书加回可写的原书，不可写时加回同来源可写书并在 message 说明；记录存 `storage.session` 的 `knownUndo`） |
+| → background | `addWord` | `{word, lemma, trans?, phonetic?}` → `AddWordResult`（写入 `addTargets`，移出 `addRemoveFromKnown`） |
+| → background | `removeWord` | `{lemma, bookIds?}` → `RemoveWordResult`（移出生词本；10 分钟内会把加入时移出的熟词加回） |
+| → background | `previewWordAction` | `{action:'add'\|'known', word, lemma}` → `WordActionPreview`（只读本地缓存，列出写入目标和各书将移除的词形，`needsConfirm` 表示含远端删除） |
+| → background | `getWordState` | `{lemma}` → `{collected, collectedIn, known}` |
 | → background | `getSyncStatus` | `{}` → `SyncStatus` |
 | → background | `syncNow` | `{}` → `SyncStatus`（立即 pull + push） |
 | → background | `reportPageWords` | `{lemmas}`（本 frame 全量）→ void，用于徽章 |
@@ -239,45 +245,57 @@ flowchart LR
 
 契约见 [source/types.ts](../src/core/source/types.ts)，分两层：
 
-- `SourceProviderInfo`（静态，任何上下文可用，登记在 [providers.ts](../src/core/source/providers.ts) 的 `SOURCE_PROVIDER_INFOS`）：`id`、`name`、`capabilities { delete, multiBook, requiresCookie, apiToken }`、`loginUrl`、`tokenUrl?`
-- `SourceProvider extends SourceProviderInfo`（background 专用网络实现，[background/sources](../src/background/sources)）：`listRemoteBooks(ctx)`、`fetchWords(remoteBookId, ctx)`（带音标/释义）、`deleteWords(remoteBookId, words, ctx) → { deleted, failed }`、可选 `addWords(remoteBookId, words, ctx) → UserWord[]`（撤销熟词时加回，返回带新删除句柄的词条）、可选 `verifiesLoginOnEmpty`（空结果前已确认登录）；`ctx.settings` 为该来源的 `SourceSettings`；可抛 `SourceError(message, code)`，`code` 新增 `ratelimit`（向后兼容）
+- `SourceProviderInfo`（静态，任何上下文可用，登记在 [providers.ts](../src/core/source/providers.ts) 的 `SOURCE_PROVIDER_INFOS`）：`id`、`name`、`capabilities { delete, multiBook, requiresCookie, apiToken, canAdd?, knownBooks?, notes? }`（`notes` 为能力限制的中文说明，UI 直接展示）、`loginUrl`、`tokenUrl?`
+- 每本远端书的能力随列表刷新写入 `SourceBookState`：`role`（`new`/`known`）、`canAdd`、`canDelete`、`readOnlyReason`（不能写入的原因），以及 `entryCount`（远端条目数，大小写不同的重复条目各算一条）。provider 在 `RemoteBook` 中声明这些字段。
+- `SourceProvider extends SourceProviderInfo`（background 专用网络实现，[background/sources](../src/background/sources)）：`listRemoteBooks(ctx)`、`fetchWords(remoteBookId, ctx)`（带音标/释义；同一单词多个远端条目时 `UserWord.refs` 列出全部句柄）、`deleteWords(remoteBookId, words, ctx) → { deleted, failed }`（多句柄词条全部删除成功才算 deleted）、可选 `addWords(remoteBookId, words, ctx) → UserWord[]`（加入生词本、撤销时加回，返回带新删除句柄的词条）、可选 `verifiesLoginOnEmpty`（空结果前已确认登录）、可选 `globalRefs`（句柄在来源内全局唯一，如有道 itemId，删除时跨书去重）；`ctx.settings` 为该来源的 `SourceSettings`；可抛 `SourceError(message, code)`，`code` 新增 `ratelimit`（向后兼容）
 
 | 来源 | 远端生词本 | 拉取 | 删除 |
 | --- | --- | --- | --- |
-| 有道（2026-10 调试账号实测） | `webapi/books` 各分组（默认“无标签” bookId=`0`）；旧版迁移的 `default` 表示全部单词 | `webapi/words?limit&offset&bookId` | 按 itemId：`webapi/delete`；加回：`webapi/v2/ajax/add`（只能加到默认分组） |
-| 欧路（cookie，默认） | `-1` 全部生词（cookie 分类接口未公开） | `my.eudic.net/StudyList/WordsDataSource` 不带分类（同旧版），分页 4000 | `Dicts/SetStarRating rating=-1` |
-| 欧路（OpenAPI token，按官方文档） | `GET /studylist/category` 各分类 | `GET /studylist/words?category_id&page(0~50)&page_size(≤100)` | `DELETE /studylist/words`（204）；加回 `POST /studylist/words` |
+| 有道（2026-10 调试账号实测） | `webapi/books` 各分组（默认“无标签” bookId=`0`）；旧版迁移的 `default` 表示全部单词 | `webapi/words?limit&offset&bookId`；同一单词可有大小写不同的多个条目（调试账号有 14 组、28 个条目），按小写合并并保留全部 itemId | 按 itemId 逐个 `webapi/delete`；加词 `webapi/v2/ajax/add` 只能加到默认分组，所以只有分组 `0` 的 `canAdd=true` |
+| 欧路（cookie，默认） | `-1` 全部生词（cookie 分类接口未公开） | `my.eudic.net/StudyList/WordsDataSource` 不带分类（同旧版），分页 4000 | `Dicts/SetStarRating rating=-1`；不能加词 |
+| 欧路（OpenAPI token，2026-10 实测） | `GET /studylist/category` 各分类 + `mastered`“已掌握单词”（`role=known`，只读） | `GET /studylist/words?category_id&page(0~50)&page_size(≤100)`；已掌握 `GET /studylist/mastered_words` | `DELETE /studylist/words`（204）；加词 `POST /studylist/words`（201）；已掌握没有写接口 |
 
 真实接口要点：有道**未登录时所有接口仍返回 `code:0`**（列表为空、删除“成功”），provider 用 `login/acc/query/accountinfo`（未登录 `code:2035`）区分，删除前必须校验登录；欧路 OpenAPI 401=授权失效、403=限流（1 分钟 30 次 / 30 分钟 500 次，超限封 1~24 小时），所有 OpenAPI 请求全局串行间隔 ≥ 2.1s。脱敏响应样例见 [tests/fixtures/sources](../tests/fixtures/sources)。
 
 同步服务 [service.ts](../src/background/sources/service.ts)：
 
-- `syncSourceBook` 逐本独立更新状态（`syncing → ok / empty / error`），同一本书并发调用复用同一任务；空结果不覆盖缓存；首次同步成功自动加入 `books.enabled`（若同来源有已启用的孤儿书，插到它的位置）
+- `syncSourceBook` 逐本独立更新状态（`syncing → ok / empty / error`），同一本书并发调用复用同一任务；空结果不覆盖缓存，返回 `ok:true, empty:true`；首次同步成功自动启用：角色为 new 的加入 `books.enabled`（若同来源有已启用的孤儿书，插到它的位置），角色为 known 的加入 `knownBooks.enabled`（绝不进高亮词书）
 - 按来源同步（`providerId` 或全部来源）总是先刷新列表；刷新失败（未登录/限流）时不逐本请求，直接把该来源各书标 error；同步后把被新书取代的已启用孤儿书（如迁移来的 `src:youdao:default`）移出启用列表，缓存保留
 - SW 被回收导致停在 `syncing` 的书在启动时复位为 error（`recoverInterruptedSyncs`）
-- `autoSyncIfDue` 在 SW 每次启动时检查：来源启用且 `autoSync`、有书成功同步过且超过 24 小时、距上次尝试超过 1 小时
+- `autoSyncIfDue` 在 SW 每次启动时检查：来源启用且 `autoSync`；同步过的来源要有书超过 24 小时未同步且距上次尝试超过 1 小时；从未同步成功的来源（与旧版 syncTime=0 一致）距上次尝试超过 24 小时即自动尝试
 
 **新增来源**：① 在 `SOURCE_PROVIDER_INFOS` 加静态描述；② 在 `background/sources/` 实现 `SourceProvider` 并加入 `background/sources/index.ts` 的 `PROVIDERS`；③ 在 `createDefaultSettings` 的 `sources` 中补默认配置。UI 自动按 `SOURCE_PROVIDER_INFOS` 渲染。
 
-### 4.9 熟词与 deleteOnKnown
+### 4.9 熟词本、加入生词本与移除目标
+
+熟词本与生词本使用同一套“来源 + 多本”模型（[known/sources.ts](../src/core/known/sources.ts)）：
+
+- 本地熟词本（storage `knownWords`，参与 storage.sync）始终生效；来源熟词本 = 生效角色为 known 的来源词书（provider 声明或 `knownBooks.roles` 覆盖），在 `knownBooks.enabled` 中启用后生效。
+- `getKnownWords()` 返回两者的并集，内容脚本的 WordMatcher 用它判定熟词（熟词优先于生词）。只编辑本地熟词本的地方（options 熟词管理、storage.sync）用 `getKnownData`。
+
+单词操作在 [background/known.ts](../src/background/known.ts)，目标配置为 `settings.wordActions`。目标 id 可以是本地词书 `local:…`、来源词书 `src:…`，或本地熟词本 `known:local`。不支持的目标（如欧路“已掌握”只读、有道非默认分组不能加词）会跳过，结果中带 `skipped` 和原因。
 
 ```mermaid
 sequenceDiagram
   participant C as 卡片(content)
   participant B as background
-  participant K as knownWords
   participant P as SourceProvider
+  C->>B: previewWordAction {action, word, lemma}
+  B-->>C: 写入目标 + 各书将移除的词形（needsConfirm）
   C->>B: markKnown {word, lemma}
-  B->>K: setKnownWords([lemma], true)
-  loop 开启 deleteOnKnown 且 capabilities.delete 的来源下各词书
-    B->>B: findWordFormsOfLemma(lemma, 词书词条)
-    B->>P: deleteWords(remoteId, 同原形词条)
-    B->>B: 成功的词从 srcBook 缓存移除并更新 wordCount
-  end
-  B-->>C: MarkKnownResult {lemma, deleted[], message}
+  B->>B: 写 knownTargets（本地熟词本 / 可写的来源熟词本；都失败时兜底写本地）
+  B->>B: findInflectedForms：knownRemoveFrom 各书中的屈折词形
+  B->>P: deleteWords（跨书按 (来源, itemId) 去重；多 itemId 全删才算成功）
+  B-->>C: MarkKnownResult {written, deleted, removedLocal, fullyUndoable, message}
 ```
 
-熟词本存储见 [known/store.ts](../src/core/known/store.ts)：`getKnownWords`（Set）、`setKnownWords`、`replaceKnownWords`（文本编辑，删除的记墓碑）、`importKnownWords`、`exportKnownWords('txt'|'csv')`。合并规则见 `mergeKnownWords`。
+- **删除集合只含屈折变化**（`findInflectedForms`）：生词本中的词 w 只有在 w 就是原形，或 w 经屈折还原（复数、三单、-ed、-ing、比较级以及 went/gone/better 这类不规则形，来自 `Lemmatizer#analyze().inflections`）等于原形时才会被删除。派生词（runner、careful、careless、carelessly、ability）永远不删。数据表外的词按规则还原时，-er/-est 不还原（runner 不当作 run 的比较级）。同原形开关 `sameLemma` 关闭时只处理当前词形和原形本身。
+- **来源删除的保护**：只对可删的书（未孤立、`canDelete`、provider 支持删除）发请求；`globalRefs` 的来源（有道）跨书按句柄去重，删除成功后同步清理其他书（含迁移来的孤儿书）缓存中的同一条目；任何失败都保留本地缓存并在文案中说明。
+- `knownRemoveFrom='auto'`（默认）等同旧开关：启用的来源中开启 `deleteOnKnown` 的全部生词本。
+- **撤销**（10 分钟，记录在 `storage.session` 的 `knownUndo`，键为 `known:<lemma>` / `add:<lemma>`）：本地词书完整恢复；来源词书原书可加词时加回原书，否则加回同来源可写的书（有道默认分组）并说明，都不行时在文案中列出无法加回的词；撤销认识时还会删除写入来源熟词本的词。
+- “加入生词本”默认写入“我的生词本”（`local:mine`，首次加入时自动创建并放到 `books.enabled` 最前），并从本地熟词本移除该词的屈折词形；词仍在启用的只读来源熟词本中时，文案提示“仍不会高亮”。
+
+熟词本存储见 [known/store.ts](../src/core/known/store.ts)：`getKnownData`（本地熟词本）、`getKnownWords`（生效并集）、`setKnownWords`、`replaceKnownWords`（文本编辑，删除的记墓碑）、`importKnownWords`、`exportKnownWords('txt'|'csv')`。合并规则见 `mergeKnownWords`。
 
 ### 4.10 手动导入
 
@@ -291,9 +309,9 @@ sequenceDiagram
 
 - **段与编码**：数据切成段，每段 `JSON → deflate-raw（CompressionStream）→ base64`（`encodeSyncValue`），按单项上限切片：
   - `settings`（`pickSyncedSettings`：去掉 `sync` 与 `apiToken`）、`known`、`lbr`（本地词书删除墓碑）、`lb:<uuid>`（每本本地词书一段）；来源词书不同步
-  - `storage.sync` 键：`hnw:m` 为 `SyncManifest { v, device, at, segs: 段→{kind, n 切片数, h 哈希, at, level} }`，切片为 `hnw:<段>:<i>`
-- **配额与取舍**（`planSyncLayout`，纯函数）：按优先级 settings(0) → known(1) → lbr(2) → 本地词书(10+，小书优先) 依次放入；本地词书先尝试完整，再降级为仅单词（`reduced`），仍放不下则 `skipped`；保证总字节 ≤ `QUOTA_BYTES - 预留`、项数 ≤ `MAX_ITEMS`、单项 ≤ `QUOTA_BYTES_PER_ITEM`、manifest 不超单项。用量 `SyncUsage` 写入 `syncState` 供 UI 展示。
-- **写频率**：本机变化防抖 5s、两次推送间隔 ≥ 10s，每次推送最多 1 次 `set`（切片与 manifest 同批）+ 1 次 `remove`，只重写哈希变化的段；遇到 `MAX_WRITE_OPERATIONS_*` 错误退避 60s 后自动补推（退避期内手动同步只拉取）。内容比较一律用 `stableStringify`（Chrome 读回的对象键按字母序，直接 `JSON.stringify` 比较会导致每次同步都重写）。熟词段用紧凑编码 [known-codec.ts](../src/core/sync/known-codec.ts)（秒精度，超配额降级为天精度）。拉取时段哈希与 manifest 不符或解码失败只跳过该段。
+  - `storage.sync` 键：`hnw:m` 为 `SyncManifest { v, device, at, segs: 段→{kind, n 切片数, h 哈希, at, level}, parts? }`，切片为 `hnw:<段>:<i>`；段目录超过单项上限时 manifest 分片，其余片在 `hnw:m:<i>`（`{ segs }`，最多 16 片），与切片同批写入；读取时缺片的段视为未知，不拉取也不当作删除
+- **配额与取舍**（`planSyncLayout`，纯函数）：按优先级 settings(0) → known(1) → lbr(2) → 本地词书(10+，小书优先) 依次放入；本地词书先尝试完整，再降级为仅单词（`reduced`），仍放不下则 `skipped`；保证总字节 ≤ `QUOTA_BYTES - 预留`、项数（含 manifest 分片）≤ `MAX_ITEMS`、单项 ≤ `QUOTA_BYTES_PER_ITEM`。用量 `SyncUsage` 写入 `syncState` 供 UI 展示。
+- **写频率**：本机变化防抖 5s，连续改动时最多等待 30s（maxWait，从第一次未推送的改动算起），两次推送间隔 ≥ 10s，本机写操作按滑动窗口自我限额（Chrome 上限的 80%：每分钟 96、每小时 1440）。每次推送最多 1 次 `set`（切片与 manifest 同批）+ 1 次 `remove`，只重写哈希变化的段。遇到 `MAX_WRITE_OPERATIONS_PER_MINUTE` 退避 60s；遇到 `PER_HOUR` 按本机写入记录推算窗口释放时间（无记录时退避 1 小时）。退避截止时间写入 `syncState.retryAt`（SW 重启后仍遵守），退避期间 `phase=pending`、`error` 清空、`notice` 说明何时自动重试，手动同步只拉取。内容比较一律用 `stableStringify`（Chrome 读回的对象键按字母序，直接 `JSON.stringify` 比较会导致每次同步都重写）。熟词段用紧凑编码 [known-codec.ts](../src/core/sync/known-codec.ts)（秒精度，超配额降级为天精度）。拉取时段哈希与 manifest 不符或解码失败只跳过该段。
 - **合并**（[merge.ts](../src/core/sync/merge.ts)）：设置按 `updatedAt` LWW 且保留本机字段；熟词并集 + 墓碑（墓碑保留 180 天）；本地词书每本按 `updatedAt` LWW，墓碑时间 ≥ 更新时间则删除；超配额被跳过的书不视为删除。全新安装的默认设置 `updatedAt=0`、旧版迁移结果 `updatedAt=1`，新设备首次同步时远端设置胜出。
 - **用户开关**：`settings.sync.enabled` 关闭后不读写 storage.sync；`include` 中关闭的类别不推送也不拉取，但保留远端已有段（`kept`，可能是其他设备的数据）。
 
@@ -346,8 +364,10 @@ stdout 输出每页统计 JSON（高亮数、不同词条数、行内翻译数�
 - 内置短释义不看上下文（present→介绍、concrete→混凝土的），按多来源义项位次投票选取；ECDICT 考试标签不是官方大纲（四级约 3.8k 词，少于官方 4.5k）；ECDICT 小写词条与人名同形（tom）在 C2 书中可能误标首字母大写的人名。
 - 词形还原不带词性：同形异义词按数据取最常见原形（leaves → leave, leaf 都作候选）；派生关系靠 ECDICT 释义做语义校验，个别派生词因释义不重叠而漏还原（unhappiness、sailor），前缀派生（un-/re-）不还原。
 - popup/options 文案仅中文，未接入 `_locales` 国际化；卡片暂无例句；收藏（加入我的生词本）按钮待 background/engine 接入 `setCollected`。
-- 欧路未用真实账号验证（调试账号网页登录被拒并出现验证码）：OpenAPI 按官方文档实现，cookie 模式沿用旧版接口，未登录判断（非 JSON / 重定向到登录页）为推断。
-- 欧路 cookie 模式删除（SetStarRating）作用于整个生词本，不区分分类。
+- 欧路 OpenAPI 已用调试账号 token 实测（分类、拉词、已掌握、在“测试”分组加词/删词）；cookie 模式沿用旧版接口，未登录判断（非 JSON / 重定向到登录页）为推断，未实测。
+- 欧路 cookie 模式删除（SetStarRating）作用于整个生词本，不区分分类；“已掌握单词”只读，OpenAPI 没有写入接口。
 - storage.sync 在真实 Chromium 中验证了配额（自算用量与 `getBytesInUse` 误差 < 50 字节）与无变化不重写，未做真实多设备验证。
-- 撤销熟词时有道只能把词加回默认分组；欧路 cookie 模式无加词接口，无法加回。
+- 撤销熟词时有道非默认分组的词只能加回默认分组“无标签”（文案会说明）；欧路 cookie 模式无加词接口，无法加回（`MarkKnownResult.fullyUndoable=false`）。
+- 屈折还原数据中的同形异义词（lay 是 lie 的过去式也是原形动词、found 是 find 的过去式也是原形）会按屈折处理：标记 lie 会删除生词本中的 lay。卡片应在 `previewWordAction.needsConfirm` 时列出将删除的词。
+- storage.sync 的防抖/退避计时器在 SW 被回收后丢失，未推送的改动在 SW 下次启动时由启动同步补推（没有使用 alarms 权限）。
 - 徽章：background 在 URL（不含 hash）变化时清零（含 SPA 路由），依赖内容脚本在路由切换后按页面实际高亮重新全量上报。

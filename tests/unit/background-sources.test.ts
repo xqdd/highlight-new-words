@@ -6,7 +6,7 @@ import { SimpleLemmatizer } from '@/core/lemma/simple';
 import { getKnownWords } from '@/core/known/store';
 import { getSettings, patchSettings } from '@/core/settings/store';
 import { SourceError } from '@/core/source/types';
-import { getSourceBook, getSourceIndex, patchSourceBookState, saveSourceBook } from '@/core/wordbook/user-store';
+import { getSourceBook, getSourceIndex, patchSourceBookState, saveSourceBook, updateSourceIndex } from '@/core/wordbook/user-store';
 import { youdaoProvider } from '@/background/sources/youdao';
 import { eudicProvider, setOpenApiThrottle } from '@/background/sources/eudic';
 import {
@@ -80,9 +80,10 @@ afterEach(() => vi.unstubAllGlobals());
 describe('有道 provider（真实接口脱敏样例）', () => {
   it('列出分组，按 bookId 拉取；旧版 default 拉取全部', async () => {
     const calls = youdaoLoggedIn();
+    // 加词接口只能加入默认分组，其他分组 canAdd=false 并给出原因
     expect(await youdaoProvider.listRemoteBooks(ctx)).toEqual([
-      { remoteId: UNGROUPED, name: '未分组' },
-      { remoteId: '0', name: '无标签' },
+      { remoteId: UNGROUPED, name: '未分组', canAdd: false, readOnlyReason: expect.stringContaining('默认分组') },
+      { remoteId: '0', name: '无标签', canAdd: true },
     ]);
     const g0 = await youdaoProvider.fetchWords('0', ctx);
     expect(Object.keys(g0)).toEqual(['algorithm', 'asynchronous', 'authentication']);
@@ -125,7 +126,7 @@ describe('欧路 provider', () => {
   const tokenCtx = { settings: { ...ctx.settings, apiToken: 'abc' } };
 
   it('cookie 模式：只有“全部生词”，与旧版一致不带分类参数，未登录（HTML）识别为 auth', async () => {
-    expect(await eudicProvider.listRemoteBooks(ctx)).toEqual([{ remoteId: '-1', name: '全部生词' }]);
+    expect(await eudicProvider.listRemoteBooks(ctx)).toEqual([{ remoteId: '-1', name: '全部生词', canAdd: false, readOnlyReason: expect.any(String) }]);
     const calls = mockFetch(on(/WordsDataSource/, () => json({ data: [{ uuid: 'Apple', phon: 'ˈæpl', exp: 'n. 苹果' }] })));
     const words = await eudicProvider.fetchWords('-1', ctx);
     expect(words.apple).toEqual({ word: 'Apple', ref: 'Apple', phonetic: 'ˈæpl', trans: 'n. 苹果' });
@@ -144,9 +145,11 @@ describe('欧路 provider', () => {
         return json({ data: p < 2 ? page(p, 100) : page(p, 7) });
       },
     );
+    // 分类可加词；“已掌握单词”作为只读的熟词本追加在最后
     expect(await eudicProvider.listRemoteBooks(tokenCtx)).toEqual([
-      { remoteId: '0', name: '我的生词本' },
-      { remoteId: '132303016416635230', name: 'nanana3' },
+      { remoteId: '0', name: '我的生词本', canAdd: true },
+      { remoteId: '132303016416635230', name: 'nanana3', canAdd: true },
+      { remoteId: 'mastered', name: '已掌握单词', role: 'known', canAdd: false, canDelete: false, readOnlyReason: expect.any(String) },
     ]);
     const words = await eudicProvider.fetchWords('0', tokenCtx);
     expect(Object.keys(words)).toHaveLength(207);
@@ -182,8 +185,10 @@ describe('欧路 provider', () => {
     expect(JSON.parse(calls[0]!.body!)).toEqual({ language: 'en', category_id: '0', words: ['Run', 'ran'] });
     mockFetch(on(/studylist\/words/, () => json(EUDIC.addWords, 201)));
     expect((await eudicProvider.addWords!('0', [{ word: 'run', ref: 'run' }], tokenCtx)).map((w) => w.word)).toEqual(['run']);
-    // cookie 模式没有加词接口
-    expect(await eudicProvider.addWords!('-1', [{ word: 'run' }], tokenCtx)).toEqual([]);
+    // cookie 模式没有加词接口、“已掌握”只读：明确报 unsupported（service 按 canAdd 不会调用）
+    await expect(eudicProvider.addWords!('-1', [{ word: 'run' }], tokenCtx)).rejects.toMatchObject({ code: 'unsupported' });
+    await expect(eudicProvider.addWords!('mastered', [{ word: 'run' }], tokenCtx)).rejects.toMatchObject({ code: 'unsupported' });
+    await expect(eudicProvider.deleteWords('mastered', [{ word: 'run' }], tokenCtx)).rejects.toMatchObject({ code: 'unsupported' });
   });
 });
 
@@ -240,7 +245,8 @@ describe('来源同步服务', () => {
     await saveSourceBook({ id: 'src:youdao:0', words: { keep: { word: 'keep' } }, updatedAt: 5 });
     const results = await syncSourceBooks({ providerId: 'youdao' });
     const byId = Object.fromEntries(results.map((r) => [r.bookId, r]));
-    expect(byId['src:youdao:0']).toMatchObject({ ok: false, message: MSG_EMPTY_VERIFIED });
+    // 已确认登录的空分组：请求成功（ok=true + empty），文案与状态一致
+    expect(byId['src:youdao:0']).toMatchObject({ ok: true, empty: true, message: MSG_EMPTY_VERIFIED });
     expect(byId[`src:youdao:${UNGROUPED}`]).toMatchObject({ ok: false, message: '有道服务器返回 502' });
     expect((await getSourceBook('src:youdao:0'))!.words.keep).toBeDefined();
     const idx = await getSourceIndex();
@@ -262,8 +268,15 @@ describe('来源同步服务', () => {
     expect((await getSourceIndex()).books['src:youdao:0']).toMatchObject({ status: 'error', error: '同步被中断，请重试' });
   });
 
-  it('自动同步：超过 24 小时且距上次尝试超过 1 小时才请求；从未同步过的来源不请求', async () => {
+  it('自动同步：超过 24 小时且距上次尝试超过 1 小时才请求；从未同步过的来源（旧版 syncTime=0）每天自动尝试一次', async () => {
     const now = 10 * 24 * 3600_000;
+    // 从未同步过：与旧版一致自动同步一次（刷新列表 + 逐本同步）
+    const first = youdaoLoggedIn();
+    await autoSyncIfDue(now);
+    expect(first.some((c) => /webapi\/books/.test(c.url))).toBe(true);
+    // 未登录的新用户：一天内不重复尝试
+    fakeBrowser.reset();
+    await updateSourceIndex((idx) => void (idx.providers.youdao = { lastListAt: now - 3600_000, error: '未登录' }));
     const calls = youdaoLoggedIn();
     await autoSyncIfDue(now);
     expect(calls).toHaveLength(0);
@@ -278,7 +291,7 @@ describe('来源同步服务', () => {
 
 describe('删词、熟词与撤销', () => {
   async function seedYoudao() {
-    await patchSourceBookState({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签' }, { status: 'ok', lastSyncAt: 1, wordCount: 3 });
+    await patchSourceBookState({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签' }, { status: 'ok', lastSyncAt: 1, wordCount: 3, canAdd: true });
     await saveSourceBook({
       id: 'src:youdao:0',
       words: { run: { word: 'run', ref: 'i1' }, runs: { word: 'Runs', ref: 'i2' }, runner: { word: 'runner', ref: 'i3' }, apple: { word: 'apple', ref: 'i4' } },
@@ -301,7 +314,7 @@ describe('删词、熟词与撤销', () => {
     const calls = youdaoLoggedIn([on(/ajax\/add/, () => json(YD_MISC.add))]);
     const res = await markKnown('running', 'run');
     expect(res.deleted[0]!.deleted.sort()).toEqual(['run', 'runs']);
-    expect(res.message).toContain('并从生词本删除');
+    expect(res.message).toContain('删除 run、runs');
     expect(calls.filter((c) => /delete\?itemId=/.test(c.url)).map((c) => new URL(c.url).searchParams.get('itemId')).sort()).toEqual(['i1', 'i2']);
     const book = await getSourceBook('src:youdao:0');
     expect(Object.keys(book!.words).sort()).toEqual(['apple', 'runner']);
@@ -315,7 +328,7 @@ describe('删词、熟词与撤销', () => {
     // fixture 默认分组里没有 run/runs，新句柄缺失时去掉 ref，避免用失效 itemId 误报删除成功
     expect(after!.words.runs!.ref).toBeUndefined();
     // 撤销记录只用一次
-    expect((await unmarkKnown('run')).restored).toBeUndefined();
+    expect((await unmarkKnown('run')).restored).toEqual([]);
   });
 
   it('来源未登录时熟词照常写入，删除失败写进提示且本地缓存保留', async () => {
@@ -335,7 +348,7 @@ describe('删词、熟词与撤销', () => {
     const res = await deleteFromSources('run', { forms: true, lemmatizer: new SimpleLemmatizer() });
     expect(res.ok).toBe(false);
     expect(res.reports[0]!.deleted).toEqual(['run']);
-    expect(res.reports[0]!.failed.map((f) => f.word)).toEqual(['Runs']);
+    expect(res.reports[0]!.failed.map((f) => f.word)).toEqual(['runs']);
     expect(Object.keys((await getSourceBook('src:youdao:0'))!.words).sort()).toEqual(['apple', 'runner', 'runs']);
   });
 });

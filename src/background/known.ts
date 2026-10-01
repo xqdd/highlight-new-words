@@ -1,13 +1,43 @@
 import { browser } from 'wxt/browser';
-import { setKnownWords } from '@/core/known/store';
+import { getKnownData, getKnownWords, setKnownWords } from '@/core/known/store';
+import { effectiveBookRole } from '@/core/known/sources';
 import { createLemmatizer } from '@/core/lemma';
 import type { Lemmatizer } from '@/core/lemma/types';
-import type { MarkKnownResult } from '@/core/messaging/protocol';
-import { getSettings } from '@/core/settings/store';
-import { SESSION_KEYS } from '@/core/storage/keys';
-import { getSourceIndex } from '@/core/wordbook/user-store';
+import type {
+  AddWordResult,
+  MarkKnownResult,
+  RemoveWordResult,
+  SourceDeleteReport,
+  WordActionPreview,
+  WordActionPreviewItem,
+  WordTargetResult,
+} from '@/core/messaging/protocol';
+import { LOCAL_KNOWN_BOOK_ID, MY_WORDS_BOOK_ID, type BookId, type Settings } from '@/core/settings/schema';
+import { getSettings, patchSettings } from '@/core/settings/store';
+import { getProviderInfo } from '@/core/source/providers';
+import { SESSION_KEYS, localBookKey } from '@/core/storage/keys';
+import { withStorageLock } from '@/core/storage/lock';
+import { parseBookId } from '@/core/wordbook/ids';
+import type { LocalBookData, LocalBookIndex, SourceBookIndex, UserWord } from '@/core/wordbook/types';
+import { getLocalBook, getLocalIndex, getSourceBook, getSourceIndex, updateLocalIndex } from '@/core/wordbook/user-store';
+import { findInflectedForms } from './forms';
 import { getSourceProvider } from './sources';
-import { deleteFromSources, restoreSourceWords, type RemovedSourceWords } from './sources/service';
+import {
+  addToSourceBook,
+  canDeleteFrom,
+  deleteSourceEntries,
+  errorMessage,
+  restoreSourceWords,
+  type RemovedSourceWords,
+  type SourceRemovalTarget,
+} from './sources/service';
+
+/**
+ * 单词操作（追加需求 v3 第 6–10 条）：标记熟词 / 撤销、加入生词本 / 移出、执行前预览。
+ *
+ * 目标配置见 settings.wordActions（schema.ts WordActionSettings）。所有“移除”都只处理屈折词形（forms.ts），
+ * 绝不使用高亮匹配的派生候选链；来源词书的远端删除不可完全恢复，卡片应先调用 previewWordAction 让用户确认。
+ */
 
 /** background 共享的词形还原器（懒加载数据，init 幂等；init 失败时下次调用重试） */
 let lemmatizerPromise: Promise<Lemmatizer> | undefined;
@@ -23,13 +53,26 @@ export function getLemmatizer(): Promise<Lemmatizer> {
   return lemmatizerPromise;
 }
 
+const LOCAL_KNOWN_NAME = '本地熟词本';
+const MY_WORDS_NAME = '我的生词本';
+
+// ---------------- 撤销记录 ----------------
+
 /** 撤销记录有效期：卡片上的“撤销”通常在几秒内点击，10 分钟足够且避免误恢复很久以前删除的词 */
 export const KNOWN_UNDO_TTL_MS = 10 * 60 * 1000;
 
 interface UndoRecord {
   at: number;
-  removed: RemovedSourceWords[];
+  /** 被删除的来源词条（撤销时加回） */
+  sourceRemoved: RemovedSourceWords[];
+  /** 被移除的本地词书词条（撤销时原样写回） */
+  localRemoved: { bookId: BookId; words: UserWord[] }[];
+  /** 从本地熟词本移除的词（撤销加入生词本时加回） */
+  knownLocalRemoved: string[];
+  /** 写入来源词书的词（撤销时从远端删除）：bookId -> 小写词 */
+  sourceAdded: SourceRemovalTarget[];
 }
+/** key：`known:<lemma>` / `add:<lemma>` */
 type UndoStore = Record<string, UndoRecord>;
 
 /** 撤销记录存在 storage.session：SW 被回收后仍在，浏览器关闭即清空 */
@@ -40,59 +83,435 @@ async function loadUndo(): Promise<UndoStore> {
 
 async function saveUndo(store: UndoStore): Promise<void> {
   const now = Date.now();
-  for (const [k, v] of Object.entries(store)) if (now - v.at > KNOWN_UNDO_TTL_MS) delete store[k];
+  for (const [k, v] of Object.entries(store)) if (now - v.at > KNOWN_UNDO_TTL_MS || !Array.isArray(v.sourceRemoved)) delete store[k];
   await browser.storage.session.set({ [SESSION_KEYS.knownUndo]: store });
 }
 
+async function putUndo(key: string, record: UndoRecord): Promise<void> {
+  const store = await loadUndo();
+  store[key] = record;
+  await saveUndo(store);
+}
+
+/** 取出并删除撤销记录；过期或旧结构返回 undefined */
+async function takeUndo(key: string): Promise<UndoRecord | undefined> {
+  const store = await loadUndo();
+  const record = store[key];
+  if (!record) return undefined;
+  delete store[key];
+  await saveUndo(store);
+  if (Date.now() - record.at > KNOWN_UNDO_TTL_MS || !Array.isArray(record.sourceRemoved)) return undefined;
+  return record;
+}
+
+// ---------------- 上下文与目标解析 ----------------
+
+interface ActionContext {
+  settings: Settings;
+  sources: SourceBookIndex;
+  locals: LocalBookIndex;
+  lemmatizer: Lemmatizer;
+}
+
+async function loadContext(): Promise<ActionContext> {
+  const [settings, sources, locals, lemmatizer] = await Promise.all([getSettings(), getSourceIndex(), getLocalIndex(), getLemmatizer()]);
+  return { settings, sources, locals, lemmatizer };
+}
+
+/** 目标显示名：来源词书“有道词典 · 无标签”；本地词书用其名称 */
+function targetName(id: BookId, ctx: ActionContext): string {
+  if (id === LOCAL_KNOWN_BOOK_ID) return LOCAL_KNOWN_NAME;
+  const parsed = parseBookId(id);
+  if (parsed.kind === 'local') return ctx.locals.books[id]?.name ?? (id === MY_WORDS_BOOK_ID ? MY_WORDS_NAME : '已删除的本地词书');
+  if (parsed.kind === 'source') {
+    const state = ctx.sources.books[id];
+    return `${getProviderInfo(parsed.providerId)?.name ?? parsed.providerId} · ${state?.name ?? parsed.remoteId}`;
+  }
+  return id;
+}
+
+/**
+ * 标记熟词时要移除的生词本：
+ * - 'auto'（默认，兼容旧开关）：启用的来源中开启 deleteOnKnown、支持删除的全部生词本（未孤立、角色为 new）
+ * - 列表：用户在选项页选择的本地/来源生词本
+ */
+export function resolveKnownRemoveFrom(settings: Settings, sources: SourceBookIndex): BookId[] {
+  const conf = settings.wordActions.knownRemoveFrom;
+  if (conf !== 'auto') return [...new Set(conf)];
+  return Object.values(sources.books)
+    .filter((b) => {
+      const src = settings.sources[b.providerId];
+      return src?.enabled && src.deleteOnKnown && canDeleteFrom(b) && effectiveBookRole(b, settings) === 'new';
+    })
+    .map((b) => b.id);
+}
+
+/** 移除计划中的一项：某本书中要移除的 key（屈折词形） */
+interface RemovalItem {
+  bookId: BookId;
+  kind: 'known-local' | 'local' | 'source';
+  keys: string[];
+  /** 不能执行的原因（来源只读等）；有值时不执行，只在结果中说明 */
+  blocked?: string;
+}
+
+/** 按配置规划移除：只读本地数据，不发请求；没有命中词形的书不列出 */
+async function planRemoval(ids: BookId[], target: string, surface: string, ctx: ActionContext): Promise<RemovalItem[]> {
+  const opts = { sameLemma: ctx.settings.wordActions.sameLemma, surface };
+  const out: RemovalItem[] = [];
+  for (const id of [...new Set(ids)]) {
+    if (id === LOCAL_KNOWN_BOOK_ID) {
+      const keys = findInflectedForms(target, Object.keys((await getKnownData()).words), ctx.lemmatizer, opts);
+      if (keys.length) out.push({ bookId: id, kind: 'known-local', keys });
+      continue;
+    }
+    const parsed = parseBookId(id);
+    if (parsed.kind === 'local') {
+      const data = await getLocalBook(id);
+      const keys = data ? findInflectedForms(target, Object.keys(data.words), ctx.lemmatizer, opts) : [];
+      if (keys.length) out.push({ bookId: id, kind: 'local', keys });
+    } else if (parsed.kind === 'source') {
+      const state = ctx.sources.books[id];
+      const data = state && (await getSourceBook(id));
+      const keys = data ? findInflectedForms(target, Object.keys(data.words), ctx.lemmatizer, opts) : [];
+      if (!keys.length) continue;
+      const blocked = canDeleteFrom(state) ? undefined : (state?.readOnlyReason ?? (state?.orphaned ? '远端已没有该生词本' : '该来源不支持删除'));
+      out.push({ bookId: id, kind: 'source', keys, blocked });
+    }
+  }
+  return out;
+}
+
+/** 撤销能否把远端删除的词加回原书 */
+function sourceUndoable(bookId: BookId, ctx: ActionContext): boolean {
+  const state = ctx.sources.books[bookId];
+  return !!state?.canAdd && !!getSourceProvider(state.providerId)?.addWords;
+}
+
+// ---------------- 本地词书读写 ----------------
+
+/** 向本地词书加词；MY_WORDS_BOOK_ID 不存在时自动创建并加入启用列表（最前，优先级最高）；其他已删除的本地词书返回 false */
+async function addLocalWords(id: BookId, words: UserWord[]): Promise<boolean> {
+  const index = await getLocalIndex();
+  const exists = !!index.books[id];
+  if (!exists && id !== MY_WORDS_BOOK_ID) return false;
+  const count = await withStorageLock(localBookKey(id), async () => {
+    const data: LocalBookData = (await getLocalBook(id)) ?? { id, words: {} };
+    for (const w of words) data.words[w.word.toLowerCase()] = { ...data.words[w.word.toLowerCase()], ...w };
+    await browser.storage.local.set({ [localBookKey(id)]: data });
+    return Object.keys(data.words).length;
+  });
+  const now = Date.now();
+  await updateLocalIndex((idx) => {
+    const prev = idx.books[id];
+    idx.books[id] = prev
+      ? { ...prev, wordCount: count, updatedAt: now }
+      : { id, name: MY_WORDS_NAME, format: 'txt', wordCount: count, createdAt: now, updatedAt: now };
+    delete idx.removed[id];
+  });
+  if (!exists) {
+    const settings = await getSettings();
+    if (!settings.books.enabled.includes(id)) await patchSettings({ books: { enabled: [id, ...settings.books.enabled] } });
+  }
+  return true;
+}
+
+/** 从本地词书移除指定 key，返回被移除的词条 */
+async function removeLocalWords(id: BookId, keys: string[]): Promise<UserWord[]> {
+  const removed: UserWord[] = [];
+  const count = await withStorageLock(localBookKey(id), async () => {
+    const data = await getLocalBook(id);
+    if (!data) return undefined;
+    for (const k of keys) {
+      if (!data.words[k]) continue;
+      removed.push(data.words[k]!);
+      delete data.words[k];
+    }
+    if (removed.length) await browser.storage.local.set({ [localBookKey(id)]: data });
+    return Object.keys(data.words).length;
+  });
+  if (removed.length && count !== undefined) {
+    await updateLocalIndex((idx) => {
+      const meta = idx.books[id];
+      if (meta) idx.books[id] = { ...meta, wordCount: count, updatedAt: Date.now() };
+    });
+  }
+  return removed;
+}
+
+// ---------------- 执行移除 ----------------
+
+interface RemovalOutcome {
+  results: WordTargetResult[];
+  sourceReports: SourceDeleteReport[];
+  sourceRemoved: RemovedSourceWords[];
+  localRemoved: { bookId: BookId; words: UserWord[] }[];
+  knownLocalRemoved: string[];
+}
+
+/** 执行移除计划：本地熟词本、本地词书直接改；来源词书统一走 deleteSourceEntries（跨书去重） */
+async function executeRemoval(plan: RemovalItem[], ctx: ActionContext): Promise<RemovalOutcome> {
+  const out: RemovalOutcome = { results: [], sourceReports: [], sourceRemoved: [], localRemoved: [], knownLocalRemoved: [] };
+  const sourceTargets: SourceRemovalTarget[] = [];
+  for (const item of plan) {
+    const name = targetName(item.bookId, ctx);
+    if (item.blocked) {
+      out.results.push({ bookId: item.bookId, name, ok: false, words: item.keys, error: item.blocked, skipped: true });
+    } else if (item.kind === 'known-local') {
+      await setKnownWords(item.keys, false);
+      out.knownLocalRemoved.push(...item.keys);
+      out.results.push({ bookId: item.bookId, name, ok: true, words: item.keys });
+    } else if (item.kind === 'local') {
+      const words = await removeLocalWords(item.bookId, item.keys);
+      if (words.length) out.localRemoved.push({ bookId: item.bookId, words });
+      out.results.push({ bookId: item.bookId, name, ok: true, words: words.map((w) => w.word.toLowerCase()) });
+    } else {
+      sourceTargets.push({ bookId: item.bookId, keys: item.keys });
+    }
+  }
+  if (sourceTargets.length) {
+    out.sourceReports = await deleteSourceEntries(sourceTargets, out.sourceRemoved);
+    for (const r of out.sourceReports) {
+      out.results.push({
+        bookId: r.bookId,
+        name: targetName(r.bookId, ctx),
+        ok: r.failed.length === 0,
+        words: r.deleted,
+        ...(r.failed.length ? { error: `${r.failed.map((f) => f.word).join('、')} 删除失败（已保留）：${r.failed[0]!.error}` } : {}),
+      });
+    }
+  }
+  return out;
+}
+
+/** 结果列表 -> 简短中文说明：成功“从“有道词典 · 无标签”删除 run、runs”，失败/跳过附原因 */
+function describe(results: WordTargetResult[], verb: (name: string, words: string) => string): string[] {
+  const parts: string[] = [];
+  for (const r of results) {
+    if (r.words.length && r.ok) parts.push(verb(r.name, r.words.join('、')));
+    else if (!r.ok) parts.push(`“${r.name}”${r.skipped ? '未处理' : '失败'}：${r.error ?? '未知错误'}`);
+  }
+  return parts;
+}
+const removedFrom = (name: string, words: string) => `已从“${name}”删除 ${words}`;
+const addedTo = (name: string, words: string) => `已加入“${name}”：${words}`;
+
+// ---------------- 标记熟词 ----------------
+
 /**
  * 标记熟词：
- * 1. 写入熟词本（lemma）
- * 2. 对开启 deleteOnKnown 且支持删除的来源，删除其各生词本中与 lemma 原形相同的所有词形（running/ran -> run）
- * 3. 记录被删除的词条，供撤销时加回
+ * 1. 写入 knownTargets（本地熟词本；可写的来源熟词本调用 addWords；只读的如欧路“已掌握”跳过并说明）。
+ *    没有任何目标写入成功时兜底写本地熟词本，保证“认识”一定生效
+ * 2. 从 knownRemoveFrom（'auto' = 各来源 deleteOnKnown）移除该词的屈折词形（sameLemma 关闭时只移除当前词形与原形本身）
+ * 3. 记录撤销信息
  */
 export async function markKnown(word: string, lemma: string): Promise<MarkKnownResult> {
   const target = lemma.trim().toLowerCase();
-  await setKnownWords([target], true);
-  const settings = await getSettings();
-  const bookIds = Object.values((await getSourceIndex()).books)
-    .filter((b) => {
-      const src = settings.sources[b.providerId];
-      return src?.enabled && src.deleteOnKnown && getSourceProvider(b.providerId)?.capabilities.delete;
-    })
-    .map((b) => b.id);
-  if (bookIds.length === 0) return { ok: true, lemma: target, deleted: [], message: '已标记为熟词' };
-
-  const removed: RemovedSourceWords[] = [];
-  const res = await deleteFromSources(target, { bookIds, forms: true, lemmatizer: await getLemmatizer(), removed });
-  if (removed.length > 0) {
-    const store = await loadUndo();
-    store[target] = { at: Date.now(), removed };
-    await saveUndo(store);
+  const surface = word.trim().toLowerCase() || target;
+  const ctx = await loadContext();
+  const written: WordTargetResult[] = [];
+  const sourceAdded: SourceRemovalTarget[] = [];
+  for (const id of [...new Set(ctx.settings.wordActions.knownTargets)]) {
+    const name = targetName(id, ctx);
+    if (id === LOCAL_KNOWN_BOOK_ID) {
+      await setKnownWords([target], true);
+      written.push({ bookId: id, name, ok: true, words: [target] });
+      continue;
+    }
+    const state = ctx.sources.books[id];
+    if (!state || effectiveBookRole(state, ctx.settings) !== 'known') {
+      written.push({ bookId: id, name, ok: false, words: [], error: '不是熟词本', skipped: true });
+      continue;
+    }
+    if (!state.canAdd) {
+      written.push({ bookId: id, name, ok: false, words: [], error: state.readOnlyReason ?? '该熟词本不支持写入', skipped: true });
+      continue;
+    }
+    try {
+      const added = await addToSourceBook(id, [{ word: target }]);
+      const keys = added.map((w) => w.word.toLowerCase());
+      sourceAdded.push({ bookId: id, keys });
+      written.push({ bookId: id, name, ok: true, words: keys });
+    } catch (e) {
+      written.push({ bookId: id, name, ok: false, words: [], error: errorMessage(e) });
+    }
   }
-  const deletedWords = [...new Set(res.reports.flatMap((r) => r.deleted))];
-  const failed = res.reports.flatMap((r) => r.failed);
-  console.log('[hnw] 标记熟词', word, '->', target, '删除来源词形', deletedWords, '失败', failed);
-  let message = '已标记为熟词';
-  if (deletedWords.length) message += `，并从生词本删除 ${deletedWords.join('、')}`;
-  // 熟词已写入，来源删除失败只作提示（ok 仍为 true）
-  if (failed.length) message += `；${failed.length} 个词从生词本删除失败：${failed[0]!.error}`;
-  return { ok: true, lemma: target, deleted: res.reports, message };
+  if (!written.some((w) => w.ok)) {
+    await setKnownWords([target], true);
+    written.push({ bookId: LOCAL_KNOWN_BOOK_ID, name: LOCAL_KNOWN_NAME, ok: true, words: [target] });
+  }
+
+  const plan = (await planRemoval(resolveKnownRemoveFrom(ctx.settings, ctx.sources), target, surface, ctx)).filter((p) => p.kind !== 'known-local');
+  const removal = await executeRemoval(plan, ctx);
+  if (removal.sourceRemoved.length || removal.localRemoved.length || sourceAdded.length) {
+    await putUndo(`known:${target}`, { at: Date.now(), sourceRemoved: removal.sourceRemoved, localRemoved: removal.localRemoved, knownLocalRemoved: [], sourceAdded });
+  }
+  const fullyUndoable = removal.sourceRemoved.every((r) => sourceUndoable(r.bookId, ctx));
+  console.log('[hnw] 标记熟词', word, '->', target, removal.results);
+
+  const parts = ['已标记为熟词', ...describe(written.filter((w) => !w.ok), addedTo), ...describe(removal.results, removedFrom)];
+  if (removal.sourceRemoved.length && !fullyUndoable) parts.push('注意：撤销不会恢复已从来源删除的部分单词');
+  return {
+    ok: true,
+    lemma: target,
+    deleted: removal.sourceReports,
+    message: parts.join('；'),
+    written,
+    removedLocal: removal.results.filter((r) => parseBookId(r.bookId).kind === 'local'),
+    fullyUndoable,
+  };
 }
 
-/** 撤销熟词：移出熟词本（记墓碑），并在有效期内把 deleteOnKnown 删除的来源词加回 */
+/** 撤销熟词：移出本地熟词本（记墓碑）；有效期内撤回 markKnown 的远端写入，并恢复移除的本地/来源词条 */
 export async function unmarkKnown(lemma: string): Promise<{ ok: boolean; restored?: string[]; message?: string }> {
   const target = lemma.trim().toLowerCase();
   await setKnownWords([target], false);
-  const store = await loadUndo();
-  const record = store[target];
-  if (!record) return { ok: true };
-  delete store[target];
-  await saveUndo(store);
-  if (Date.now() - record.at > KNOWN_UNDO_TTL_MS) return { ok: true };
-  const restored = await restoreSourceWords(record.removed);
-  const total = record.removed.reduce((n, r) => n + r.words.length, 0);
-  const message = restored.length
-    ? `已撤销，并把 ${restored.join('、')} 加回生词本${restored.length < total ? '（部分来源不支持加回）' : ''}`
-    : '已撤销（来源生词本中已删除的单词无法自动加回）';
-  return { ok: true, restored, message };
+  const record = await takeUndo(`known:${target}`);
+  const notes: string[] = [];
+  const restored: string[] = [];
+  if (record) {
+    // 写入过的来源熟词本：删除刚加入的词（能删才删）
+    if (record.sourceAdded.length) await deleteSourceEntries(record.sourceAdded);
+    for (const { bookId, words } of record.localRemoved) {
+      if (await addLocalWords(bookId, words)) restored.push(...words.map((w) => w.word.toLowerCase()));
+    }
+    const res = await restoreSourceWords(record.sourceRemoved);
+    restored.push(...res.restored);
+    for (const f of res.fallback) notes.push(`“${f.from}”不支持加词，已加回“${f.to}”`);
+    if (res.lost.length) notes.push(`${[...new Set(res.lost)].join('、')} 已从来源删除，无法自动加回`);
+  }
+  // 仍在启用的来源熟词本中（如欧路“已掌握”）时提醒：本地撤销后仍不会高亮
+  if ((await getKnownWords()).has(target)) notes.push('该词仍在启用的来源熟词本中，依然不会高亮');
+  const uniq = [...new Set(restored)];
+  const message = ['已撤销', ...(uniq.length ? [`已加回 ${uniq.join('、')}`] : []), ...notes].join('；');
+  return { ok: true, restored: uniq, message };
+}
+
+// ---------------- 加入 / 移出生词本 ----------------
+
+/** addTargets 为空时退回“我的生词本” */
+function addTargetsOf(settings: Settings): BookId[] {
+  const ids = [...new Set(settings.wordActions.addTargets)];
+  return ids.length ? ids : [MY_WORDS_BOOK_ID];
+}
+
+/**
+ * 加入生词本：写入 addTargets（本地直接写；来源调用 addWords，只读的跳过并说明），
+ * 再从 addRemoveFromKnown 移除该词（同原形开关控制是否移除屈折词形）。
+ */
+export async function addWord(data: { word: string; lemma: string; trans?: string; phonetic?: string }): Promise<AddWordResult> {
+  const target = data.lemma.trim().toLowerCase();
+  const surface = data.word.trim().toLowerCase() || target;
+  const ctx = await loadContext();
+  const entry: UserWord = { word: target, ...(data.trans ? { trans: data.trans } : {}), ...(data.phonetic ? { phonetic: data.phonetic } : {}) };
+  const added: WordTargetResult[] = [];
+  const sourceAdded: SourceRemovalTarget[] = [];
+  const localAdded: { bookId: BookId; words: UserWord[] }[] = [];
+  for (const id of addTargetsOf(ctx.settings)) {
+    const name = targetName(id, ctx);
+    const kind = parseBookId(id).kind;
+    if (kind === 'local') {
+      const ok = await addLocalWords(id, [entry]);
+      if (ok) localAdded.push({ bookId: id, words: [entry] });
+      added.push(ok ? { bookId: id, name, ok, words: [target] } : { bookId: id, name, ok, words: [], error: '该本地词书已删除', skipped: true });
+    } else if (kind === 'source') {
+      const state = ctx.sources.books[id];
+      if (!state?.canAdd) {
+        added.push({ bookId: id, name, ok: false, words: [], error: state?.readOnlyReason ?? '该生词本不支持加词', skipped: true });
+        continue;
+      }
+      try {
+        const res = await addToSourceBook(id, [{ word: target }]);
+        const keys = res.map((w) => w.word.toLowerCase());
+        sourceAdded.push({ bookId: id, keys });
+        added.push({ bookId: id, name, ok: true, words: keys });
+      } catch (e) {
+        added.push({ bookId: id, name, ok: false, words: [], error: errorMessage(e) });
+      }
+    }
+  }
+  const plan = await planRemoval(ctx.settings.wordActions.addRemoveFromKnown, target, surface, ctx);
+  const removal = await executeRemoval(plan, ctx);
+  await putUndo(`add:${target}`, {
+    at: Date.now(),
+    sourceRemoved: removal.sourceRemoved,
+    localRemoved: [],
+    knownLocalRemoved: removal.knownLocalRemoved,
+    sourceAdded,
+  });
+  const ok = added.some((a) => a.ok);
+  const parts = [ok ? `已加入${added.filter((a) => a.ok).map((a) => `“${a.name}”`).join('、')}` : '加入失败'];
+  parts.push(...describe(added.filter((a) => !a.ok), addedTo), ...describe(removal.results, removedFrom));
+  if ((await getKnownWords()).has(target)) parts.push('该词仍在启用的熟词本中，不会高亮（可在选项页调整熟词本）');
+  return { ok, lemma: target, added, removedKnown: removal.results, message: parts.join('；') };
+}
+
+/** 移出生词本（收藏取消 / 撤销加入）：只处理该原形本身；有效期内把加入时移出的熟词加回 */
+export async function removeWord(data: { lemma: string; bookIds?: BookId[] }): Promise<RemoveWordResult> {
+  const target = data.lemma.trim().toLowerCase();
+  const ctx = await loadContext();
+  const ids = data.bookIds ?? addTargetsOf(ctx.settings);
+  const plan: RemovalItem[] = [];
+  for (const id of ids) {
+    const kind = parseBookId(id).kind;
+    if (kind === 'local' && (await getLocalBook(id))?.words[target]) plan.push({ bookId: id, kind: 'local', keys: [target] });
+    if (kind === 'source' && (await getSourceBook(id))?.words[target]) {
+      const state = ctx.sources.books[id];
+      plan.push({ bookId: id, kind: 'source', keys: [target], blocked: canDeleteFrom(state) ? undefined : (state?.readOnlyReason ?? '该来源不支持删除') });
+    }
+  }
+  const removal = await executeRemoval(plan, ctx);
+  const record = await takeUndo(`add:${target}`);
+  if (record?.knownLocalRemoved.length) await setKnownWords(record.knownLocalRemoved, true);
+  if (record?.sourceRemoved.length) await restoreSourceWords(record.sourceRemoved);
+  const ok = removal.results.every((r) => r.ok);
+  const parts = removal.results.length ? describe(removal.results, removedFrom) : ['生词本中没有该单词'];
+  return { ok, removed: removal.results, message: parts.join('；') };
+}
+
+// ---------------- 预览与状态 ----------------
+
+/** addWord / markKnown 执行前预览：列出写入目标与各书中将被移除的词形（只读本地缓存） */
+export async function previewWordAction(data: { action: 'add' | 'known'; word: string; lemma: string }): Promise<WordActionPreview> {
+  const target = data.lemma.trim().toLowerCase();
+  const surface = data.word.trim().toLowerCase() || target;
+  const ctx = await loadContext();
+  const writeIds = data.action === 'add' ? addTargetsOf(ctx.settings) : [...new Set(ctx.settings.wordActions.knownTargets)];
+  const write: WordActionPreviewItem[] = writeIds.map((id) => {
+    const name = targetName(id, ctx);
+    const remote = parseBookId(id).kind === 'source';
+    const state = ctx.sources.books[id];
+    const supported = !remote || (!!state?.canAdd && (data.action === 'add' || effectiveBookRole(state, ctx.settings) === 'known'));
+    return { bookId: id, name, ok: supported, words: [target], remote, undoable: true, ...(supported ? {} : { error: state?.readOnlyReason ?? '不支持写入', skipped: true }) };
+  });
+  const removeIds = data.action === 'add' ? ctx.settings.wordActions.addRemoveFromKnown : resolveKnownRemoveFrom(ctx.settings, ctx.sources);
+  const plan = await planRemoval(removeIds, target, surface, ctx);
+  const remove: WordActionPreviewItem[] = plan
+    .filter((p) => data.action === 'add' || p.kind !== 'known-local')
+    .map((p) => {
+      const remote = p.kind === 'source';
+      return {
+        bookId: p.bookId,
+        name: targetName(p.bookId, ctx),
+        ok: !p.blocked,
+        words: p.keys,
+        remote,
+        undoable: !remote || sourceUndoable(p.bookId, ctx),
+        ...(p.blocked ? { error: p.blocked, skipped: true } : {}),
+      };
+    });
+  return { action: data.action, lemma: target, write, remove, needsConfirm: remove.some((r) => r.remote && r.ok) };
+}
+
+/** 单词状态：是否在 addTargets 的某本书中（收藏按钮）、是否为熟词（含启用的来源熟词本） */
+export async function getWordState(lemma: string): Promise<{ collected: boolean; collectedIn: BookId[]; known: boolean }> {
+  const target = lemma.trim().toLowerCase();
+  const settings = await getSettings();
+  const collectedIn: BookId[] = [];
+  for (const id of addTargetsOf(settings)) {
+    const kind = parseBookId(id).kind;
+    const words = kind === 'local' ? (await getLocalBook(id))?.words : kind === 'source' ? (await getSourceBook(id))?.words : undefined;
+    if (words?.[target]) collectedIn.push(id);
+  }
+  return { collected: collectedIn.length > 0, collectedIn, known: (await getKnownWords()).has(target) };
 }

@@ -104,12 +104,75 @@ describe('storage.sync：多设备与容错', () => {
     const set = vi.spyOn(area, 'set').mockRejectedValueOnce(new Error('This request exceeds the MAX_WRITE_OPERATIONS_PER_MINUTE quota.'));
     const svc = new StorageSyncService({ area, debounceMs: 0, minIntervalMs: 0 });
     const st = await svc.syncNow();
-    expect(st.phase).toBe('error');
-    expect(st.error).toContain('写入过于频繁');
+    // 退避期是“待推送”而不是错误：error 清空，notice 说明何时自动重试；retryAt 持久化供 SW 重启后遵守
+    expect(st.phase).toBe('pending');
+    expect(st.error).toBeUndefined();
+    expect(st.notice).toContain('写入过于频繁');
+    expect(st.retryAt! - Date.now()).toBeGreaterThan(50_000);
     const again = await svc.syncNow();
     expect(again.phase).toBe('pending');
     expect(set).toHaveBeenCalledTimes(1);
+    // 换一个服务实例（模拟 SW 重启）仍遵守持久化的退避
+    await new StorageSyncService({ area, debounceMs: 0, minIntervalMs: 0 }).syncNow();
+    expect(set).toHaveBeenCalledTimes(1);
   });
+
+  it('触发每小时写入上限：按小时窗口退避，而不是每 60 秒重试', async () => {
+    await setKnownWords(['apple'], true);
+    const area = fakeBrowser.storage.sync;
+    vi.spyOn(area, 'set').mockRejectedValueOnce(new Error('This request exceeds the MAX_WRITE_OPERATIONS_PER_HOUR quota.'));
+    const st = await new StorageSyncService({ area, debounceMs: 0, minIntervalMs: 0 }).syncNow();
+    expect(st.phase).toBe('pending');
+    expect(st.retryAt! - Date.now()).toBeGreaterThan(50 * 60_000);
+  });
+
+  it('防抖有最大等待：每 3 秒改动一次持续 3 分钟，至少每 30 秒推送一次', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const area = fakeBrowser.storage.sync;
+      const set = vi.spyOn(area, 'set');
+      const svc = new StorageSyncService({ area });
+      for (let i = 0; i < 60; i++) {
+        await setKnownWords([`w${i}`], true);
+        svc.schedulePush();
+        await vi.advanceTimersByTimeAsync(3_000);
+        // 推送链路含 CompressionStream/crypto 等真实异步，等本轮推送跑完再推进假时钟
+        await (svc as unknown as { running: Promise<unknown> }).running;
+      }
+      await vi.advanceTimersByTimeAsync(10_000);
+      await (svc as unknown as { running: Promise<unknown> }).running;
+      // 3 分钟 / 30 秒 = 6 次左右；没有 maxWait 时为 0 次（每次改动都把 5 秒防抖往后推）
+      expect(set.mock.calls.length).toBeGreaterThanOrEqual(5);
+      expect(set.mock.calls.length).toBeLessThanOrEqual(19);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('manifest 分片：300 本小词书不再受单项 8KB 限制，总配额内尽量多同步', async () => {
+    for (let i = 0; i < 300; i++) await saveLocalBook({ name: `小书${i}`, format: 'txt', words: [{ word: `w${i}a` }, { word: `w${i}b` }] });
+    const st = await fast().syncNow();
+    expect(st.phase).toBe('idle');
+    const all = await fakeBrowser.storage.sync.get(null);
+    const head = all[SYNC_MANIFEST_KEY] as SyncManifest;
+    expect(head.parts).toBeGreaterThan(1);
+    let total = 0;
+    for (const [k, v] of Object.entries(all)) {
+      expect(syncItemBytes(k, v)).toBeLessThanOrEqual(DEFAULT_SYNC_QUOTA.quotaBytesPerItem);
+      total += syncItemBytes(k, v);
+    }
+    expect(total).toBeLessThanOrEqual(DEFAULT_SYNC_QUOTA.quotaBytes);
+    expect(Object.keys(all).length).toBeLessThanOrEqual(DEFAULT_SYNC_QUOTA.maxItems);
+    const synced = st.usage!.segments.filter((s) => s.id.startsWith('lb:') && s.state !== 'skipped').length;
+    // 上一轮只用单个 manifest 项时约 64 本后全部跳过；分片后受总配额/项数约束
+    expect(synced).toBeGreaterThan(200);
+    expect(Math.abs(st.usage!.bytes - total)).toBeLessThan(1500);
+    // 另一台设备能读回全部已同步的书
+    await switchDevice();
+    await fast().syncNow();
+    const { getLocalIndex } = await import('@/core/wordbook/user-store');
+    expect(Object.keys((await getLocalIndex()).books)).toHaveLength(synced);
+  }, 30_000);
 
   it('真实规模数据：每项不超过 8KB、总量与项数在配额内，超出部分按优先级取舍', async () => {
     // 8000 个真实单词作熟词（加入时间在一年内随机）+ 6 本各 3000 词带释义的本地词书，远超 100KB

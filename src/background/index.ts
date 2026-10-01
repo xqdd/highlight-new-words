@@ -3,7 +3,7 @@ import { handleBackgroundMessages } from '@/core/messaging';
 import { runMigrationIfNeeded } from '@/core/settings/store';
 import { StorageSyncService } from '@/core/sync/service';
 import { getTabWords, reportFrameWords, setupBadge } from './badge';
-import { getLemmatizer, markKnown, unmarkKnown } from './known';
+import { addWord, getLemmatizer, getWordState, markKnown, previewWordAction, removeWord, unmarkKnown } from './known';
 import { autoSyncIfDue, deleteFromSources, recoverInterruptedSyncs, refreshSourceBooks, syncSourceBooks } from './sources/service';
 import { speak } from './tts';
 
@@ -44,6 +44,22 @@ export function setupBackground(): void {
     unmarkKnown: async ({ lemma }) => {
       await ready;
       return unmarkKnown(lemma);
+    },
+    addWord: async (data) => {
+      await ready;
+      return addWord(data);
+    },
+    removeWord: async (data) => {
+      await ready;
+      return removeWord(data);
+    },
+    previewWordAction: async (data) => {
+      await ready;
+      return previewWordAction(data);
+    },
+    getWordState: async ({ lemma }) => {
+      await ready;
+      return getWordState(lemma);
     },
     getSyncStatus: () => sync.getStatus(),
     syncNow: async () => {

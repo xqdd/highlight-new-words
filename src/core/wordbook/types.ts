@@ -1,6 +1,7 @@
 import type { BookId } from '../settings/schema';
 import type { ImportFormat } from '../import/types';
 import type { BookKind } from './ids';
+import type { BookRole } from '../settings/schema';
 
 export type { BookKind } from './ids';
 
@@ -110,6 +111,11 @@ export interface UserWord {
   trans?: string;
   /** provider 删除远端词条所需的句柄（有道为 itemId；欧路为远端单词原文），本地导入词书不填 */
   ref?: string;
+  /**
+   * 同一规范化单词在远端有多个条目时的全部删除句柄（含 ref），如有道同时收录 Collapse 与 collapse 两个 itemId。
+   * 删除时必须逐个删除，全部成功才算删除成功（background 第 2 轮新增，旧缓存没有该字段时只用 ref）。
+   */
+  refs?: string[];
 }
 
 /** 词条表：key 为小写单词 */
@@ -138,6 +144,19 @@ export interface SourceBookState {
   error?: string;
   /** 远端已不存在该生词本（listRemoteBooks 不再返回），本地缓存保留，由用户决定删除 */
   orphaned?: boolean;
+  /**
+   * provider 声明的角色（默认 new）：known 表示远端熟词本（如欧路“已掌握”），同步后作为熟词来源而不是高亮词书。
+   * 实际生效角色还要看用户覆盖 settings.knownBooks.roles，用 effectiveBookRole 计算。
+   */
+  role?: BookRole;
+  /** 该远端生词本能否加词（provider.addWords 可写入该本；有道只能写入默认分组，欧路“已掌握”只读） */
+  canAdd?: boolean;
+  /** 该远端生词本能否删词（缺省按 provider.capabilities.delete） */
+  canDelete?: boolean;
+  /** 不能加/删时给用户看的原因（如“欧路 OpenAPI 未提供写入已掌握单词的接口”） */
+  readOnlyReason?: string;
+  /** 远端条目数（大小写不同的同一单词各算一条，与网页显示一致）；与 wordCount 不同时 UI 可提示“含 N 个重复条目” */
+  entryCount?: number;
 }
 
 /** storage `sourceBooks` 键：所有来源词书的索引 + 各 provider 的列表刷新状态 */

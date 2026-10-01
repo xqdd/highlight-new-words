@@ -33,14 +33,86 @@ export interface SourceSettings {
   apiToken?: string;
 }
 
+/**
+ * 词书角色：new=生词本（高亮其中的词）；known=熟词本（其中的词不高亮，优先于生词）。
+ * 来源词书的默认角色由 provider 声明（如欧路“已掌握”为 known），用户可在 knownBooks.roles 中覆盖。
+ */
+export type BookRole = 'new' | 'known';
+
+/** 本地熟词本（storage `knownWords`）在“写入/移除目标”配置中的虚拟 id，不是 registry 中的词书 */
+export const LOCAL_KNOWN_BOOK_ID = 'known:local';
+/** “加入生词本”默认写入的本地词书（首次加入时由 background 自动创建并启用，名称“我的生词本”） */
+export const MY_WORDS_BOOK_ID = 'local:mine';
+
+/** 熟词本（多来源）配置：本地熟词本始终生效；来源熟词本（role=known 的来源词书）按 enabled 取并集 */
+export interface KnownBooksSettings {
+  /** 启用的来源熟词本 id（src:…）；首次同步成功的 known 角色书由 background 自动加入 */
+  enabled: BookId[];
+  /** 用户为来源词书指定的角色，覆盖 provider 声明（如把欧路某个自建分组当作熟词本） */
+  roles: Record<BookId, BookRole>;
+}
+
+/**
+ * 单词操作（卡片“加入生词本 / 认识”）的目标配置。目标 id 可以是本地词书 `local:…`、来源词书 `src:…`
+ * 或本地熟词本 LOCAL_KNOWN_BOOK_ID；来源词书需要 provider 支持对应能力（canAdd / delete），不支持的目标被跳过并在结果中说明。
+ */
+export interface WordActionSettings {
+  /**
+   * 同原形处理：移除操作（加入生词本时移出熟词本、标记熟词时移出生词本）是否处理原形相同的所有屈折词形
+   * （run/runs/ran/running；不含 runner、careful 这类派生词）。关闭时只处理当前词形与其原形本身。
+   */
+  sameLemma: boolean;
+  /** “加入生词本”写入的生词本（本地或来源，可多选）；来源词书调用 provider.addWords 同步写入远端 */
+  addTargets: BookId[];
+  /** “加入生词本”时同时从这些熟词本移除该词（本地熟词本 / 来源熟词本） */
+  addRemoveFromKnown: BookId[];
+  /** “认识”（标记熟词）写入的熟词本：本地熟词本和/或支持写入的来源熟词本（欧路“已掌握”只读，不能作为目标） */
+  knownTargets: BookId[];
+  /**
+   * “认识”时从这些生词本移除该词（本地或来源）。'auto' = 沿用旧开关：各来源 `deleteOnKnown` 开启时，移除该来源全部生词本中的该词。
+   */
+  knownRemoveFrom: BookId[] | 'auto';
+}
+
 /** 可经 storage.sync 跨设备同步的数据类别 */
 export type SyncDataKind = 'settings' | 'knownWords' | 'localBooks';
 
-/** storage.sync 同步开关（本机设置，本身不参与同步） */
+/**
+ * WebDAV 同步后端配置（本机设置，在 settings.sync 中，不进入任何同步数据；
+ * 只有用户勾选 credentialSync.webdav 时，连接信息才作为凭据随 chrome.storage.sync 上传，见 core/sync/credentials.ts）。
+ * 文件位置：`<url>/<dir>/hnw-sync.json`。
+ */
+export interface WebDavSettings {
+  enabled: boolean;
+  /** 服务器地址，如坚果云 `https://dav.jianguoyun.com/dav/`、Nextcloud `https://host/remote.php/dav/files/<user>/` */
+  url: string;
+  username: string;
+  /** 密码或应用密码（坚果云需在“安全选项”生成应用密码） */
+  password: string;
+  /** 远端目录（相对 url，可多级，不存在时自动 MKCOL 创建） */
+  dir: string;
+  /** 同步的数据类别；sourceBooks=来源词书缓存（storage.sync 不同步，WebDAV 可选） */
+  include: Record<SyncDataKind, boolean> & { sourceBooks: boolean };
+  /** 自动同步：本机数据变化后防抖同步、启动时同步、定时同步（分钟，0=关闭；SW 唤醒时检查是否到期） */
+  autoSync: { onChange: boolean; onStartup: boolean; intervalMinutes: number };
+}
+
+/**
+ * 同步设置（本机设置，本身不参与同步）。
+ * enabled/include 为 chrome.storage.sync 后端（向后兼容的字段名）；webdav 为 WebDAV 后端（background 第 3 轮新增）。
+ * 手动备份导入导出没有持久配置，走 background 消息 exportBackup / importBackup。
+ */
 export interface SyncSettings {
   enabled: boolean;
   include: Record<SyncDataKind, boolean>;
+  webdav: WebDavSettings;
 }
+
+/**
+ * 可随同步上传的凭据 id：`token:<providerId>`（来源 API token，如欧路 OpenAPI token）、`webdav`（WebDAV 连接信息含密码）。
+ * 清单与说明见 core/sync/credentials.ts 的 listSyncCredentials。
+ */
+export type CredentialId = string;
 
 /** 行内翻译模式：关闭 / 单词后括注 / 单词上方注音式(ruby) */
 export type InlineTranslationMode = 'off' | 'after' | 'ruby';
@@ -91,8 +163,17 @@ export interface Settings {
   };
   /** 按来源 provider id 的配置；未知 provider 的项保留不动（便于新增来源） */
   sources: Record<string, SourceSettings>;
-  /** storage.sync 跨设备同步 */
+  /** 熟词本多来源（background 分片新增，旧数据由 normalizeSettings 按默认值补齐） */
+  knownBooks: KnownBooksSettings;
+  /** 加入生词本 / 标记熟词的写入与移除目标（background 分片新增） */
+  wordActions: WordActionSettings;
+  /** 跨设备同步（本机设置，不参与同步） */
   sync: SyncSettings;
+  /**
+   * 凭据是否随同步上传（默认全部不上传）。本字段本身参与同步，所以各设备的选择一致；
+   * 同步后端自身的凭据不会写进它自己的数据（WebDAV 密码只可能随 chrome.storage.sync 或手动备份上传）。
+   */
+  credentialSync: Record<CredentialId, boolean>;
   /** 扩展页面界面偏好（options 分片新增；旧数据由 normalizeSettings 按默认值补齐） */
   ui: {
     theme: UiTheme;
