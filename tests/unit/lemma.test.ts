@@ -100,6 +100,30 @@ describe('DataLemmatizer', () => {
     expect(knownRoot.match('normal')?.lemma).toBe('normal');
   });
 
+  it('手工屈折表覆盖数据源：does 只还原为 do，不借 doe（母鹿）高亮', () => {
+    // 修复前 ECDICT/BNC 把 does 记作 doe 的复数，手工表又豁免同形口径，得到 does -> do, doe；词书收了 doe 没收 do 时 does 被标成 doe
+    expect(lem.candidates('does')).toEqual(['does', 'do']);
+    expect(lem.candidates('Does')).toEqual(['does', 'do']);
+    const onlyDoe = new WordMatcher({ lemmatizer: lem, books: [createSetWordBook(meta('b'), ['doe'])], known: new Set() });
+    expect(onlyDoe.match('does')).toBeNull();
+    expect(onlyDoe.match('doe')?.lemma).toBe('doe');
+    // 熟词 doe 不影响 does，熟词 do 照常覆盖 does
+    const both = new WordMatcher({ lemmatizer: lem, books: [createSetWordBook(meta('b'), ['do', 'doe'])], known: new Set(['doe']) });
+    expect(both.match('does')?.lemma).toBe('do');
+    const knownDo = new WordMatcher({ lemmatizer: lem, books: [createSetWordBook(meta('b'), ['doe'])], known: new Set(['do']) });
+    expect(knownDo.match('does')).toBeNull();
+  });
+
+  it('常用分词形容词不还原为动词原形，卡片词条与字幕注解一致（advanced 先进的 ↛ advance）', () => {
+    // 字幕注解按页面词形查词（advanced 先进的），卡片标题与释义取 match.lemma：lemma 必须是 advanced 本身
+    expect(lem.candidates('advanced')).toEqual(['advanced']);
+    const onlyVerb = new WordMatcher({ lemmatizer: lem, books: [createSetWordBook(meta('cet4'), ['advance'])], known: new Set() });
+    expect(onlyVerb.match('advanced')).toBeNull();
+    expect(onlyVerb.match('advances')?.lemma).toBe('advance');
+    const both = new WordMatcher({ lemmatizer: lem, books: [createSetWordBook(meta('b'), ['advance', 'advanced'])], known: new Set() });
+    expect(both.match('Advanced')?.lemma).toBe('advanced');
+  });
+
   it('Object.prototype 同名单词（constructor/__proto__/toString…）不抛错，constructor 按词书正常匹配', () => {
     // 修复前 normalizeSurface 用普通对象查缩写表，constructor 取到 Object.prototype.constructor，随后 endsWith 抛 TypeError，整页不高亮
     const PROTO_WORDS = ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf', 'isPrototypeOf', 'Constructors'];

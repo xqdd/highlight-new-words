@@ -112,7 +112,12 @@ const MANUAL_INFLECTIONS = {
   more: 'many,much', most: 'many,much', less: 'little', least: 'little',
   elder: 'old', eldest: 'old', further: 'far', furthest: 'far', farther: 'far', farthest: 'far',
 };
-for (const [form, lemmas] of Object.entries(MANUAL_INFLECTIONS)) for (const l of lemmas.split(',')) addInfl(form, l);
+// 手工表是这些词形的全部屈折原形，覆盖数据源已有映射：does 在 ECDICT/BNC 中还是 doe（母鹿）的复数，
+// 而手工词形又豁免同形口径（commonHeadwordHomograph），不覆盖会得到 does -> do, doe，词书只收 doe 时 does 被标成 doe
+for (const [form, lemmas] of Object.entries(MANUAL_INFLECTIONS)) {
+  infl.delete(form);
+  for (const l of lemmas.split(',')) addInfl(form, l);
+}
 
 // ---------------------------------------------------------------------------
 // 3. 词汇表 V
