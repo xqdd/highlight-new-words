@@ -115,7 +115,10 @@ export interface ResolvedTranslationStyle {
   color: string;
   opacity: number;
   fontScale: number;
+  /** 词后显示用的括号（缺省 paren） */
   bracket: TranslationBracket;
+  /** 词上/词下小字用的括号（缺省 none：小字注解习惯不加括号；用户明确选了括号时与词后一致） */
+  rubyBracket: TranslationBracket;
   background: string;
   italic: boolean;
   bold: boolean;
@@ -136,6 +139,7 @@ export function resolveTranslationStyleOf(t: { mode: InlineTranslationMode } & T
     opacity: clamp(t.opacity ?? TRANSLATION_STYLE_DEFAULTS.opacity[key], 0.2, 1),
     fontScale: clamp(t.fontScale ?? TRANSLATION_STYLE_DEFAULTS.fontScale[key], 0.5, 1),
     bracket: t.bracket ?? 'paren',
+    rubyBracket: t.bracket ?? 'none',
     background: t.background ?? '',
     italic: !!t.italic,
     bold: !!t.bold,
@@ -179,6 +183,7 @@ export function matchTranslationPreset(t: { mode: InlineTranslationMode } & Tran
   const cur = resolveTranslationStyleOf(t);
   return TRANSLATION_PRESETS.find((p) => {
     const want = resolveTranslationStyleOf({ mode: t.mode, ...p.style });
+    if (cur.rubyBracket !== want.rubyBracket) return false;
     return TRANSLATION_PRESET_FIELDS.every((f) => {
       const a = cur[f];
       const b = want[f];

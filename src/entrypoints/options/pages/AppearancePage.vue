@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { INLINE_MODE_LABELS, INLINE_MODE_ORDER, INLINE_TRANSLATION_NAME } from '@/core/settings/inline-translation-labels';
+import { INLINE_MODE_LABELS, INLINE_MODE_ORDER, INLINE_TRANSLATION_NAME, isRubyMode } from '@/core/settings/inline-translation-labels';
 import type { InlineTranslationMode, Settings } from '@/core/settings/schema';
 import {
   applyTranslationPreset,
@@ -136,17 +136,17 @@ const TR_BRACKET_OPTIONS: { value: TranslationBracket; label: string }[] = [
   { value: 'lenticular', label: '【 】' },
   { value: 'none', label: '无' },
 ];
-/** 预设卡片的示例译文：按当前模式解析预设样式，词后显示带括号，词上/词下小字不带（与页面渲染一致） */
+/** 预设卡片的示例译文：按当前模式解析预设样式，括号与页面渲染一致（词后用 bracket，词上/词下用 rubyBracket） */
 const TR_SAMPLE_WORD = 'skeptical';
 const TR_SAMPLE_TEXT = '怀疑的';
 function trSample(p: TranslationPreset) {
   const r = resolveTranslationStyleOf({ mode: settings.value.inlineTranslation.mode, ...p.style });
-  const [open, close] = TRANSLATION_BRACKETS[r.bracket];
   const ruby = r.mode === 'ruby' || r.mode === 'below';
+  const [open, close] = TRANSLATION_BRACKETS[ruby ? r.rubyBracket : r.bracket];
   const decls = [`font-size:${ruby ? `max(${r.fontScale}em,10px)` : `${r.fontScale}em`}`, `opacity:${r.opacity}`, ...translationLookDecls(r)];
   if (r.color) decls.push(`color:${r.color}`);
   if (!ruby) decls.push(`margin-inline-start:${r.bracket === 'none' || r.background ? '.25em' : '.1em'}`);
-  return { ruby, below: r.mode === 'below', text: ruby ? TR_SAMPLE_TEXT : `${open}${TR_SAMPLE_TEXT}${close}`, style: decls.join(';') };
+  return { ruby, below: r.mode === 'below', text: `${open}${TR_SAMPLE_TEXT}${close}`, style: decls.join(';') };
 }
 const trSamples = computed(() => TRANSLATION_PRESETS.map((p) => ({ preset: p, sample: trSample(p) })));
 
@@ -341,12 +341,12 @@ const cardColor = computed({
         </div>
         <span class="lbl">括号</span>
         <SegmentedControl
-          :model-value="tr.bracket"
+          :model-value="isRubyMode(settings.inlineTranslation.mode) ? tr.rubyBracket : tr.bracket"
           :options="TR_BRACKET_OPTIONS"
           aria-label="译文括号"
           @update:model-value="(v: TranslationBracket) => patchTr({ bracket: v })"
         />
-        <p v-if="settings.inlineTranslation.mode !== 'after'" class="muted small">词上/词下小字不加括号；按钮等放不下小字、改为附在词后时使用。</p>
+        <p v-if="settings.inlineTranslation.mode !== 'after'" class="muted small">词上/词下小字默认不加括号，选了括号后小字也带上；按钮等放不下小字、改为附在词后时同样使用。</p>
         <span class="lbl">译文颜色</span>
         <ColorRow :model-value="tr.color" label="译文颜色" empty-label="跟随正文颜色" @update:model-value="(c: string) => patchTr({ color: c })" />
         <span class="lbl">译文底色</span>

@@ -159,6 +159,7 @@ describe('v5 样式契约', () => {
       opacity: 0.2,
       fontScale: 1,
       bracket: 'paren',
+      rubyBracket: 'none',
       background: '',
       italic: false,
       bold: false,
@@ -188,8 +189,17 @@ describe('v5 样式契约', () => {
       expect(css).toContain(`html[data-hnw-tr="after"] hnw-tr::before{content:${content}}`);
       // 受限容器中 ruby 退回的词后括注同样使用所选括号
       s.inlineTranslation = { mode: 'ruby', bracket };
-      expect(buildPageCss(s)).toContain(`hnw-mark[data-hnw-tight]>hnw-tr[data-tr]::before{content:${content}}`);
+      const rubyCss = buildPageCss(s);
+      expect(rubyCss).toContain(`hnw-mark[data-hnw-tight]>hnw-tr[data-tr]::before{content:${content}}`);
+      // 明确选了括号时，词上/词下小字同样加括号（none 时不生成规则）
+      const rubyRule = `:is(html[data-hnw-tr="ruby"],html[data-hnw-tr="below"]) hnw-tr[data-tr]::before{content:`;
+      if (bracket === 'none') expect(rubyCss).not.toContain(rubyRule);
+      else expect(rubyCss).toContain(`${rubyRule}${content}}`);
     }
+    // 没选括号时词上/词下小字不加括号，受限容器退回词后仍用半角括号
+    s.inlineTranslation = { mode: 'below' };
+    expect(buildPageCss(s)).not.toContain(':is(html[data-hnw-tr="ruby"],html[data-hnw-tr="below"]) hnw-tr[data-tr]::before');
+    expect(buildPageCss(s)).toContain('hnw-mark[data-hnw-tight]>hnw-tr[data-tr]::before{content:"(" attr(data-tr) ")"}');
     s.inlineTranslation = { mode: 'after', background: 'rgba(20, 184, 166, 0.14)', italic: true, bold: true, color: '#64748b' };
     const look = buildPageCss(s);
     expect(look).toContain('background:rgba(20, 184, 166, 0.14);padding:0 .3em;border-radius:.3em;font-style:italic;font-weight:700');
@@ -212,8 +222,11 @@ describe('v5 样式契约', () => {
     expect(s.inlineTranslation.opacity).toBeUndefined();
     expect(s.inlineTranslation.bold).toBeUndefined();
     // 显式写成模式缺省值、颜色大小写不同也视为匹配
-    s.inlineTranslation = { mode: 'ruby', color: '', opacity: 0.7, bracket: 'paren' };
+    s.inlineTranslation = { mode: 'ruby', color: '', opacity: 0.7 };
     expect(matchTranslationPreset(s.inlineTranslation)?.id).toBe('classic');
+    // 词上小字明确选了半角括号：与经典（小字不加括号）不同，算自定义
+    s.inlineTranslation = { mode: 'ruby', bracket: 'paren' };
+    expect(matchTranslationPreset(s.inlineTranslation)).toBeUndefined();
     s.inlineTranslation = { mode: 'after', color: '#6B7280', opacity: 0.9, bracket: 'square' };
     expect(matchTranslationPreset(s.inlineTranslation)?.id).toBe('square-gray');
     s.inlineTranslation = { ...s.inlineTranslation, italic: true };

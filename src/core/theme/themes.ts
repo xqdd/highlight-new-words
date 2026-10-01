@@ -66,7 +66,10 @@ export interface TranslationStyle {
   opacity?: number;
   /** 字号相对正文的比例 0.5–1 */
   fontScale?: number;
-  /** 括号（词后显示时使用：after 模式、ruby/below 在受限容器中退回的词后括注；词上/词下小字不加括号），缺省 paren */
+  /**
+   * 括号，所有显示位置通用。缺省时按位置区分：词后显示（after 模式、ruby/below 在受限容器中退回的词后括注）为 paren，
+   * 词上/词下小字为 none；用户明确选择后各位置都用所选括号
+   */
   bracket?: TranslationBracket;
   /** 译文底色（标签/胶囊效果），空串=无；带底色时加少量水平内边距与圆角 */
   background?: string;

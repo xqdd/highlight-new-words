@@ -1,6 +1,6 @@
 import type { MarkStyle, Settings } from '@/core/settings/schema';
 import { markStyleParts, resolveMarkStyle, resolveTranslationStyle, translationLookDecls } from '@/core/theme/resolve';
-import { TRANSLATION_BRACKETS } from '@/core/theme/themes';
+import { TRANSLATION_BRACKETS, type TranslationBracket } from '@/core/theme/themes';
 import { DARK_PAGE_BG, LIGHT_PAGE_BG, ensureContrast, isOpaque, parseColor } from './color';
 import {
   ATTR_BOOK,
@@ -187,9 +187,12 @@ function translationRules(settings: Settings): string[] {
   const look = translationLookDecls(t).map((d) => `;${d}`).join('');
   // 词后显示（after 模式、受限容器中的 ruby 退回）：不加括号或带底色时，与单词的间距稍放大，避免译文贴着单词
   const afterLook = look + (t.bracket === 'none' || t.background ? ';margin-inline-start:.25em' : '');
-  // 词后显示的括号；ruby/below 的词上/词下小字不加括号
-  const [open, close] = TRANSLATION_BRACKETS[t.bracket];
-  const glossContent = t.bracket === 'none' ? `attr(${ATTR_TR_TEXT})` : `"${open}" attr(${ATTR_TR_TEXT}) "${close}"`;
+  // 括号：词后显示用 bracket，词上/词下小字用 rubyBracket（缺省不加，用户选了括号时同样加上）
+  const withBracket = (b: TranslationBracket) => {
+    const [open, close] = TRANSLATION_BRACKETS[b];
+    return b === 'none' ? `attr(${ATTR_TR_TEXT})` : `"${open}" attr(${ATTR_TR_TEXT}) "${close}"`;
+  };
+  const glossContent = withBracket(t.bracket);
   const out: string[] = [];
   // 默认隐藏；文字来自属性（::before），不进入页面文本，复制/查找/页面脚本都读不到
   out.push(
@@ -215,6 +218,8 @@ function translationRules(settings: Settings): string[] {
     `${RUBY} ${TR}{display:ruby-text;ruby-align:center;text-align:center;font-size:max(${t.fontScale}em,10px);line-height:1.2;opacity:${t.opacity};${color}white-space:nowrap${look}}`,
     `${RUBY} ${TR}:not([${ATTR_TR_TEXT}])::before{content:"\\a0"}`,
   );
+  // 词上/词下小字的括号（只对已有释义的注解；占位注解仍是不换行空格）
+  if (t.rubyBracket !== 'none') out.push(`${RUBY} ${TR}[${ATTR_TR_TEXT}]::before{content:${withBracket(t.rubyBracket)}}`);
   // 不占位的浮层：悬停模式、代码中的浮动标注、同段重复词的悬停兜底共用。绝对定位在单词上方，不参与布局
   const float =
     `display:block;position:absolute;left:50%;bottom:100%;transform:translate(-50%,-3px);z-index:2147483000;` +
