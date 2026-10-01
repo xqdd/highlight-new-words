@@ -214,8 +214,8 @@ describe('ShadowCardView', () => {
     view = new ShadowCardView(document, actions, backend);
     view.open(mark, data());
     await flush();
-    // 说明行：默认一行摘要，详情折叠在“i”里
-    expect(q('.hint-sum')!.textContent).toContain('加入 → 我的生词本 · 认识 → 本地熟词本');
+    // 说明行：正常去向不常驻（只留 ⓘ），详情折叠在“i”里
+    expect(q('.hint-sum')!.textContent).not.toContain('加入 →');
     expect(q('.hint-details')).toBeNull();
     q('[data-act="hints"]')!.click();
     expect(q('.hint-details')!.textContent).toContain('记入 本地熟词本');
@@ -300,14 +300,18 @@ describe('ShadowCardView', () => {
       lookupDict: vi.fn(async () => ({ word: 'deliberate', short: 'adj. 故意的', full: 'adj. 故意的；深思熟虑的\nvt. 仔细考虑；商议' })),
     });
     view = new ShadowCardView(document, makeActions(), backend);
-    view.open(mark, data({ surface: 'deliberate', lemma: 'deliberate', entry: { word: 'deliberate', short: '故意的', full: '故意的' } }));
+    view.open(mark, data({ surface: 'deliberate', lemma: 'deliberate', userTrans: '故意的', entry: { word: 'deliberate', short: '故意的', full: '故意的' } }));
     await flush();
     expect(q('.defs')!.textContent).toContain('仔细考虑');
     // 生词本释义已包含在词典释义里：不重复显示
     expect(q('.user-trans')).toBeNull();
-    view.update(data({ surface: 'deliberate', lemma: 'deliberate', entry: { word: 'deliberate', short: '审慎的', full: '审慎的（我的笔记）' } }));
+    view.update(data({ surface: 'deliberate', lemma: 'deliberate', userTrans: '审慎的（我的笔记）', entry: { word: 'deliberate', short: '审慎的', full: '审慎的（我的笔记）' } }));
     await flush();
     expect(q('.user-trans')!.textContent).toContain('审慎的（我的笔记）');
+    // 设置关闭显示时 app 不传 userTrans：不显示
+    view.update(data({ surface: 'deliberate', lemma: 'deliberate', entry: { word: 'deliberate', short: '审慎的', full: '审慎的（我的笔记）' } }));
+    await flush();
+    expect(q('.user-trans')).toBeNull();
   });
 
   it('页面词形有自己的词条时以它为主释义和音标，原形附一行简短释义（advanced adj. 先进的）', async () => {
@@ -340,6 +344,10 @@ describe('ShadowCardView', () => {
     view.update(data({ surface: 'running', lemma: 'run', bookWords: ['running'], entry: { word: 'run', short: '跑' } }));
     await flush();
     expect(q('.form')!.textContent).not.toContain('生词');
+    // 词书记的就是原形（enroll），页面是 enrolled：与原形重复也标出
+    view.update(data({ surface: 'enrolled', lemma: 'enroll', bookWords: ['enroll'], entry: { word: 'enroll', short: '登记' } }));
+    await flush();
+    expect(q('.form')!.textContent).toContain('生词 enroll');
   });
 
   it('加入生词本：按默认目标加入，toast 写明加到哪里，按钮变为已收藏，可撤销', async () => {
@@ -347,7 +355,8 @@ describe('ShadowCardView', () => {
     view = new ShadowCardView(document, makeActions(), backend);
     view.open(mark, data({ entry: { word: 'abandon', phonetic: 'ә', short: '放弃', full: '' } }));
     await flush();
-    expect(q('.hints')!.textContent).toContain('加入 → 我的生词本');
+    q('[data-act="hints"]')!.click();
+    expect(q('.hint-details')!.textContent).toContain('我的生词本');
     q('[data-act="add"]')!.click();
     await flush();
     expect(backend.addWord).toHaveBeenCalledWith({ word: 'abandoned', lemma: 'abandon', trans: '放弃', phonetic: 'ә' });

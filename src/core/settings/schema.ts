@@ -249,6 +249,8 @@ export interface Settings {
     modifier: CardModifierKey;
     /** 悬停弹卡延迟 ms（card 修复轮新增，默认 250；旧设置由 normalizeSettings 补齐，非法值按 250） */
     hoverDelay: CardHoverDelay;
+    /** 卡片上显示生词本自带的释义（与词典不同时另起一行）；缺省视为开启（旧设置没有此字段） */
+    showUserTrans?: boolean;
   };
   tts: {
     /** 打开卡片时自动发音（旧 ttsToggle） */

@@ -326,6 +326,12 @@ const cardColor = computed({
 
   <SettingsSection id="card" title="释义卡片" description="生词的释义卡片怎样打开；手机、平板上始终点按生词打开">
     <CardTriggerSection />
+    <ToggleSwitch
+      :model-value="settings.card.showUserTrans !== false"
+      label="显示生词本释义"
+      description="单词在有道、欧路或导入的生词本里且带释义时，与词典不同的部分另起一行显示"
+      @update:model-value="(v: boolean) => (settings.card.showUserTrans = v)"
+    />
     <details class="advanced" @toggle="advOpen.card = ($event.target as HTMLDetailsElement).open">
       <summary>卡片颜色<AppIcon :name="advOpen.card ? 'up' : 'down'" :size="16" /></summary>
       <div class="fields">

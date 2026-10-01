@@ -356,7 +356,8 @@ export class ShadowCardView implements CardView {
     // 原形释义以打包词典的完整义项为主：入口的组合词典在单词进入用户生词本后会用生词本里的一行释义覆盖它，
     // 生词本释义与词典不同时作为附加信息单独显示
     const lemmaMain = dict?.full || dict?.short ? dict : e;
-    const userTrans = lemmaMain !== e ? extraUserTrans(e, dict) : undefined;
+    // 生词本释义（app 按原形与生词本实际记的词查好，设置关闭时为空）；打包词典没有该词、释义本身就来自生词本时不重复显示
+    const userTrans = lemmaMain && lemmaMain === e ? undefined : extraUserTrans(data.userTrans, dict);
     // 卡片以页面上的词形为准（标题、音标、释义）：词形有自己的词条（running、advanced、carelessly）时用它的释义，
     // 原形只附一行简短释义；纯屈折变形（ran、studies）词典里没有词条，标出与原形的关系后显示原形释义，
     // 此时不显示原形的音标（ran 不能标 run 的读音）
@@ -367,8 +368,8 @@ export class ShadowCardView implements CardView {
     const loading = !main && this.awaitingEntry;
     const phon = formatPhonetic(differs ? own?.phonetic : (e?.phonetic ?? dict?.phonetic));
     const form = describeForm(data.surface, data.lemma);
-    // 生词本里实际记的词与页面词形不同时单独标出（生词本记 running、页面是 runs，原形是 run）
-    const bookWord = data.bookWords?.includes(surface) ? undefined : data.bookWords?.find((w) => w !== data.lemma.toLowerCase());
+    // 词书里实际记的词与页面词形不同时标出“生词 xx”（与原形相同也标，如页面 enrolled、词书记 enroll）
+    const bookWord = data.bookWords?.length && !data.bookWords.includes(surface) ? data.bookWords.join('、') : undefined;
     // 显示原形释义时，按变形类型把对应词性排前（enrolled 先列动词义）；词形自己的词条本来就是它的义项，不调整
     const defs = own ? parseDefinitions(main?.short, main?.full) : prioritizeByForm(parseDefinitions(main?.short, main?.full), form);
     const clamp = !this.expanded && defs.length > DEF_CLAMP_LINES;
@@ -564,7 +565,9 @@ export class ShadowCardView implements CardView {
       details.push(hintLine(d, '移出', [{ text: `来源生词本：${deleteReason}`, warn: true }]));
     }
     const hints: HTMLElement[] = [];
-    if (summary.length) {
+    // 摘要只留需要注意的（没有可写入的生词本等）；正常去向（加入 → 我的生词本 · 认识 → 本地熟词本）不常驻，点 ⓘ 看详情
+    const warns = summary.filter((x) => x.warn);
+    if (warns.length || details.length) {
       hints.push(
         h(
           d,
@@ -573,8 +576,8 @@ export class ShadowCardView implements CardView {
           h(
             d,
             'span',
-            { class: 'sum-text', title: summary.map((x) => x.text).join(' · ') },
-            ...summary.map((x, i) => h(d, 'span', x.warn ? { class: 'warn' } : {}, i ? ` · ${x.text}` : x.text)),
+            { class: 'sum-text', title: warns.map((x) => x.text).join(' · ') },
+            ...warns.map((x, i) => h(d, 'span', { class: 'warn' }, i ? ` · ${x.text}` : x.text)),
           ),
           details.length > 0 &&
             h(
@@ -1352,9 +1355,9 @@ function hintLine(d: Document, label: string, segments: HintSegment[]): HTMLElem
   );
 }
 
-/** 入口词条（可能来自用户生词本）中与词典不同的释义；已包含在词典释义里时不重复显示 */
-function extraUserTrans(entry: DictEntry | undefined, dict: DictEntry | undefined): string | undefined {
-  const user = entry?.full?.trim();
+/** 生词本释义中与词典不同的部分；已包含在词典释义里时不重复显示 */
+function extraUserTrans(text: string | undefined, dict: DictEntry | undefined): string | undefined {
+  const user = text?.trim();
   if (!user) return undefined;
   const squash = (x: string | undefined) => (x ?? '').replace(/\s+/g, '');
   const dictText = squash(dict?.full) + squash(dict?.short);

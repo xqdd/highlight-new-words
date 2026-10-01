@@ -13,7 +13,7 @@ import { resolveCardStyle } from '@/core/theme/resolve';
 import { bookKindOf } from '@/core/wordbook/ids';
 import { DefaultWordBookRegistry, createExtensionLoaders } from '@/core/wordbook/registry';
 import type { BookMeta, WordBook } from '@/core/wordbook/types';
-import { UserBooksDictionary } from '@/core/wordbook/user-book';
+import { UserBooksDictionary, userWordToEntry } from '@/core/wordbook/user-book';
 import { ShadowCardView } from './card/card-view';
 import { speakWord } from './card/speak';
 import { bindCardTrigger } from './card/trigger';
@@ -127,16 +127,32 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     return card;
   }
 
+  /** 生词本自带释义：按 keys 顺序、按词书启用顺序取第一条带释义的（生词本记 running、页面 runs 匹配到 run 时按 running 查到） */
+  function userTransOf(keys: string[]): string | undefined {
+    for (const key of keys) {
+      for (const b of loadedBooks) {
+        if (b.meta.kind === 'builtin') continue;
+        const w = b.entry?.(key);
+        if (w?.trans) return userWordToEntry(key, w).full;
+      }
+    }
+    return undefined;
+  }
+
   async function openCard(mark: HTMLElement): Promise<void> {
     const view = ensureCard();
     const lemma = mark.getAttribute(ATTR_LEMMA)!;
     const bookIds = (mark.getAttribute(ATTR_BOOKS) ?? '').split(' ').filter(Boolean);
     const metas = new Map<string, BookMeta>(loadedBooks.map((b) => [b.meta.id, b.meta]));
+    // 词书里实际记的词：用户生词本的原始条目（running），加上命中的内置词书（条目就是原形）
+    const builtinHit = loadedBooks.some((b) => b.meta.kind === 'builtin' && bookIds.includes(b.meta.id) && b.has(lemma));
+    const bookWords = [...new Set([...(currentMatcher?.userEntriesOf(lemma) ?? []), ...(builtinHit ? [lemma] : [])])];
     const books = bookIds.map((id) => metas.get(id)).filter((m): m is BookMeta => !!m);
     const data: CardData = {
       surface: markSurface(mark),
       lemma,
-      bookWords: currentMatcher?.userEntriesOf(lemma),
+      bookWords,
+      userTrans: settings.card.showUserTrans === false ? undefined : userTransOf([lemma, ...bookWords]),
       books,
       deletableBooks: books.filter((b) => b.kind === 'source' && !!getProviderInfo(b.providerId ?? '')?.capabilities.delete),
     };

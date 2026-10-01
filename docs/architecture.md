@@ -262,7 +262,7 @@ flowchart LR
 - 卡片：`CardView` 接口（[card/types.ts](../src/content/card/types.ts)）；`CardData.deletableBooks` 为命中的、provider 支持删除的来源词书；`CardActions` 为 `markKnown(lemma, surface) → MarkKnownResult`、`unmarkKnown(lemma)`（撤销）、`deleteFromSources(lemma, bookIds)`，均转发 background 消息。当前实现 `ShadowCardView`（open 模式 Shadow DOM，便于测试穿透）：视口 ≤ 600px 或无悬停能力的触屏设备显示底部卡片（近全宽、可下滑关闭、触控目标 ≥ 44px，单词被遮挡时自动滚到卡片上方），否则为贴词浮层（滚动时跟随单词，单词离开视口关闭）；暗色页面自动换暗色卡片；“认识”后关闭卡片并弹出可撤销 toast；来源删除为两步确认。打开期间给锚点加 `data-hnw-active` 属性，并由卡片注入 `<style id="hnw-card-active-style">` 显示激活态（叠加渐变，不覆盖 engine 的高亮样式）。纯函数（词形关系说明、释义分行、音标规范化、外部词典链接）在 [word-info.ts](../src/content/card/word-info.ts)。触发逻辑 `bindCardTrigger`：鼠标悬停 `card.hoverDelay`（默认 250ms）打开、触屏点按打开并阻止链接跳转（再次点按放行）；鼠标在外部按下 / 触屏在外部点按（滑动滚动不关闭）/ Esc 关闭，页面滚动不再由 trigger 关闭。
 - 卡片单词操作（card 第二阶段）：卡片自己持有 `CardBackend`（[word-actions.ts](../src/content/card/word-actions.ts)，`ShadowCardView` 构造的第三个参数，缺省为转发 background 消息的运行时实现），入口无需改动：
   - 打开卡片时并行取 `getWordState`、`previewWordAction`（add/known）、加入候选目标（读 storage 的设置与词书索引，`buildAddTargets`）、来源词书删除能力；都只读本地缓存。
-  - 底栏：“认识”｜“加入生词本 ▾”（分段按钮，下拉为卡片内联面板，可临时改选目标，本页有效，按所选 `targets` 真实写入）｜来源删除（两步确认）。下方说明默认只有一行摘要（“加入 → 我的生词本 等 2 本 · 认识 → 本地熟词本”），逐项去向与跳过/只读原因折叠在右侧“i”（带跳过数）里；跳过说明用琥珀色，红色只用于错误。不支持的目标（有道非默认分组、欧路“已掌握”只读、来源不可删）置灰，点按置灰按钮或面板中的置灰选项给出原因 toast。
+  - 底栏：“认识”｜“加入生词本 ▾”（分段按钮，下拉为卡片内联面板，可临时改选目标，本页有效，按所选 `targets` 真实写入）｜来源删除（两步确认）。下方说明默认不显示正常去向，只在有问题时显示摘要（如“加入 → 没有可写入的生词本”）；逐项去向与跳过/只读原因折叠在右侧“i”（带跳过数）里；跳过说明用琥珀色，红色只用于错误。不支持的目标（有道非默认分组、欧路“已掌握”只读、来源不可删）置灰，点按置灰按钮或面板中的置灰选项给出原因 toast。
   - 内联面板（加入目标 / 认识确认）打开时占满卡片（隐藏释义与底栏，`.paneled`），操作按钮固定在面板底部，手机上不被遮挡。
   - 认识：预览含不可撤销的远端删除或同形异义词形时先在卡片内确认（同形异义默认保留，勾选后带 `confirmed` 再调一次 `markKnown`）。结果 toast 为一行主结论（记入哪个熟词本、跳过/失败数）+“撤销”+可展开“详情”（逐项去向与原因）；部分失败/失败用独立的警示样式（琥珀/红）与 `role=alert`。撤销由 `CardBackend.unmarkKnown` 直接调 background，提示与原操作对称：逐本列出认识时移除的词形哪些已加回、哪些未能加回。加入/移出生词本的 toast 同样写明去向并可撤销（撤销加入 = `removeWord` 加入的书；撤销移出 = 带 `targets` 的 `addWord`）。纯函数 `knownNotice`/`addNotice`/`removeNotice`/`undoKnownNotice` 在 word-actions.ts。
   - `addWord` 的可选 `targets` 由 card 新增到协议，background 第二阶段第 2 轮已实现：传入时完全取代 `addTargets`（含撤销移出后的重新加入），规则见消息表 `addWord` 一行。
@@ -270,7 +270,8 @@ flowchart LR
   - 渲染全部用 DOM API（[h.ts](../src/content/card/h.ts)），不使用 innerHTML。强调色取单词实际渲染的高亮颜色（装饰线 > 马克笔渐变 > 底色 > 边框 > 文字色，`markAccent`），与主题 `CardStyle.accent` 同色系时用主题色，再按卡片底色调整明度到 4.5:1（`fitContrast`），因此跟随 v5 样式与按词书样式。
   - toast 始终在视口底部；手机底部卡片打开时紧贴卡片上沿，不遮挡卡片。桌面悬停卡片在卡片内点按过后不再因鼠标移出而关闭（`bindCardTrigger`）。
   - 锚点跟踪：卡片打开期间用 MutationObserver 检测锚点被移出文档（加入生词本触发 engine 全量重扫、SPA 局部刷新），换到同一原形、离原位置最近的新 mark，卡片不跳位、不丢暗色配色；找不到时保持原位。
-  - 释义：卡片通过 `CardBackend.lookupDict`（卡片自用的 `PackagedDictionary`）始终展示打包词典的完整义项。入口的组合词典在单词进入用户生词本后会用生词本里的一行释义覆盖完整释义，因此生词本释义与词典不同时作为“生词本释义”附加一行显示。
+  - 标题与释义以页面词形为准：标题、音标、外部词典用页面词形；标题下一行写“enroll 的过去式”，词书里实际记的词（`CardData.bookWords`：用户生词本原始条目 + 命中的内置词书原形）与页面词形不同时再标“生词 xx”。页面词形有自己的词条（running、advanced）时以它为主释义、附一行原形简短释义；否则显示原形释义，并按变形类型把对应词性排前（`word-info.ts#prioritizeByForm`），不标原形音标。
+  - 释义：卡片通过 `CardBackend.lookupDict`（卡片自用的 `PackagedDictionary`）始终展示打包词典的完整义项。生词本自带释义（`CardData.userTrans`，app 先按原形、再按生词本实际记的词查）与词典不同时作为“生词本释义”附加一行显示，开关 `settings.card.showUserTrans`（默认开）。
   - 朗读兜底：`sendToBackground('tts')` 已在后台无引擎时于页面内用 Web Speech 朗读（见 4.6）；卡片发音按钮与自动发音另经 [speak.ts](../src/content/card/speak.ts) `speakWord`，结果仍为 `reason='unavailable'`（后台未带 `fallback`）时再调 platform `speakText` 兜底，避免完全无声。
   - 后台操作结果：右键菜单的 `actionNotice` 由 app 在每个 frame 注册，调用可选的 `CardView.showMessage(message, ok, lemma)` 显示与卡片操作同款的 toast（message 按“；”分段，首段为主行、其余进“详情”；`ok=false` 用失败样式），不需要卡片打开。
   - 加入生词本部分失败：只有一处失败时 toast 主行直接写出本名（如“部分失败：「run」已加入“我的生词本”，“欧路 · 测试”加入失败”），多处失败写“N 处失败”，逐项见详情（`addNotice`）。
