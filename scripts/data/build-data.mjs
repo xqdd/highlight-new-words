@@ -14,6 +14,7 @@
  *   kyle/7 SAT-乱序.txt、kyle/tsv_专四.txt、kyle/tsv_专八.txt  KyleBing/english-vocabulary（BSD-3）：只取词表
  *   ultimate/ultimate.csv              可选（仓库产物带它生成），ECDICT-ultimate（MIT）：pos 词性占比与更规整的释义行（短释义打分、完整释义 f）
  *   short-overrides.tsv（脚本同目录）   行内短释义人工覆盖表
+ *   verb-overrides.tsv（脚本同目录）    动词短释义 v 人工覆盖/置空表（格式约束与解析见 verb-short.mjs）
  *
  * 输出（--out 目录，默认 public/data，结构见 src/core/wordbook/types.ts、src/core/dict/types.ts）：
  *   books/index.json        BookCatalog：词书目录（词数/描述/分类/级别/增量关系）
@@ -32,6 +33,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import zlib from 'node:zlib';
+import { isCleanVerbShort, parseVerbOverrides } from './verb-short.mjs';
 
 // ---------------------------------------------------------------------------
 // 参数
@@ -592,8 +594,12 @@ for (const [w, e] of ecdict) {
 /** 打分权重（调参时可用环境变量 SHORT_W='{"ult":2}' 覆盖，正式构建用默认值） */
 const W = { ec: 0.8, ult: 3, kc: 0.7, kf: 0.4, pos: 25, zh: 2, mark: 5, long: 12, ...JSON.parse(process.env.SHORT_W || '{}') };
 function shortOf(w, baseLines) {
-  // 人工覆盖的词只给 s，不另给动词释义（覆盖值已按常见用法选定词性）
-  if (SHORT_OVERRIDES.has(w)) return { short: SHORT_OVERRIDES.get(w) };
+  // 人工覆盖的词只给 s；动词释义只取 verb-overrides.tsv 明确给出的（覆盖值已按常见用法选定词性，自动 v 多与之不配）
+  if (SHORT_OVERRIDES.has(w)) {
+    const short = SHORT_OVERRIDES.get(w);
+    const verb = VERB_OVERRIDES.get(w);
+    return { short, verb: verb && verb !== short ? verb : undefined };
+  }
   const weight = posWeights(w);
   const maxW = Math.max(1, ...weight.values());
   /** @type {{lines:string[], wgt:number}[]} */
@@ -664,8 +670,10 @@ function shortOf(w, baseLines) {
     const bestVerb = [...cand.values()].filter((c) => c.pos === 'v').sort((x, y) => y.final - x.final)[0];
     if (bestVerb) verb = displayText(bestVerb);
     // 动词释义只在行内替换 short 用，必须同样精炼完整：超过 6 字或带“…”残缺框式（在上盖…的邮戳）的不提供，回退到 short
-    if (verb && (verb.length > 6 || verb.includes('…'))) verb = undefined;
+    if (verb && !isCleanVerbShort(verb)) verb = undefined;
   }
+  // 人工覆盖（verb-overrides.tsv）：ECDICT 把冷僻动词义排在前面（match 使比赛、bolt 筛选、date 过时）时改成常用义；'-' 表示置空
+  if (VERB_OVERRIDES.has(w)) verb = VERB_OVERRIDES.get(w) || undefined;
   return { short, verb: verb && verb !== short ? verb : undefined };
 }
 
@@ -692,6 +700,12 @@ const SHORT_OVERRIDES = new Map(
     .map((l) => l.split('\t').map((x) => x.trim())),
 );
 for (const [w, g] of SHORT_OVERRIDES) if (!g || g.length > SHORT_MAX) throw new Error(`short-overrides.tsv: ${w} 的释义为空或超过 ${SHORT_MAX} 字`);
+
+/**
+ * 动词短释义人工覆盖表（scripts/data/verb-overrides.tsv）：单词<TAB>动词短释义，'-' 表示不提供 v（解析为 ''，shortOf 中置空）。
+ * 格式约束（≤ 6 字、不含“…”）见 verb-short.mjs#isCleanVerbShort，解析时不合格直接抛错
+ */
+const VERB_OVERRIDES = parseVerbOverrides(fs.readFileSync(new URL('./verb-overrides.tsv', import.meta.url), 'utf8'));
 
 /**
  * 短释义审计：给可疑的自动选义打标（不影响输出），人工复核后补进 short-overrides.tsv。
@@ -751,7 +765,11 @@ for (const w of [...dictWords].sort()) {
   const short = {};
   if (e.phonetic) short.p = e.phonetic;
   if (s) short.s = s;
-  if (sv) short.v = sv;
+  if (sv) {
+    // 兜底断言：任何来源的 v 都必须精炼完整，否则构建失败（而不是把残缺释义写进产物）
+    if (!isCleanVerbShort(sv)) throw new Error(`动词短释义不合格：${w}=${sv}（≤ 6 字且不含“…”）`);
+    short.v = sv;
+  }
   const g = examTagsOf.get(w);
   if (g) short.g = g.join(' ');
   if (levelOf.has(w)) short.l = levelOf.get(w);

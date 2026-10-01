@@ -6,6 +6,7 @@ import type { DictShardFile } from '@/core/dict/types';
 import { createUserWordBook, UserBooksDictionary } from '@/core/wordbook/user-book';
 import { DefaultWordBookRegistry, localBookMeta, type RegistryLoaders } from '@/core/wordbook/registry';
 import type { BookCatalog, BookDataFile, CatalogBookMeta } from '@/core/wordbook/types';
+import { isCleanVerbShort, parseVerbOverrides } from '../../scripts/data/verb-short.mjs';
 
 /**
  * data 分片单测：registry 的嵌套词书加载、打包词典两层懒加载，以及 public/data 产物的完整性与“常用词误报”回归。
@@ -301,6 +302,35 @@ describe('行内短释义质量', () => {
     const bad: string[] = [];
     for (const c of 'abcdefghijklmnopqrstuvwxyz') for (const [w, e] of Object.entries(shortShard(c))) if (e.v && (e.v.length > 6 || e.v.includes('…'))) bad.push(`${w}=${e.v}`);
     expect(bad).toEqual([]);
+  });
+
+  it('构建脚本的 v 检查：≤ 6 字与“…”残缺检查生效，人工覆盖表全部合格', () => {
+    expect(isCleanVerbShort('匹配')).toBe(true);
+    expect(isCleanVerbShort('使相形见绌')).toBe(true);
+    // 超长、残缺框式（ECDICT 的“在上盖…的邮戳”“确定…年代”）、ASCII 省略号都不合格
+    for (const v of ['阻碍议案的通过', '在上盖…的邮戳', '确定…年代', '使...加快', '']) expect(isCleanVerbShort(v), v).toBe(false);
+    // 不合格的覆盖行解析即抛错（build-data.mjs 构建失败）；'-' 解析为空串表示置空
+    expect(() => parseVerbOverrides('ware\t留心于…之上\n')).toThrow();
+    expect(() => parseVerbOverrides('ware\n')).toThrow();
+    expect(parseVerbOverrides('# 注释\nware\t-\nmatch\t匹配\n')).toEqual(new Map([['ware', ''], ['match', '匹配']]));
+    const overrides = parseVerbOverrides(fs.readFileSync(path.resolve(__dirname, '../../scripts/data/verb-overrides.tsv'), 'utf8'));
+    expect(overrides.size).toBeGreaterThan(100);
+  });
+
+  it('D1 回归：s 取常用义、不超长；v 不取冷僻义（改常用义或置空）', () => {
+    // 曾经的错误值见括注：olympic 奥林匹斯山的、advertise 通知、impress 盖印、account 解释、calculus 结石、stewardess 女管家、
+    // commend 推荐、teenager 十几岁的青少年、olympics 奥林匹克运动会、babysitter 临时照顾幼儿者
+    const S: Record<string, string> = {
+      olympic: '奥运的', advertise: '做广告', impress: '给人印象', account: '账户', calculus: '微积分', stewardess: '空姐',
+      commend: '表扬', teenager: '青少年', olympics: '奥运会', babysitter: '保姆',
+    };
+    expect(Object.entries(S).filter(([w, s]) => dictEntry(w)?.s !== s).map(([w]) => `${w}=${dictEntry(w)?.s}`)).toEqual([]);
+    // v：使比赛、卷发、筛选、过时、减轻、挖苦、逆向移动、留心 → 常用义；undefined 表示置空（行内回退到 s）
+    const V: Record<string, string | undefined> = {
+      match: '匹配', wave: '挥手', bolt: '闩上', date: '约会', plaster: '涂抹', quiz: undefined, counter: '反击', ware: undefined,
+      fire: '开火', account: undefined,
+    };
+    expect(Object.entries(V).filter(([w, v]) => dictEntry(w)?.v !== v).map(([w]) => `${w}=${dictEntry(w)?.v}`)).toEqual([]);
   });
 
   it('词书词的短释义 ≥ 95% 为 2–6 字，且不含英文、括注与残留标点', () => {
