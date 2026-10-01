@@ -663,6 +663,8 @@ function shortOf(w, baseLines) {
   if (best.pos !== 'v' && verbForms && (weight.size ? (weight.get('v') || 0) / maxW >= 0.15 : true)) {
     const bestVerb = [...cand.values()].filter((c) => c.pos === 'v').sort((x, y) => y.final - x.final)[0];
     if (bestVerb) verb = displayText(bestVerb);
+    // 动词释义只在行内替换 short 用，必须同样精炼完整：超过 6 字或带“…”残缺框式（在上盖…的邮戳）的不提供，回退到 short
+    if (verb && (verb.length > 6 || verb.includes('…'))) verb = undefined;
   }
   return { short, verb: verb && verb !== short ? verb : undefined };
 }

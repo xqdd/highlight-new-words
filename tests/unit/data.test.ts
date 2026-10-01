@@ -282,6 +282,27 @@ describe('行内短释义质量', () => {
     expect(miss.length / Object.keys(GOLD).length, miss.join(' ')).toBeLessThanOrEqual(0.05);
   });
 
+  it('常见网页/科技词与数量词：硬性回归（不允许任何一个回退）', () => {
+    // 第 2 轮需求核对与盲评中出现的错误义项（括注为曾经的错误值）
+    const MUST: Record<string, string> = {
+      subscribe: '订阅', subscription: '订阅', quote: '引用', hover: '盘旋', token: '令牌', console: '控制台', crew: '工作人员',
+      faculty: '教职员工', browser: '浏览器', server: '服务器', cache: '缓存', tutorial: '教程', printer: '打印机', widget: '小部件',
+      dew: '露水', tabulate: '制成表格', email: '电子邮件', online: '在线的', sidebar: '侧边栏', avatar: '头像', module: '模块',
+      // 数量词：million 不是“万”，billion 不是“亿”
+      thousand: '千', million: '百万', billion: '十亿', trillion: '万亿',
+      // 领域误义：utilities 不是“实用程序”，projections 不是“投影”
+      utility: '公用事业', projection: '预测', stack: '堆', spectrum: '光谱', persist: '持续', soar: '飙升', bulk: '大部分',
+    };
+    const wrong = Object.entries(MUST).filter(([w, s]) => dictEntry(w)?.s !== s).map(([w]) => `${w}=${dictEntry(w)?.s}`);
+    expect(wrong).toEqual([]);
+  });
+
+  it('动词短释义 v 精炼完整：≤ 6 字且不含“…”', () => {
+    const bad: string[] = [];
+    for (const c of 'abcdefghijklmnopqrstuvwxyz') for (const [w, e] of Object.entries(shortShard(c))) if (e.v && (e.v.length > 6 || e.v.includes('…'))) bad.push(`${w}=${e.v}`);
+    expect(bad).toEqual([]);
+  });
+
   it('词书词的短释义 ≥ 95% 为 2–6 字，且不含英文、括注与残留标点', () => {
     const all = new Set(catalog.books.flatMap((b) => [...bookWords(b.id)]));
     let ok = 0;
@@ -344,6 +365,12 @@ describe('编程熟词（v8 代码块）', () => {
     for (const w of ['vulnerable', 'element', 'infrastructure', 'premise']) expect(isCodeKnownWord(w), w).toBe(false);
     expect([...CODE_KNOWN_WORDS].every((w) => w === w.toLowerCase())).toBe(true);
   });
+  it('标识符中的屈折形式按原形判断（defaults、modules、callbacks）', async () => {
+    const { isCodeKnownWord } = await import('@/core/dict/code-words');
+    for (const w of ['defaults', 'modules', 'imports', 'callbacks', 'Exported', 'returning', 'foo', 'tsx']) expect(isCodeKnownWord(w), w).toBe(true);
+    for (const w of ['cases', 'element', 'premises']) expect(isCodeKnownWord(w), w).toBe(w === 'cases');
+  });
+
 });
 
 describe('动词短释义 shortVerb（v）', () => {
@@ -363,5 +390,18 @@ describe('动词短释义 shortVerb（v）', () => {
     expect(many.get('advocate')).toMatchObject({ short: '拥护者' });
     expect(many.get('advocate')?.shortVerb).toBeUndefined();
     expect((await new CompositeDictionary([packaged]).lookupMany(['advocate'])).get('advocate')?.shortVerb).toBe('提倡');
+  });
+});
+
+describe('搭配义覆盖 collocationShort', () => {
+  it('固定搭配改用搭配义，未命中回退', async () => {
+    const { collocationShort } = await import('@/core/dict/collocation');
+    expect(collocationShort('vicious', undefined, 'cycle')).toBe('恶性的');
+    expect(collocationShort('concrete', 'the', 'structure')).toBe('混凝土');
+    expect(collocationShort('surge', 'storm', 'flood')).toBe('风暴潮');
+    expect(collocationShort('bulk', 'the', 'of')).toBe('大部分');
+    expect(collocationShort('shed', 'to', 'light')).toBe('揭示');
+    expect(collocationShort('vicious', 'a', 'dog')).toBeUndefined();
+    expect(collocationShort('concrete')).toBeUndefined();
   });
 });

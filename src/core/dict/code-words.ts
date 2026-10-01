@@ -58,12 +58,26 @@ const ABBREVIATIONS = [
   'eslint', 'tsconfig', 'dockerfile', 'readme', 'changelog', 'localhost', 'boolean', 'nullable', 'getter', 'setter',
   'callback', 'callbacks', 'runtime', 'namespace', 'middleware', 'plugin', 'plugins', 'webhook', 'endpoint', 'endpoints',
   'refactor', 'linter', 'lint', 'mixin', 'mixins', 'stdlib', 'printf', 'println', 'toString', 'tostring', 'len',
+  // 占位名与文件/语言缩写（data 第 2 轮补充）
+  'foo', 'bar', 'baz', 'qux', 'quux', 'jsx', 'tsx', 'js', 'ts', 'py', 'rb', 'rs', 'cpp', 'hpp', 'md', 'csv', 'toml',
+  'ini', 'svg', 'png', 'jpg', 'gif', 'utf', 'ascii', 'stdio', 'iostream', 'cstdlib', 'cmath', 'typeof', 'nan', 'inf',
+  'mtx', 'lck', 'wg', 'wr', 'rd', 'fd', 'fp', 'ok', 'kv', 'hdr', 'hdrs', 'tbl', 'col', 'cols', 'mgr', 'svc', 'srv',
+  'ctrl', 'impl', 'dbg', 'tpl', 'tmpl', 'ref', 'refs', 'cmp', 'eq', 'ne', 'lt', 'gt', 'le', 'ge', 'neg', 'inc',
+  'alloc', 'dealloc', 'free', 'sizeof', 'nullptr', 'stmt', 'expr', 'ast', 'tok', 'lex', 'ptr', 'bufs', 'calc',
 ];
 
 /** 小写编程熟词集合（只读） */
 export const CODE_KNOWN_WORDS: ReadonlySet<string> = new Set([...KEYWORDS, ...ABBREVIATIONS].map((w) => w.toLowerCase()));
 
-/** 是否为编程熟词（大小写不敏感）。engine 在代码上下文中对拆分后的每个子词调用 */
+/**
+ * 是否为编程熟词（大小写不敏感）。engine 在代码上下文中对拆分后的每个子词调用。
+ * 标识符常用屈折形式（defaults、modules、imports、callbacks、extended、returning），也按原形判断：
+ * 依次去掉 -s / -es / -ed / -d / -ing 后命中清单即算（只在代码上下文用，过度还原的风险可接受）
+ */
 export function isCodeKnownWord(word: string): boolean {
-  return CODE_KNOWN_WORDS.has(word.toLowerCase());
+  const w = word.toLowerCase();
+  if (CODE_KNOWN_WORDS.has(w)) return true;
+  if (w.length < 4) return false;
+  const stems = [w.replace(/s$/, ''), w.replace(/es$/, ''), w.replace(/ed$/, ''), w.replace(/d$/, ''), w.replace(/ing$/, ''), w.replace(/ing$/, 'e')];
+  return stems.some((s) => s !== w && s.length >= 2 && CODE_KNOWN_WORDS.has(s));
 }
