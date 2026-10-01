@@ -100,9 +100,9 @@ describe('trigger-config', () => {
   });
 
   it('旧设置补齐 card.modifier，旧 trigger 原样保留', () => {
-    expect(createDefaultSettings().card).toEqual({ trigger: 'auto', modifier: 'alt', hoverDelay: 250, showUserTrans: true });
+    expect(createDefaultSettings().card).toEqual({ trigger: 'auto', modifier: 'alt', hoverDelay: 250, showUserTrans: true, tapOpen: true });
     const old = { ...createDefaultSettings(), card: { trigger: 'click' } };
-    expect(normalizeSettings(old).card).toEqual({ trigger: 'click', modifier: 'alt', hoverDelay: 250, showUserTrans: true });
+    expect(normalizeSettings(old).card).toEqual({ trigger: 'click', modifier: 'alt', hoverDelay: 250, showUserTrans: true, tapOpen: true });
     // 悬停延迟只允许 100/250/400：写坏的值按默认
     expect(normalizeSettings({ card: { trigger: 'hover', hoverDelay: 400 } }).card.hoverDelay).toBe(400);
     expect(normalizeSettings({ card: { trigger: 'hover', hoverDelay: 7 } }).card.hoverDelay).toBe(250);
@@ -212,6 +212,21 @@ describe('bindCardTrigger v11', () => {
     down($('w2'), {}, 'touch');
     expect(click($('w2')).defaultPrevented).toBe(true);
     expect(onOpen).toHaveBeenCalledWith($('w2'), 'tap');
+    unbind();
+  });
+
+  it('关闭“触屏点按开卡片”：点按页面生词不弹卡片、不拦截链接；鼠标点击模式不受影响', () => {
+    document.body.innerHTML = '<a id="link" href="#go"><hnw-mark id="w2" data-lemma="harbor">harbor</hnw-mark></a>';
+    const view = fakeView();
+    const onOpen = vi.fn();
+    const unbind = bindCardTrigger({ doc: document, view, getTrigger: () => 'click', getTapOpen: () => false, onOpen, hintStore: false, mac: false });
+    const w2 = document.getElementById('w2')!;
+    down(w2, {}, 'touch');
+    expect(click(w2).defaultPrevented).toBe(false);
+    expect(onOpen).not.toHaveBeenCalled();
+    down(w2);
+    expect(click(w2).defaultPrevented).toBe(true);
+    expect(onOpen).toHaveBeenCalledWith(w2, 'click');
     unbind();
   });
 

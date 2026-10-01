@@ -325,8 +325,14 @@ const cardColor = computed({
     </details>
   </SettingsSection>
 
-  <SettingsSection id="card" title="释义卡片" description="生词的释义卡片怎样打开；手机、平板上始终点按生词打开">
+  <SettingsSection id="card" title="释义卡片" description="生词的释义卡片怎样打开、显示什么">
     <CardTriggerSection />
+    <ToggleSwitch
+      :model-value="settings.card.tapOpen !== false"
+      label="手机、平板上点按生词打开卡片"
+      description="关闭后点按生词不再弹出卡片，链接照常打开；仍可用悬浮球取词查词"
+      @update:model-value="(v: boolean) => (settings.card.tapOpen = v)"
+    />
     <ToggleSwitch
       :model-value="settings.card.showUserTrans !== false"
       label="显示生词本释义"

@@ -175,7 +175,7 @@ const demoHint = computed(() => {
       <span class="lbl">电脑上的打开方式</span>
       <span class="badge">仅电脑端</span>
     </div>
-    <p v-if="touchOnly && desktopOpen" class="touch-note muted">本机是触屏设备，始终点按生词查看释义，不受此设置影响；这里的选择会随同步应用到你的电脑。</p>
+    <p v-if="touchOnly && desktopOpen" class="touch-note muted">本机是触屏设备，点按生词查看释义（可在下方关闭），不受此设置影响；这里的选择会随同步应用到你的电脑。</p>
     <template v-if="showDesktopOptions">
     <div class="modes" role="radiogroup" aria-label="电脑上的卡片打开方式">
       <button

@@ -123,6 +123,7 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
       getModifier: () => settings.card.modifier,
       // 悬停弹卡延迟（card 修复轮新增 settings.card.hoverDelay）
       getHoverDelay: () => settings.card.hoverDelay,
+      getTapOpen: () => settings.card.tapOpen !== false,
       onOpen: (mark) => void openCard(mark),
     });
     return card;

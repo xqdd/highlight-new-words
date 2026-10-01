@@ -251,6 +251,8 @@ export interface Settings {
     hoverDelay: CardHoverDelay;
     /** 卡片上显示生词本自带的释义（与词典不同时另起一行）；缺省视为开启（旧设置没有此字段） */
     showUserTrans?: boolean;
+    /** 手机、平板上点按生词打开卡片；关闭后点按照常交给页面（链接跳转），仍可用悬浮球取词查词。缺省视为开启 */
+    tapOpen?: boolean;
   };
   tts: {
     /** 打开卡片时自动发音（旧 ttsToggle） */

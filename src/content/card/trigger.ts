@@ -22,6 +22,8 @@ export interface TriggerOptions {
   getModifier?(): CardModifierKey | undefined;
   /** 悬停弹卡延迟 ms（settings.card.hoverDelay；缺省 DEFAULT_HOVER_SHOW_DELAY） */
   getHoverDelay?(): number | undefined;
+  /** 触屏点按页面生词是否打开卡片（settings.card.tapOpen；缺省开启） */
+  getTapOpen?(): boolean;
   /** 需要打开卡片时回调（入口负责组装数据并调用 view.open）；锚点可以是 hnw-mark 或触发区域（registerCardTriggerZone）返回的元素 */
   onOpen(mark: HTMLElement, via: CardOpenVia): void;
   /** PC 端卡片首次出现时的触发方式提示；false 关闭（缺省用 storage.local） */
@@ -312,6 +314,9 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
       return;
     }
     const isTouch = lastPointerType !== 'mouse';
+    // 用户关闭了触屏点按开卡片：页面生词的点按完全交给页面（链接照常跳转）；
+    // 注册区域（YouTube 字幕面板等专门的查词入口）与悬浮球取词模式不受影响
+    if (isTouch && opts.getTapOpen?.() === false && anchor.tagName === TAG_MARK.toUpperCase()) return;
     if (!isTouch) {
       if (resolved().mode !== 'click') return;
       // 带修饰键的点击（新标签/新窗口/下载）完全交给浏览器
