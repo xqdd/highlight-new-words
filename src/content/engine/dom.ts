@@ -107,9 +107,52 @@ export function shouldSkipElement(el: Element, opts?: ScanOptions): boolean {
     // 不用 pre/code 的语法高亮容器（如 GitHub 新代码视图的 div 行）：与 pre/code 一样受代码开关控制
     if (!opts?.codeEnabled) for (const c of CODE_CONTAINER_CLASSES) if (cls.contains(c)) return true;
   }
+  // 读屏专用的视觉隐藏元素（skip link、.sr-only 等）：标注后会把 1px 容器撑出溢出，且用户看不到，整棵子树跳过
+  if (isVisuallyHidden(el)) return true;
   // 站点适配层注册的额外规则（如 YouTube 播放器控件），未注册时为空数组
   for (const rule of siteSkipRules) if (rule(el)) return true;
   return false;
+}
+
+/**
+ * 读屏专用“视觉隐藏”类名（小写精确匹配）：Bootstrap/Primer/Tailwind 的 sr-only、visually-hidden，
+ * WordPress 的 screen-reader-text，Drupal 的 element-invisible，GitHub 的 show-on-focus（skip link，聚焦前隐藏），
+ * 维基的 mw-jump-link，以及常见 skip link 类名。
+ */
+const VISUALLY_HIDDEN_CLASSES = new Set([
+  'sr-only', 'sr-only-focusable', 'visually-hidden', 'visually-hidden-focusable', 'visuallyhidden', 'u-visually-hidden',
+  'hidden-visually', 'screen-reader-text', 'screen-reader-only', 'screenreader-only', 'element-invisible', 'a11y-hidden',
+  'show-on-focus', 'mw-jump-link', 'skip-link', 'skip-to-content', 'skiplink', 'js-skip-to-content',
+]);
+/**
+ * CSS Modules / Primer React 生成的哈希类名只能按子串识别，如 prc-VisuallyHidden-VisuallyHidden-Q0qSB、
+ * MarketingHeader-module__visuallyHidden__sqKsl、PRIVATE_VisuallyHidden、ScreenReaderHeading-module__*
+ */
+const VISUALLY_HIDDEN_CLASS_RE = /visually-?hidden|screen-?reader|sr-?only/i;
+/**
+ * 内联样式里的视觉隐藏写法：clip:rect(0 0 0 0)/rect(1px,1px,1px,1px)、clip-path:inset(50%)。
+ * 1px×1px+overflow:hidden 在 isVisuallyHidden 中按宽高与 overflow 组合判断。
+ */
+const HIDDEN_CLIP_RE = /clip\s*:\s*rect\(\s*(0|1px)(px)?[\s,]+(0|1px)(px)?[\s,]+(0|1px)(px)?[\s,]+(0|1px)(px)?\s*\)|clip-path\s*:\s*inset\(\s*50%/i;
+
+/**
+ * 元素是否为读屏专用的视觉隐藏元素。只看 class 与内联 style 属性（字符串判断，O(类名数)），
+ * 不调用 getComputedStyle：扫描与增量处理会对大量元素/祖先调用本函数，逐个取计算样式会触发整页样式重算。
+ * 子树剪枝由调用方完成（TreeWalker 的 FILTER_REJECT、closestSkipped 的祖先遍历），所以后代不会重复判断。
+ * 代价：只靠外部样式表把普通类名做成 1px 裁剪的元素识别不到（需要计算样式），属于有意的取舍。
+ */
+export function isVisuallyHidden(el: Element): boolean {
+  // getAttribute 而不是 className：SVG 元素的 className 是 SVGAnimatedString
+  const cls = el.getAttribute('class');
+  if (cls) {
+    for (const c of cls.split(/\s+/)) if (c && VISUALLY_HIDDEN_CLASSES.has(c.toLowerCase())) return true;
+    if (VISUALLY_HIDDEN_CLASS_RE.test(cls)) return true;
+  }
+  const style = el.getAttribute('style');
+  if (!style) return false;
+  if (HIDDEN_CLIP_RE.test(style)) return true;
+  // 1px×1px 且 overflow:hidden 的盒子（visually-hidden 的另一种写法），宽高为 0 也算
+  return /(^|;)\s*width\s*:\s*[01]px/i.test(style) && /(^|;)\s*height\s*:\s*[01]px/i.test(style) && /overflow\s*:\s*hidden/i.test(style);
 }
 
 /**
