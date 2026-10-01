@@ -1,7 +1,11 @@
-# 词形还原金标测试集（lemma 分片，手工整理，固定不随实现调整）
-# 列：单词<TAB>可接受的原形（|分隔）<TAB>类别<TAB>禁止出现在候选中的误还原（|分隔，可空；只列真实英语单词）
+# 词形还原金标测试集（lemma 分片，手工整理，不随实现调整；只随产品口径调整，见下方 deriv-hf）
+# 列：单词<TAB>可接受的原形（|分隔）<TAB>类别<TAB>禁止出现在候选中的误还原（|分隔，可空；只列真实英语单词）[<TAB>语言学词根（仅说明，不参与评分）]
 # 类别：verb 规则动词变化 / irr-verb 不规则动词 / plural 规则复数 / irr-plural 不规则复数 /
-#       degree 比较级最高级 / possessive 所有格 / deriv 派生词（回到词根） / keep 不应还原的词
+#       degree 比较级最高级 / possessive 所有格 / deriv 派生词（回到词根） / keep 不应还原的词 /
+#       deriv-hf 高频独立词条（COCA 排名 ≤ 5000，非透明后缀）：语言学上可派生回第 5 列的词根，但产品口径不还原，金标为原词。
+#       口径来源：高频词本身就是独立词条、词义常与词根分化（normal 正常的 / norm 标准），词书只收词根时还原过去会显示词根释义
+#       （见 docs/architecture.md「词形还原」与 build-lemma-data.mjs#derivationAllowedByFrequency）。这 38 词原为 deriv，
+#       口径调整后整体改到 deriv-hf；deriv 中保留的是低频派生与高频透明后缀（-ly 副词、-ness/-ful/-less）。
 walked	walk	verb
 studies	study	verb
 studied	study	verb
@@ -281,24 +285,24 @@ weakness	weak	deriv
 illness	ill	deriv
 loneliness	lonely	deriv
 emptiness	empty	deriv
-development	develop	deriv
-government	govern	deriv
-agreement	agree	deriv
-argument	argue	deriv
-movement	move	deriv
-payment	pay	deriv
+development	development	deriv-hf		develop
+government	government	deriv-hf		govern
+agreement	agreement	deriv-hf		agree
+argument	argument	deriv-hf		argue
+movement	movement	deriv-hf		move
+payment	payment	deriv-hf		pay
 enjoyment	enjoy	deriv
-achievement	achieve	deriv
-teacher	teach	deriv
-worker	work	deriv
-writer	write	deriv
-runner	run	deriv
-singer	sing	deriv
-reader	read	deriv
-player	play	deriv
-actor	act	deriv
+achievement	achievement	deriv-hf		achieve
+teacher	teacher	deriv-hf		teach
+worker	worker	deriv-hf		work
+writer	writer	deriv-hf		write
+runner	runner	deriv-hf		run
+singer	singer	deriv-hf		sing
+reader	reader	deriv-hf		read
+player	player	deriv-hf		play
+actor	actor	deriv-hf		act
 sailor	sail	deriv
-visitor	visit	deriv
+visitor	visitor	deriv-hf		visit
 basically	basic	deriv
 dramatically	dramatic	deriv
 automatically	automatic	deriv
@@ -309,37 +313,37 @@ easily	easy	deriv
 angrily	angry	deriv
 heavily	heavy	deriv
 possibly	possible	deriv
-probably	probable	deriv
+probably	probably	deriv-hf		probable
 terribly	terrible	deriv
 truly	true	deriv
 fully	full	deriv
 completely	complete	deriv
 extremely	extreme	deriv
-friendship	friend	deriv
-childhood	child	deriv
-freedom	free	deriv
-creation	create	deriv
-decision	decide	deriv
-discussion	discuss	deriv
-education	educate	deriv
-explanation	explain	deriv
-organization	organize	deriv
-reality	real	deriv
-ability	able	deriv
-national	nation	deriv
-cultural	culture	deriv
-musical	music	deriv
-dangerous	danger	deriv
-famous	fame	deriv
+friendship	friendship	deriv-hf		friend
+childhood	childhood	deriv-hf		child
+freedom	freedom	deriv-hf		free
+creation	creation	deriv-hf		create
+decision	decision	deriv-hf		decide
+discussion	discussion	deriv-hf		discuss
+education	education	deriv-hf		educate
+explanation	explanation	deriv-hf		explain
+organization	organization	deriv-hf		organize
+reality	reality	deriv-hf		real
+ability	ability	deriv-hf		able
+national	national	deriv-hf		nation
+cultural	cultural	deriv-hf		culture
+musical	musical	deriv-hf		music
+dangerous	dangerous	deriv-hf		danger
+famous	famous	deriv-hf		fame
 rainy	rain	deriv
-sunny	sun	deriv
+sunny	sunny	deriv-hf		sun
 childish	child	deriv
 modernize	modern	deriv
-realize	real	deriv
+realize	realize	deriv-hf	real	real
 washable	wash	deriv
-creative	create	deriv
-difference	differ|different	deriv
-performance	perform	deriv
+creative	creative	deriv-hf		create
+difference	difference	deriv-hf		differ|different
+performance	performance	deriv-hf		perform
 news	news	keep	new
 business	business	keep	busy
 businesses	business	keep	busy

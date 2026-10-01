@@ -6,13 +6,17 @@
  *   # 可选：UD English-EWT 测试集（CC BY-SA 4.0，不入库），抽取为 “词形<TAB>原形<TAB>UPOS”
  *   LEMMA_BENCH_DIR=/tmp/lemma-bench [LEMMA_BENCH_OUT=结果.json] npx vitest run tests/unit/lemma-bench.test.ts
  * 未设置 LEMMA_BENCH_DIR 时整个文件跳过（常规 npm test 不依赖网络与外部包）。
+ *
+ * 指标口径变化：高频词（COCA 排名 ≤ 5000）只允许透明后缀派生后，原 deriv 中 38 个高频非透明后缀词（development、teacher、
+ * national、realize …）改为 deriv-hf（金标为原词），这是有意的产品口径（docs/architecture.md「词形还原」），不是退化。
+ * 与口径调整前对比时注意：按旧金标 deriv 83/84 → 45/84；按新金标 deriv 45/46、deriv-hf 38/38、ALL 412/413。
  */
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DataLemmatizer, type LemmaDataFile } from '@/core/lemma/data-lemmatizer';
-import { loadGold, packagedWords, pct, score, type GoldItem, type Predictor } from './lemma-eval';
+import { isDerivCategory, loadGold, packagedWords, pct, score, type GoldItem, type Predictor } from './lemma-eval';
 
 const BENCH_DIR = process.env.LEMMA_BENCH_DIR;
 
@@ -45,7 +49,7 @@ describe.skipIf(!BENCH_DIR)('lemma 对标评测', () => {
     const systems: Predictor[] = [
       {
         name: 'hnw DataLemmatizer',
-        predict: (it) => (it.category === 'deriv' ? lem.root(it.word, isWord) : lem.lemma(it.word, isWord)),
+        predict: (it) => (isDerivCategory(it.category) ? lem.root(it.word, isWord) : lem.lemma(it.word, isWord)),
         candidates: (it) => lem.candidates(it.word),
       },
       { name: 'wink-lemmatizer(自动词性)', predict: (it) => winkAuto(it.word) },
@@ -53,7 +57,7 @@ describe.skipIf(!BENCH_DIR)('lemma 对标评测', () => {
     ];
     const gold = loadGold();
     const results: Record<string, unknown> = {};
-    const cats = ['ALL', 'ALL-无派生', 'verb', 'irr-verb', 'plural', 'irr-plural', 'degree', 'possessive', 'deriv', 'keep'];
+    const cats = ['ALL', 'ALL-无派生', 'verb', 'irr-verb', 'plural', 'irr-plural', 'degree', 'possessive', 'deriv', 'deriv-hf', 'keep'];
     const lines = [`| 系统 | ${cats.join(' | ')} |`, `|${' --- |'.repeat(cats.length + 1)}`];
     for (const s of systems) {
       const t0 = performance.now();

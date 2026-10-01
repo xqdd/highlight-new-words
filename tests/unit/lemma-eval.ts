@@ -4,6 +4,7 @@
  * 金标见 tests/fixtures/lemma-gold.tsv。评分口径：
  * - 屈折类（verb/irr-verb/plural/irr-plural/degree/possessive）：预测的原形 ∈ 可接受原形
  * - deriv：预测的词根 ∈ 可接受词根（本项目额外统计“可接受词根出现在匹配候选中”）
+ * - deriv-hf：高频独立词条，产品口径不做派生还原，预测的词根应为原词（同样走 root() 口径）
  * - keep：预测 ∈ 可接受（通常为原词）
  * - 任意类别：预测（本项目为全部匹配候选）中出现“禁止误还原”即判错
  */
@@ -43,6 +44,9 @@ export interface CategoryScore {
   errors: string[];
 }
 
+/** 派生类类别（deriv / deriv-hf）：评测时用 root() 而不是 lemma() 取预测 */
+export const isDerivCategory = (category: string) => category === 'deriv' || category === 'deriv-hf';
+
 export function score(items: GoldItem[], p: Predictor): Record<string, CategoryScore> {
   const out: Record<string, CategoryScore> = {};
   const add = (cat: string, ok: boolean, err: string) => {
@@ -59,7 +63,8 @@ export function score(items: GoldItem[], p: Predictor): Record<string, CategoryS
     const err = `${item.word}->${pred}${bad.length ? ` (误:${bad.join('/')})` : ''}`;
     add(item.category, ok, err);
     add('ALL', ok, err);
-    if (item.category !== 'deriv') add('ALL-无派生', ok, err);
+    // deriv-hf 也不计入：保持 ALL-无派生 只统计屈折与 keep，口径调整前后可直接对比
+    if (!isDerivCategory(item.category)) add('ALL-无派生', ok, err);
   }
   return out;
 }

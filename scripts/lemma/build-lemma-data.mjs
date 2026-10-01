@@ -12,7 +12,7 @@
  *
  * 思路（“规则 + 覆盖表”）：
  * 1. 词汇表 V = 有词频或考试标签的 ECDICT 词 ∪ 屈折表中出现的词；
- * 2. 真值 T(w) = 屈折原形（按词频排序）+ 派生词根链（后缀规则生成、语义校验通过，最多 3 层）；
+ * 2. 真值 T(w) = 屈折原形（按词频排序）+ 派生词根链（后缀规则生成、语义校验与词频口径通过，最多 3 层；高频词只允许透明后缀）；
  * 3. 运行时规则 R(w)（rules.ts#ruleCandidates）过滤到 V 后若与 T(w) 完全一致则不写表，否则写入覆盖。
  * 这样 V 内的词在运行时得到精确结果（匹配只发生在词书词上，而词书 ⊆ V），表只存规则处理不了的部分。
  *
@@ -250,9 +250,37 @@ function weaklyRelated(w, lemma) {
   return false;
 }
 
+/**
+ * 高频词阈值（COCA/BNC 排名）。高频词本身就是独立词条，词义常已与“词根”分化（normal 正常的 / norm 标准、
+ * formal / form、committee / commit、pressure / press、realize / real），词书只收了词根时把它们还原过去，
+ * 卡片会显示词根的释义；所以高频词默认不做派生还原，页面上的它只按自身词条匹配。
+ */
+const HIGH_FREQ_RANK = 5000;
+/** 高频词中仍允许派生的透明后缀：方式副词 -ly（quickly / quick）与 -ness/-ful/-less（happiness、careful、endless） */
+const TRANSPARENT_SUFFIX = /(?:ness|ful|less)$/;
+/** 高频派生词的词根排名超过派生词排名的这个倍数，视为“词根比原形更罕见” */
+const ROOT_RARER_FACTOR = 3;
+/**
+ * 词频口径的派生限制（语义校验之外的第二道闸），真实的派生关系里词根一般不比派生词罕见，反过来多半是同形巧合：
+ * - 高频派生词（rank ≤ HIGH_FREQ_RANK）：只允许透明后缀——-ly 且自身首义项为副词（quickly / quick；lovely、friendly、daily
+ *   这类 -ly 形容词不算），或 -ness/-ful/-less；其余后缀（-al/-er/-ee/-y/-en/-ure/-ize/-ion 等：normal、committee、they、
+ *   happen、figure、realize、position）一律不还原。透明后缀的词根也不能罕见太多（especially ↛ especial），
+ *   但允许差几倍（quickly 679 / quick 1303、really 143 / real 305，高频副词比形容词更常用很正常）。
+ * - 低频派生词：词根不能比它更罕见（spiral 8028 ↛ spire 13610）；carelessly ↛ careless ↛ care 这类正常派生不受影响。
+ */
+function derivationAllowedByFrequency(w, root) {
+  const rank = rankOf(w);
+  if (rank > HIGH_FREQ_RANK) return rankOf(root) <= rank;
+  if (rankOf(root) > rank * ROOT_RARER_FACTOR) return false;
+  if (w.endsWith('ly')) return info.get(w).trans.startsWith('adv.');
+  return TRANSPARENT_SUFFIX.test(w);
+}
+
 /** 一级派生词根（已校验） */
 const derivMemo = new Map();
 const derivStats = new Map();
+/** 语义校验通过、但被词频口径拦下的派生对（--report 输出） */
+const freqBlocked = [];
 function derivOf(w) {
   let r = derivMemo.get(w);
   if (r) return r;
@@ -264,6 +292,7 @@ function derivOf(w) {
       // 缩写不作词根：apply ↛ app、comment ↛ com
       if (!V.has(root) || (infl.has(root) && !isBase.has(root)) || info.get(root)?.trans.startsWith('abbr')) continue;
       if (semanticallyRelated(w, root)) {
+        if (!derivationAllowedByFrequency(w, root)) { freqBlocked.push(`${w}>${root}`); continue; }
         r.push(root);
         const suf = w.slice(commonPrefix(w, root));
         derivStats.set(suf, (derivStats.get(suf) ?? 0) + 1);
@@ -301,7 +330,10 @@ for (const w of [...V].sort()) {
   const r = ruleCandidates(w);
   // 屈折与派生分别比较：运行时 lemma() 只取屈折候选（teacher 的规则候选 teach 来自 -er 比较级规则，归类不对也要写表）
   const eq = (a, b) => a.length === b.length && a.every((c, i) => c === b[i]);
-  if (eq(inflections, r.inflections.filter((c) => VX.has(c))) && eq(derivs, r.derivations.filter((c) => VX.has(c)))) { same++; continue; }
+  // 高频词的派生口径要精确（见 derivationAllowedByFrequency）：规则生成的非词候选（family -> famy/fami）也不放过，
+  // 写表覆盖为空，保证 analyze 对高频词不返回任何派生项；其余词只比较真实词，非词候选不会命中词书
+  const ruleDerivs = rankOf(w) <= HIGH_FREQ_RANK ? r.derivations : r.derivations.filter((c) => VX.has(c));
+  if (eq(inflections, r.inflections.filter((c) => VX.has(c))) && eq(derivs, ruleDerivs)) { same++; continue; }
   entries[w] = derivs.length ? `${inflections.join(',')}|${derivs.join(',')}` : inflections.join(',');
 }
 
@@ -322,6 +354,7 @@ if (REPORT) {
   console.log('拒绝样本:', pick(rejected, 80).join(' '));
   console.log(`屈折丢弃 ${droppedInfl.length}:`, pick(droppedInfl, 60).join(' '));
   console.log(`规则补屈折 ${ruleInfl.length}:`, pick(ruleInfl, 60).join(' '));
+  console.log(`词频口径拦截 ${freqBlocked.length}:`, pick(freqBlocked, 80).join(' '));
   console.log('派生后缀命中:', [...derivStats].sort((a, b) => b[1] - a[1]).slice(0, 40).map(([k, v]) => `${k}:${v}`).join(' '));
   for (const w of process.env.WORDS?.split(',') ?? ['business', 'news', 'hardly', 'lately', 'happiness', 'quickly', 'teacher', 'writer', 'beautifully', 'carelessly',
     'development', 'decision', 'national', 'ability', 'better', 'went', 'leaves', 'used', 'data', 'children', 'corner', 'department',
