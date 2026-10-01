@@ -259,6 +259,12 @@ export interface SyncChannel {
   /** 处理入口（options hash 路由） */
   route: string;
   providerId?: string;
+  /** 原始错误文案：status.text 被改写成短句（见 friendlyChannels）时保留，供“详情”展开与修复动作判断 */
+  detail?: string;
+  /** 上次成功同步时间 ms（0=从未成功；undefined=未知）：区分“未登录”（从没成功过）与“登录已过期” */
+  lastSyncAt?: number;
+  /** 出错 / 待处理行的补充说明（如“上次成功 3 小时前”），列表中以次要文字显示在状态后 */
+  since?: string;
 }
 
 /** 状态严重程度：总状态取最严重的一项（出错 > 待处理 > 同步中 > 正常 > 未开启） */
@@ -291,7 +297,14 @@ export function summarizeSourceChannels(
     const failed = own.filter((b) => b.sync!.status === 'error');
     if (failed.length) {
       const prefix = own.length > 1 ? `${failed.length}/${own.length} 本失败：` : '同步失败：';
-      out.push({ ...base, status: { text: prefix + (failed[0]!.sync!.error || '未知错误'), tone: 'error' }, action: 'fix' });
+      const lastOk = Math.max(...own.map((b) => b.sync!.lastSyncAt));
+      out.push({
+        ...base,
+        status: { text: prefix + (failed[0]!.sync!.error || '未知错误'), tone: 'error' },
+        action: 'fix',
+        lastSyncAt: lastOk,
+        since: lastOk ? `上次成功 ${formatAgo(lastOk, now)}` : undefined,
+      });
       continue;
     }
     const last = Math.max(...own.map((b) => b.sync!.lastSyncAt));
@@ -395,19 +408,26 @@ const LEVEL_TONE: Record<StatusLevel, Tone> = { error: 'error', busy: 'busy', pe
  * background `getStatusSummary` 的条目 → popup 行（background 统一计算文案，与选项页一致；本文件的
  * buildSyncChannels 只在后台不支持该消息时兜底）。关闭（off）的条目不占行；出错的条目给“处理”入口。
  */
-export function channelsFromStatusItems(items: StatusItem[]): SyncChannel[] {
+export function channelsFromStatusItems(items: StatusItem[], now = Date.now()): SyncChannel[] {
   return items
     .filter((it) => it.level !== 'off')
     .map((it) => {
       const kind: SyncChannel['kind'] = it.kind === 'source' ? 'source' : it.id === 'webdav' ? 'webdav' : 'storage-sync';
       const providerId = kind === 'source' ? it.id.replace(/^source:/, '') : undefined;
+      // 从未成功过的来源失败时后台给 level=never + 失败原因（如“未登录有道…”），这种需要用户先去连接 / 登录；
+      // 只是“尚未同步”（没试过）的先试一次同步
+      const neverFailed = it.level === 'never' && !/^尚未同步/.test(it.text);
+      // 正常行带上次同步时间（后台文案不含时间）；出错 / 待处理行把上次成功时间放进 since
+      const text = it.level === 'ok' && it.lastSyncAt ? `${it.text} · ${formatAgo(it.lastSyncAt, now)}` : it.text;
+      const showSince = (it.level === 'error' || it.level === 'pending' || it.level === 'never') && it.lastSyncAt > 0;
       return {
         id: it.id,
         kind,
         label: it.name,
-        status: { text: it.text, tone: LEVEL_TONE[it.level] },
-        // 从未同步的先试一次（未登录等问题会变成 error，再给处理入口）
-        action: it.level === 'error' ? 'fix' : 'sync',
+        status: { text, tone: LEVEL_TONE[it.level] },
+        action: it.level === 'error' || neverFailed ? 'fix' : 'sync',
+        lastSyncAt: it.lastSyncAt,
+        since: showSince ? `上次成功 ${formatAgo(it.lastSyncAt, now)}` : undefined,
         running: it.level === 'busy',
         // 同步后端直接定位到同步页对应小节（比 href 更精确）；来源用后台给的位置
         route: kind === 'webdav' ? OPTIONS_ROUTES.webdav : kind === 'storage-sync' ? OPTIONS_ROUTES.sync : it.href || OPTIONS_ROUTES.sources,
@@ -425,9 +445,11 @@ export function overallSyncStatus(channels: SyncChannel[]): StatusText {
     case 'error':
       return { text: problems > 1 ? `${problems} 项同步出错` : `${worst.label}同步出错`, tone: 'error' };
     case 'warn':
-      return { text: `${worst.label}需要处理`, tone: 'warn' };
+      // 直接说是什么事（“有道词典：未登录”），比“需要处理”更好懂
+      return { text: `${worst.label}：${worst.status.text}`, tone: 'warn' };
     case 'busy':
-      return { text: '正在同步…', tone: 'busy' };
+      // 只有排队 / 退避等待（pending）的项时不说“正在同步”、也不用强调色，避免看起来一直卡在同步中
+      return channels.some((c) => c.running) ? { text: '正在同步…', tone: 'busy' } : { text: '等待自动同步', tone: 'muted' };
     default:
       return { text: channels.length > 1 ? `${channels.length} 项同步正常` : '同步正常', tone: 'ok' };
   }
@@ -438,7 +460,7 @@ export function overallSyncStatus(channels: SyncChannel[]): StatusText {
 /** popup 本地记住上次使用的行内释义模式（快速开关重新打开时恢复），只是本机界面偏好，不进 settings */
 export const LAST_INLINE_MODE_KEY = 'hnw:popup:lastInlineMode';
 
-/** 行内释义快速开关：关闭 → 恢复上次的显示方式（无记录或记录无效时用“词后”） */
+/** 行内释义快速开关：关闭 → 恢复上次的显示方式（无记录或记录无效时用第一个，即“词后”）；modes 需包含全部开启方式（含 hover） */
 export function nextInlineMode<M extends string>(current: M | 'off', last: string | null, modes: readonly M[]): M | 'off' {
   if (current !== 'off') return 'off';
   return (modes as readonly string[]).includes(last ?? '') ? (last as M) : modes[0]!;
@@ -450,8 +472,10 @@ export function nextInlineMode<M extends string>(current: M | 'off', last: strin
  * 出错行“处理”按钮的具体动词：按错误文案判断用户要做的事（重新登录 / 更新授权 / 检查服务器…），
  * 让用户在 popup 里一眼知道怎么修；识别不出时用“去处理”。
  */
-export function syncFixVerb(c: Pick<SyncChannel, 'kind' | 'status'>): string {
-  const t = c.status.text;
+export function syncFixVerb(c: Pick<SyncChannel, 'kind' | 'status' | 'detail'>): string {
+  const t = c.detail ?? c.status.text;
+  // 从没登录过（短句已判定为“未登录”）是“去登录”，不是“重新登录”
+  if (/^未登录/.test(c.status.text)) return '去登录';
   if (/登录|cookie|会话|过期/i.test(t)) return '重新登录';
   if (/token|授权|密钥|凭据|401|403/i.test(t)) return c.kind === 'webdav' ? '检查账号' : '更新授权';
   if (c.kind === 'webdav' && /连接|服务器|网络|超时|fetch|ECONN|404|5\d\d/i.test(t)) return '检查服务器';
@@ -464,8 +488,10 @@ export function syncFixVerb(c: Pick<SyncChannel, 'kind' | 'status'>): string {
 export interface StatusAlert {
   tone: 'error' | 'warn';
   text: string;
-  /** 按钮：route=跳设置页对应位置；scroll=滚动到同步卡片（多项出错时） */
-  action?: { label: string; route?: string; scroll?: boolean };
+  /** 按钮：route=跳设置页对应位置；sheet=就地弹出同步面板（多项出错时，不长距离滚动） */
+  action?: { label: string; route?: string; sheet?: boolean };
+  /** 可“稍后提醒”：同步出错可暂时收起（长期故障不一直占位）；离线提示随网络恢复自动消失，不需要 */
+  dismissible?: boolean;
 }
 
 /**
@@ -473,16 +499,79 @@ export interface StatusAlert {
  * 网站未授权不在这里提示——本站卡片会直接切换成授权态，避免同一问题出现两处。
  */
 export function resolveStatusAlert(input: { online: boolean; channels: SyncChannel[] }): StatusAlert | undefined {
-  if (!input.online) return { tone: 'warn', text: '已离线：同步与生词本改动会在联网后再执行' };
+  if (!input.online) return { tone: 'warn', text: '已离线：改动先存本地，联网后自动同步' };
   const errors = input.channels.filter((c) => c.status.tone === 'error');
   if (errors.length === 1) {
     const c = errors[0]!;
-    return { tone: 'error', text: `${c.label}：${c.status.text}`, action: { label: syncFixVerb(c), route: c.route } };
+    return { tone: 'error', text: `${c.label}：${c.status.text}`, action: { label: syncFixVerb(c), route: c.route }, dismissible: true };
   }
   if (errors.length > 1) {
-    return { tone: 'error', text: `${errors.map((c) => c.label).join('、')}同步出错`, action: { label: '查看', scroll: true } };
+    // 三项及以上只给数量，手机上也能一行放下
+    const who = errors.length > 2 ? `${errors.length} 项` : errors.map((c) => c.label).join('、');
+    // 按钮写明数量：行首被截断（窄屏）时也能看懂要做什么
+    return { tone: 'error', text: `${who}同步出错`, action: { label: `${errors.length} 项需处理`, sheet: true }, dismissible: true };
   }
   return undefined;
+}
+
+/** 告警条“稍后提醒”：同一条告警收起 24 小时；文案变化（出现新的错误）时立即重新显示 */
+export const ALERT_SNOOZE_KEY = 'hnw:popup:alertSnooze';
+export const ALERT_SNOOZE_MS = 24 * 3600e3;
+
+export function isAlertSnoozed(alert: StatusAlert, snooze: { text: string; at: number } | null, now = Date.now()): boolean {
+  return !!alert.dismissible && !!snooze && snooze.text === alert.text && now - snooze.at < ALERT_SNOOZE_MS;
+}
+
+/**
+ * 同步错误改写成给用户看的短句（后台文案偏技术：带主机名括注、原始 fetch 异常、重复的修复说明）。
+ * 修复说明由行内按钮（syncFixVerb：重新登录 / 更新授权…）承担，这里只说“出了什么事”；原文放进 detail 供展开查看。
+ * 识别不出时原样返回（不丢信息）。
+ */
+export function friendlySyncError(text: string, opts: { neverSynced?: boolean } = {}): { short: string; detail?: string } {
+  // 来源多本时的前缀“1/2 本失败：”保留在短句前
+  const m = text.match(/^(\d+\/\d+ 本失败：|同步失败：)?([\s\S]*)$/);
+  const prefix = m?.[1] === '同步失败：' ? '' : m?.[1] ?? '';
+  const body = m?.[2] ?? text;
+  const rules: [RegExp, (r: RegExpMatchArray) => string][] = [
+    // 行内按钮已是“检查服务器”，短句只说连不上哪台服务器
+    [/无法连接.*?服务器[（(]([^）)]+)[）)]/, (r) => `连不上服务器 ${r[1]}`],
+    [/无法连接|Failed to fetch|NetworkError|ECONN|网络/i, () => '连不上服务器，请检查网络'],
+    // 后台“未登录或登录已失效”是同一句：从没同步成功过 = 新用户未登录；成功过 = 登录过期
+    [/未登录|登录已(失效|过期)|NO_LOGIN/i, () => (opts.neverSynced ? '未登录' : '登录已过期')],
+    [/用户名或密码错误/, () => '用户名或密码错误'],
+    [/(授权|token).*(无效|失效|过期)|(无效|失效|过期).*(授权|token)/i, () => '授权已失效'],
+    [/拒绝访问|无权限/, () => '没有访问权限'],
+    [/路径不存在/, () => '同步目录不存在'],
+    [/请求频率|频繁|429/, () => '请求太频繁，稍后自动重试'],
+    [/存储空间不足|quota|配额/i, () => '存储空间不足'],
+    [/HTTP (\d{3})/, (r) => `服务器出错（HTTP ${r[1]}）`],
+  ];
+  for (const [re, fmt] of rules) {
+    const r = body.match(re);
+    if (r) {
+      const short = prefix + fmt(r);
+      return short === text ? { short } : { short, detail: text };
+    }
+  }
+  return { short: text };
+}
+
+/** 出错 / 待处理行（warn，如未登录）的状态文案改成短句，原文存入 detail（修复动作仍按原文判断） */
+export function friendlyChannels(channels: SyncChannel[]): SyncChannel[] {
+  return channels.map((c) => {
+    if (c.status.tone !== 'error' && c.status.tone !== 'warn') return c;
+    const f = friendlySyncError(c.status.text, { neverSynced: c.lastSyncAt === 0 });
+    return f.detail ? { ...c, status: { ...c.status, text: f.short }, detail: f.detail } : c;
+  });
+}
+
+/**
+ * 同步面板的主操作：有需要用户处理的行（出错优先，其次未登录等待处理）时，主按钮换成第一项的修复动作——
+ * 这时“全部同步”大概率还会失败；没有时返回 undefined（主按钮为“全部同步”）。
+ */
+export function primaryFixChannel(channels: SyncChannel[]): SyncChannel | undefined {
+  const fixes = channels.filter((c) => c.action === 'fix');
+  return fixes.find((c) => c.status.tone === 'error') ?? fixes[0];
 }
 
 /**

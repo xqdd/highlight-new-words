@@ -20,6 +20,10 @@ import {
   toggleSiteRule,
   syncFixVerb,
   resolveStatusAlert,
+  friendlySyncError,
+  friendlyChannels,
+  primaryFixChannel,
+  isAlertSnoozed,
   markKnownToast,
   presetScrollLeft,
 } from '@/entrypoints/popup/model';
@@ -206,6 +210,10 @@ describe('popup model', () => {
     expect(nextInlineMode('off', 'ruby', modes)).toBe('ruby');
     expect(nextInlineMode('off', null, modes)).toBe('after');
     expect(nextInlineMode('off', 'bogus', modes)).toBe('after');
+    // “仅悬停”同样能被记住并恢复（之前分段选项缺 hover，关再开会丢失用户选择）
+    const all = ['after', 'ruby', 'hover'] as const;
+    expect(nextInlineMode('hover', null, all)).toBe('off');
+    expect(nextInlineMode('off', 'hover', all)).toBe('hover');
   });
 });
 
@@ -235,9 +243,66 @@ describe('popup 顶部状态位与提示', () => {
       tone: 'error',
       text: '有道：登录已过期',
       action: { label: '重新登录', route: '#r-有道' },
+      dismissible: true,
     });
-    expect(resolveStatusAlert({ online: true, channels: [youdao, dav] })?.action).toEqual({ label: '查看', scroll: true });
+    expect(resolveStatusAlert({ online: true, channels: [youdao, dav] })?.action).toEqual({ label: '2 项需处理', sheet: true });
     expect(resolveStatusAlert({ online: true, channels: [ch('ok', 'webdav', '3 小时前', 'ok')] })).toBeUndefined();
+  });
+
+  it('friendlySyncError：技术文案改短句，原文保留到 detail，识别不出原样返回', () => {
+    expect(friendlySyncError('无法连接 WebDAV 服务器（127.0.0.1:9）：Failed to fetch')).toEqual({
+      short: '连不上服务器 127.0.0.1:9',
+      detail: '无法连接 WebDAV 服务器（127.0.0.1:9）：Failed to fetch',
+    });
+    expect(friendlySyncError('未登录有道或登录已失效，请先登录有道单词本网页版').short).toBe('登录已过期');
+    // 从没同步成功过（新装默认启用有道）是“未登录”，不是“登录已过期”
+    expect(friendlySyncError('未登录有道或登录已失效，请先登录有道单词本网页版', { neverSynced: true }).short).toBe('未登录');
+    expect(friendlySyncError('1/2 本失败：授权失效，请重新填写 API token').short).toBe('1/2 本失败：授权已失效');
+    expect(friendlySyncError('同步失败：欧路 API 授权无效或已过期，请重新获取授权信息').short).toBe('授权已失效');
+    expect(friendlySyncError('奇怪的错误')).toEqual({ short: '奇怪的错误' });
+    // 改写后修复动作仍按原文判断
+    const [c] = friendlyChannels([{ ...ch('WebDAV', 'webdav', '无法连接 WebDAV 服务器（127.0.0.1:9）：Failed to fetch') }]);
+    expect(c!.status.text).toBe('连不上服务器 127.0.0.1:9');
+    expect(syncFixVerb(c!)).toBe('检查服务器');
+  });
+
+  it('新装未登录有道：显示“未登录 / 去登录”，成功过再失败才是“登录已过期 / 重新登录”', () => {
+    const NOW = 1_800_000_000_000;
+    const item = (level: StatusItem['level'], lastSyncAt: number): StatusItem => ({
+      id: 'source:youdao',
+      kind: 'source',
+      name: '有道词典',
+      level,
+      text: '未登录有道或登录已失效，请先登录有道单词本网页版',
+      lastSyncAt,
+      href: '#sources',
+    });
+    const [fresh] = friendlyChannels(channelsFromStatusItems([item('never', 0)], NOW));
+    expect(fresh).toMatchObject({ action: 'fix', status: { text: '未登录', tone: 'warn' } });
+    expect(fresh!.since).toBeUndefined();
+    expect(syncFixVerb(fresh!)).toBe('去登录');
+    expect(overallSyncStatus([fresh!])).toEqual({ text: '有道词典：未登录', tone: 'warn' });
+    expect(primaryFixChannel([fresh!])?.id).toBe('source:youdao');
+    // 只是没试过同步：先试一次，不给修复入口
+    const untried = channelsFromStatusItems([{ ...item('never', 0), text: '尚未同步，点“立即同步”拉取生词本' }], NOW)[0]!;
+    expect(untried.action).toBe('sync');
+    expect(primaryFixChannel([untried])).toBeUndefined();
+    const [expired] = friendlyChannels(channelsFromStatusItems([item('error', NOW - 3 * 3600e3)], NOW));
+    expect(expired).toMatchObject({ action: 'fix', since: '上次成功 3 小时前', status: { text: '登录已过期', tone: 'error' } });
+    expect(syncFixVerb(expired!)).toBe('重新登录');
+    // 出错优先作为主修复动作
+    expect(primaryFixChannel([fresh!, expired!])?.status.text).toBe('登录已过期');
+    // 正常行带上次同步时间
+    const ok = channelsFromStatusItems([{ ...item('ok', NOW - 120_000), id: 'storage-sync', kind: 'backend', text: '已同步 · 已用 1.0 KB / 100 KB' }], NOW)[0]!;
+    expect(ok.status.text).toBe('已同步 · 已用 1.0 KB / 100 KB · 2 分钟前');
+  });
+
+  it('isAlertSnoozed：同一条告警收起 24 小时，文案变化立即重新显示', () => {
+    const a = { tone: 'error' as const, text: '有道：登录已过期', dismissible: true };
+    expect(isAlertSnoozed(a, { text: a.text, at: 1000 }, 1000 + 3600e3)).toBe(true);
+    expect(isAlertSnoozed(a, { text: a.text, at: 1000 }, 1000 + 25 * 3600e3)).toBe(false);
+    expect(isAlertSnoozed(a, { text: '别的', at: 1000 }, 2000)).toBe(false);
+    expect(isAlertSnoozed({ ...a, dismissible: undefined }, { text: a.text, at: 1000 }, 2000)).toBe(false);
   });
 
   it('markKnownToast：远端删除失败（含离线）时不显示成全部完成', () => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { browser } from 'wxt/browser';
 import { sendToBackground } from '@/core/messaging';
 import { requestAllSitesAccess, speakText } from '@/core/platform';
@@ -18,8 +18,10 @@ import BookPicker from './components/BookPicker.vue';
 import BottomSheet from './components/BottomSheet.vue';
 import PopupIcon from './components/PopupIcon.vue';
 import WordDetail from './components/WordDetail.vue';
+import SyncList from './components/SyncList.vue';
 import WordList from './components/WordList.vue';
 import {
+  ALERT_SNOOZE_KEY,
   LAST_INLINE_MODE_KEY,
   isScriptableUrl,
   OPTIONS_ROUTES,
@@ -28,16 +30,18 @@ import {
   filterWords,
   formatAgo,
   formatCount,
+  friendlyChannels,
+  isAlertSnoozed,
   markKnownToast,
   nextInlineMode,
   oneLineMeaning,
   overallSyncStatus,
-  presetScrollLeft,
+  primaryFixChannel,
+  syncFixVerb,
   recentKnownWords,
   resolveStatusAlert,
   resolvePageStatus,
   solidSwatch,
-  syncFixVerb,
   toggleEnabledBook,
   toggleSiteRule,
   type StatusText,
@@ -115,6 +119,11 @@ const pageStatusText = computed<StatusText>(() => {
   }
 });
 
+/** “本页生词”角标：读不到本页（未授权 / 内置页 / 未注入 / 关闭）时显示“—”，不显示成“0 个生词” */
+const pageCountLabel = computed(() =>
+  pageStatus.value === 'active' ? String(data.pageLemmas.value.length) : '—',
+);
+
 function reloadPage() {
   if (data.tabId.value === undefined) return;
   void browser.tabs.reload(data.tabId.value);
@@ -177,55 +186,30 @@ const presetChips = computed(() => {
   else if (!chips.some((c) => c.id === s.style.themeId)) chips.unshift({ id: s.style.themeId, name: '当前', mark: resolveMarkStyle(s) });
   return chips;
 });
-const presetStrip = ref<HTMLElement>();
+const currentPreset = computed(() => presetChips.value.find((c) => c.id === settings.value?.style.themeId) ?? presetChips.value[0]);
+/**
+ * 外观卡片默认收成一行（“样式 · 琥珀 ›” + 行内释义开关），把首屏让给本页生词；展开后显示全部预设与释义显示方式。
+ * 展开状态是本机界面偏好，记在 localStorage。
+ */
+const LOOK_OPEN_KEY = 'hnw:popup:lookOpen';
+const lookOpen = ref(readLocal(LOOK_OPEN_KEY) === '1');
+watch(lookOpen, (v) => writeLocal(LOOK_OPEN_KEY, v ? '1' : '0'));
 
 function choosePreset(id: string) {
   if (!settings.value || settings.value.style.themeId === id) return;
   applyPreset(settings.value, id);
 }
 
-/**
- * 打开时定位当前预设：在首屏内就从最左开始（不裁掉第一张），靠后时让它完整可见并露出半张下一项。
- * 不用 scrollIntoView（inline:center 会把第一张裁掉一半，还可能带动整页纵向滚动）。
- */
-watch(
-  presetStrip,
-  (el) => {
-    const chip = el?.querySelector<HTMLElement>('[aria-checked="true"]');
-    if (!el || !chip) return;
-    const base = el.getBoundingClientRect().left - el.scrollLeft;
-    const leftOf = (c: Element) => c.getBoundingClientRect().left - base;
-    // 对齐后左侧只留一个间距（gap），上一张恰好完全移出可视区，不露出一条边
-    const [first, second] = el.children;
-    const pad = first && second ? leftOf(second) - leftOf(first) - (first as HTMLElement).offsetWidth : 0;
-    el.scrollLeft = presetScrollLeft({
-      itemLeft: leftOf(chip),
-      itemWidth: chip.offsetWidth,
-      viewport: el.clientWidth,
-      peek: chip.offsetWidth / 2,
-      max: el.scrollWidth - el.clientWidth,
-      snaps: [...el.children].map((c) => leftOf(c) - pad),
-    });
-  },
-  { flush: 'post' },
-);
-
 // ---------------- 行内释义 ----------------
 
-/** 开启时的显示方式（“关闭”由开关负责） */
+/** 开启时的显示方式（“关闭”由开关负责），需覆盖 InlineTranslationMode 的全部开启值，否则会把用户的选择显示错/恢复丢 */
 const inlineShowOptions: { value: Exclude<InlineTranslationMode, 'off'>; label: string }[] = [
-  { value: 'after', label: '词后括注' },
+  { value: 'after', label: '词后' },
   { value: 'ruby', label: '词上方' },
+  { value: 'hover', label: '仅悬停' },
 ];
 type InlineShowMode = (typeof inlineShowOptions)[number]['value'];
 
-function readLastInlineMode(): string | null {
-  try {
-    return localStorage.getItem(LAST_INLINE_MODE_KEY);
-  } catch {
-    return null;
-  }
-}
 
 /** 行内释义快速开关：关闭时记住当前方式，再打开时恢复 */
 const inlineOn = computed({
@@ -235,7 +219,7 @@ const inlineOn = computed({
     if (!s || on === (s.inlineTranslation.mode !== 'off')) return;
     s.inlineTranslation.mode = nextInlineMode(
       s.inlineTranslation.mode,
-      readLastInlineMode(),
+      readLocal(LAST_INLINE_MODE_KEY),
       inlineShowOptions.map((o) => o.value),
     );
   },
@@ -243,22 +227,20 @@ const inlineOn = computed({
 const inlineShowMode = computed<InlineShowMode>({
   get: () => {
     const m = settings.value?.inlineTranslation.mode;
+    // 关闭时分段控件不显示，这里的回退值只是占位
     return inlineShowOptions.some((o) => o.value === m) ? (m as InlineShowMode) : 'after';
   },
   set: (m) => {
     if (settings.value) settings.value.inlineTranslation.mode = m;
   },
 });
+/** 折叠行里显示的当前方式名 */
+const inlineModeLabel = computed(() => inlineShowOptions.find((o) => o.value === settings.value?.inlineTranslation.mode)?.label ?? '');
 // 记住最近一次开启的方式（本机界面偏好，不同步）
 watch(
   () => settings.value?.inlineTranslation.mode,
   (m) => {
-    if (!m || m === 'off') return;
-    try {
-      localStorage.setItem(LAST_INLINE_MODE_KEY, m);
-    } catch {
-      /* 隐私模式等不可用时忽略，下次开启用默认方式 */
-    }
+    if (m && m !== 'off') writeLocal(LAST_INLINE_MODE_KEY, m);
   },
 );
 
@@ -267,16 +249,37 @@ watch(
 type Tab = 'page' | 'known';
 const tab = ref<Tab>('page');
 const query = ref('');
-/** 首屏最多渲染的行数，避免几百个词时一次渲染过多 DOM */
-const PAGE_SIZE = 60;
-const limit = ref(PAGE_SIZE);
-/** 桌面 popup 列表默认在卡片内滚动（约 5 行）；“查看全部”后取消高度限制，随整页滚动 */
+/**
+ * 列表折叠 / 展开（桌面与触屏同一套文案“查看全部 N 个”）：
+ * - 桌面折叠时在卡片内滚动（约 5 行高，最多渲染 60 行）；触屏整页随页面滚动，折叠时只渲染前 12 行，避免同步卡片被挤到几十行之后
+ * - 展开后取消高度限制，一次最多渲染 300 行，更多时“继续显示”
+ */
+const COLLAPSED_ROWS = touchUi ? 12 : 60;
+const COLLAPSED_VISIBLE = touchUi ? 12 : 5;
+const EXPANDED_CHUNK = 300;
 const listExpanded = ref(false);
-watch([tab, query], () => (limit.value = PAGE_SIZE));
+const limit = ref(COLLAPSED_ROWS);
+watch([tab, query, listExpanded], () => (limit.value = listExpanded.value ? EXPANDED_CHUNK : COLLAPSED_ROWS));
+
+/** 筛选框：默认收起成图标 */
+const searchOpen = ref(false);
+const searchInput = ref<HTMLInputElement>();
+async function openSearch() {
+  searchOpen.value = true;
+  await nextTick();
+  searchInput.value?.focus();
+}
+function closeSearch() {
+  query.value = '';
+  searchOpen.value = false;
+}
 
 const knownList = computed(() => recentKnownWords(data.known.value, 200).map((k) => k.word));
 const knownTotal = computed(() => Object.keys(data.known.value.words).length);
-const sourceWords = computed(() => (tab.value === 'page' ? data.pageLemmas.value : knownList.value));
+/** 本页不在高亮（未授权 / 关闭 / 未注入）时不列旧数据，与角标“—”和空态说明一致 */
+const sourceWords = computed(() =>
+  tab.value === 'page' ? (pageStatus.value === 'active' ? data.pageLemmas.value : []) : knownList.value,
+);
 const filtered = computed(() => filterWords(sourceWords.value, query.value));
 const shownWords = computed(() => filtered.value.slice(0, limit.value));
 
@@ -410,7 +413,9 @@ async function collect() {
       showToast(`收藏失败：${failed?.error || res.message || (online.value ? '未知错误' : '当前离线')}`);
       return;
     }
-    showToast(res.message || `已收藏 ${word}`, { label: '撤销', run: () => void sendToBackground('removeWord', { lemma: word }).catch(() => undefined) });
+    // 离线时只写进了本地（来源生词本与跨设备同步要等联网），不报“收藏成功”
+    const text = online.value ? res.message || `已收藏 ${word}` : `已存本地，联网后同步：${word}`;
+    showToast(text, { label: '撤销', run: () => void sendToBackground('removeWord', { lemma: word }).catch(() => undefined) });
   } catch (e) {
     if (detailWord.value === word) detailCollected.value = false;
     showToast(`收藏失败：${e instanceof Error ? e.message : String(e)}`);
@@ -455,31 +460,27 @@ async function deleteFromSources() {
  */
 const syncChannels = computed<SyncChannel[]>(() => {
   const summary = data.statusSummary.value;
-  if (summary) return channelsFromStatusItems(summary.items);
+  if (summary) return friendlyChannels(channelsFromStatusItems(summary.items));
   if (!settings.value) return [];
-  return buildSyncChannels({
+  return friendlyChannels(buildSyncChannels({
     books: books.value,
     sources: settings.value.sources,
     providers: SOURCE_PROVIDER_INFOS,
     storageSync: data.syncStatus.value,
     webdav: data.webdavStatus.value,
-  });
+  }));
 });
 const syncOverall = computed<StatusText>(() => {
   const st = overallSyncStatus(syncChannels.value);
   const last = data.statusSummary.value?.lastSyncAt;
-  // 正常时带上最近同步时间（“同步正常 · 3 小时前”），折叠成一行也能看出是否在工作
-  return st.tone === 'ok' && last ? { ...st, text: `${st.text} · ${formatAgo(last)}` } : st;
+  // 带上最近同步时间（“2 项同步正常 · 3 小时前”“等待自动同步 · 上次 3 小时前”），底栏一行就能看出是否在工作
+  if (!last || st.tone === 'error' || st.tone === 'warn') return st;
+  return { ...st, text: `${st.text} · ${st.tone === 'ok' ? '' : '上次 '}${formatAgo(last)}` };
 });
-/** 同步卡片展开：有出错/待处理项时自动展开，正常时折叠成一行（用户可手动展开） */
-const syncExpandedByUser = ref(false);
-const syncNeedsAttention = computed(() => syncChannels.value.some((c) => c.status.tone === 'error' || c.status.tone === 'warn'));
-const syncExpanded = computed(() => syncNeedsAttention.value || syncExpandedByUser.value);
-const syncCard = ref<HTMLElement>();
-function scrollToSync() {
-  syncExpandedByUser.value = true;
-  syncCard.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
+/** 需要用户处理的第一项（出错优先，其次未登录等）：底栏同步行与同步面板的主操作直接给它的修复动作 */
+const syncFix = computed(() => primaryFixChannel(syncChannels.value));
+/** 同步状态底部面板：底栏同步行 / 告警条“N 项需处理”就地弹出 */
+const syncSheetOpen = ref(false);
 
 // ---------------- 顶部状态位（离线 / 同步出错） ----------------
 
@@ -491,12 +492,30 @@ const onOnline = () => {
 const onOffline = () => (online.value = false);
 addEventListener('online', onOnline);
 addEventListener('offline', onOffline);
-const statusAlert = computed(() => resolveStatusAlert({ online: online.value, channels: syncChannels.value }));
+/** “稍后提醒”记录（同一条告警 24 小时内不再占位，出现新错误时立即显示） */
+const alertSnooze = ref<{ text: string; at: number } | null>(parseSnooze(readLocal(ALERT_SNOOZE_KEY)));
+function parseSnooze(raw: string | null): { text: string; at: number } | null {
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+const statusAlert = computed(() => {
+  const a = resolveStatusAlert({ online: online.value, channels: syncChannels.value });
+  return a && !isAlertSnoozed(a, alertSnooze.value) ? a : undefined;
+});
 function runAlertAction() {
   const a = statusAlert.value?.action;
   if (!a) return;
-  if (a.scroll) scrollToSync();
+  if (a.sheet) syncSheetOpen.value = true;
   else openOptions(a.route);
+}
+function snoozeAlert() {
+  if (!statusAlert.value) return;
+  alertSnooze.value = { text: statusAlert.value.text, at: Date.now() };
+  writeLocal(ALERT_SNOOZE_KEY, JSON.stringify(alertSnooze.value));
+  showToast('已收起，24 小时内不再提示；底部同步状态中仍可查看');
 }
 /** 正在手动同步的行 id（'all' = 全部） */
 const syncingIds = ref(new Set<string>());
@@ -507,7 +526,6 @@ function setSyncing(id: string, on: boolean) {
   else next.delete(id);
   syncingIds.value = next;
 }
-const CHANNEL_ICON = { source: 'book', 'storage-sync': 'cloud', webdav: 'server' } as const;
 
 /** 来源同步结果汇总为一句提示 */
 function sourceResultText(label: string, results: { ok: boolean; count?: number; message: string }[]): string {
@@ -573,6 +591,24 @@ function openOptions(hash = '') {
   window.close();
 }
 
+// ---------------- 本机界面偏好 ----------------
+
+/** localStorage 读写：隐私模式等不可用时读为 null、写入忽略（只影响记住界面偏好） */
+function readLocal(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeLocal(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* 忽略 */
+  }
+}
+
 // ---------------- 提示条 ----------------
 
 const toast = ref<{ text: string; action?: { label: string; run: () => void } } | null>(null);
@@ -601,10 +637,8 @@ onBeforeUnmount(() => {
         <img class="logo" src="/icons/48.png" alt="" width="28" height="28" />
         <strong class="brand">生词高亮</strong>
         <span class="spacer" />
-        <button type="button" class="icon-btn" title="全部设置" aria-label="全部设置" @click="openOptions()">
-          <PopupIcon name="settings" />
-        </button>
-        <!-- 总开关带文字，与本站卡片里的“本站”开关区分 -->
+        <!-- 总开关带文字，与本站卡片里的“本站”开关区分；设置入口只保留在底栏，顶栏不重复。
+             未授权访问网站时保持原样（置灰会被误读成“扩展被关了”），“不可用”只在本站卡片上说明 -->
         <ToggleSwitch v-model="settings.enabled" class="master" title="总开关：在所有网站高亮生词" aria-label="总开关：在所有网站高亮生词">
           <span class="master-label">全部网站</span>
         </ToggleSwitch>
@@ -615,6 +649,9 @@ onBeforeUnmount(() => {
         <span class="al-text" :title="statusAlert.text">{{ statusAlert.text }}</span>
         <button v-if="statusAlert.action" type="button" class="al-act" @click="runAlertAction">
           {{ statusAlert.action.label }}<PopupIcon name="chevron" :size="14" />
+        </button>
+        <button v-if="statusAlert.dismissible" type="button" class="al-x" title="稍后提醒（24 小时内不再显示）" aria-label="稍后提醒" @click="snoozeAlert">
+          <PopupIcon name="close" :size="14" />
         </button>
       </div>
     </header>
@@ -677,57 +714,63 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <!-- 词书 -->
-      <section class="card">
-        <button type="button" class="card-head as-btn" @click="pickerOpen = true">
-          <span class="head-text">
-            <h2>词书</h2>
-            <span class="sub">
-              {{ enabledMetas.length ? `共 ${formatCount(enabledWordTotal)} 词 · 可多本组合` : '未启用任何词书' }}
-            </span>
-          </span>
-          <span class="link">切换<PopupIcon name="chevron" :size="16" /></span>
-        </button>
+      <!-- 词书：一行（标题 + 已启用词书芯片 + 切换），把首屏留给本页生词 -->
+      <section class="card row-card books">
+        <h2 :title="enabledMetas.length ? `共 ${formatCount(enabledWordTotal)} 词，可多本组合` : undefined">词书</h2>
         <div v-if="enabledMetas.length" class="chips">
           <button v-for="b in enabledMetas" :key="b.id" type="button" class="chip" @click="pickerOpen = true">
             <MarkPreview :mark="markOf(b.id)" word="Aa" />
-            <span class="chip-name">{{ b.name }}</span>
+            <span class="chip-name">{{ b.short || b.name }}</span>
           </button>
         </div>
-        <button v-else type="button" class="btn primary block" @click="pickerOpen = true">选择词书</button>
+        <span v-else class="sub grow">未启用任何词书</span>
+        <button type="button" class="link as-link" :class="{ strong: !enabledMetas.length }" @click="pickerOpen = true">
+          {{ enabledMetas.length ? '切换' : '选择' }}<PopupIcon name="chevron" :size="16" />
+        </button>
       </section>
 
-      <!-- 样式与行内释义 -->
-      <section class="card look">
-        <div class="look-head">
-          <h2>高亮样式</h2>
-          <button type="button" class="link as-link" @click="openOptions(OPTIONS_ROUTES.appearance)">
-            调整<PopupIcon name="chevron" :size="16" />
+      <!-- 样式与行内释义：默认一行（当前预设 + 释义开关），展开后选预设与释义显示方式 -->
+      <section class="card look" :class="{ open: lookOpen }">
+        <div class="look-row">
+          <button type="button" class="look-toggle" :aria-expanded="lookOpen" aria-controls="look-panel" @click="lookOpen = !lookOpen">
+            <h2>样式</h2>
+            <span v-if="currentPreset" class="look-current">
+              <span class="preset-sample mini"><MarkPreview :mark="currentPreset.mark" word="Word" /></span>
+              <span class="look-name">{{ currentPreset.name }}</span>
+            </span>
+            <PopupIcon name="chevron" :size="16" class="caret" />
           </button>
-        </div>
-        <div ref="presetStrip" class="presets" role="radiogroup" aria-label="高亮样式预设">
-          <button
-            v-for="p in presetChips"
-            :key="p.id"
-            type="button"
-            role="radio"
-            class="preset"
-            :aria-checked="settings.style.themeId === p.id"
-            :title="p.name"
-            @click="choosePreset(p.id)"
-          >
-            <span class="preset-sample"><MarkPreview :mark="p.mark" word="Word" /></span>
-            <span class="preset-name">{{ p.name }}</span>
-          </button>
-        </div>
-        <!-- 行内释义：开关 + 显示方式同一行，关闭时只留开关 -->
-        <div class="inline-row">
-          <span class="head-text" title="在生词旁显示简短中文释义">
-            <span class="inline-title">行内释义</span>
-            <span v-if="!inlineOn" class="sub">只高亮，点按或悬停看释义</span>
+          <span class="divider" aria-hidden="true" />
+          <span class="inline-quick" title="在生词旁显示简短中文释义">
+            <span class="inline-title">释义</span>
+            <span v-if="inlineOn" class="inline-mode">{{ inlineModeLabel }}</span>
           </span>
-          <SegmentedControl v-if="inlineOn" v-model="inlineShowMode" class="seg" :options="inlineShowOptions" />
           <ToggleSwitch v-model="inlineOn" class="inline-toggle" aria-label="行内释义" />
+        </div>
+        <div v-if="lookOpen" id="look-panel" class="look-panel">
+          <div class="presets" role="radiogroup" aria-label="高亮样式预设">
+            <button
+              v-for="p in presetChips"
+              :key="p.id"
+              type="button"
+              role="radio"
+              class="preset"
+              :aria-checked="settings.style.themeId === p.id"
+              :title="p.name"
+              @click="choosePreset(p.id)"
+            >
+              <span class="preset-sample"><MarkPreview :mark="p.mark" word="Word" /></span>
+              <span class="preset-name">{{ p.name }}</span>
+            </button>
+          </div>
+          <div class="inline-row">
+            <span class="inline-label">行内释义</span>
+            <SegmentedControl v-if="inlineOn" v-model="inlineShowMode" class="seg" :options="inlineShowOptions" />
+            <span v-else class="sub grow">已关闭：只高亮，点按或悬停看释义</span>
+          </div>
+          <button type="button" class="link as-link more-look" @click="openOptions(OPTIONS_ROUTES.appearance)">
+            调整颜色与字号<PopupIcon name="chevron" :size="16" />
+          </button>
         </div>
       </section>
 
@@ -735,15 +778,29 @@ onBeforeUnmount(() => {
       <section class="card words">
         <div class="tabs" role="tablist">
           <button type="button" role="tab" :aria-selected="tab === 'page'" :class="{ on: tab === 'page' }" @click="tab = 'page'">
-            本页生词<span class="count">{{ data.pageLemmas.value.length }}</span>
+            <!-- 无法读取本页（未授权 / 内置页 / 未注入）时显示“—”，避免“0”被理解成“本页没有生词” -->
+            本页生词<span class="count" :class="{ na: pageStatus !== 'active' }">{{ pageCountLabel }}</span>
           </button>
           <button type="button" role="tab" :aria-selected="tab === 'known'" :class="{ on: tab === 'known' }" @click="tab = 'known'">
             熟词本<span class="count">{{ knownTotal }}</span>
           </button>
+          <span class="spacer" />
+          <!-- 筛选默认收成标签栏右侧的图标，点开才占一行，首屏多露出一行生词 -->
+          <button
+            v-if="sourceWords.length > 8 && !searchOpen"
+            type="button"
+            class="tab-search"
+            :aria-label="tab === 'page' ? '筛选本页生词' : '筛选最近的熟词'"
+            title="筛选"
+            @click="openSearch"
+          >
+            <PopupIcon name="search" :size="17" />
+          </button>
         </div>
-        <label v-if="sourceWords.length > 8" class="search">
+        <label v-if="searchOpen" class="search">
           <PopupIcon name="search" :size="16" />
-          <input v-model="query" type="search" :placeholder="tab === 'page' ? '筛选本页生词' : '筛选最近的熟词'" />
+          <input ref="searchInput" v-model="query" type="search" :placeholder="tab === 'page' ? '筛选本页生词' : '筛选最近的熟词'" @keydown.esc.stop="closeSearch" />
+          <button type="button" class="search-x" aria-label="关闭筛选" @click="closeSearch"><PopupIcon name="close" :size="15" /></button>
         </label>
 
         <div class="list-wrap" :class="{ expanded: listExpanded }">
@@ -760,83 +817,60 @@ onBeforeUnmount(() => {
             <template v-if="query">没有匹配“{{ query }}”的单词</template>
             <template v-else-if="tab === 'known'">还没有熟词。点生词右侧的 <PopupIcon name="check-check" :size="14" class="inline-icon" /> 即可标为熟词，之后不再高亮</template>
             <template v-else-if="pageStatus === 'active'">本页没有命中启用词书的生词</template>
+            <!-- 授权的唯一主按钮在本站卡片上，这里只说明 -->
+            <template v-else-if="pageStatus === 'no-access'">授权后显示本页生词</template>
             <template v-else>{{ pageStatusText.text }}</template>
           </div>
-          <button v-if="filtered.length > limit" type="button" class="more" @click="limit += PAGE_SIZE * 4">
-            显示更多（还有 {{ filtered.length - limit }} 个）
+          <button v-if="listExpanded && filtered.length > limit" type="button" class="more" @click="limit += EXPANDED_CHUNK">
+            继续显示（还有 {{ filtered.length - limit }} 个）
           </button>
           <p v-if="tab === 'known' && knownTotal > knownList.length && !query" class="foot-note">
             仅显示最近 {{ knownList.length }} 个，<a href="#" @click.prevent="openOptions(OPTIONS_ROUTES.known)">管理全部熟词</a>
           </p>
         </div>
-        <!-- 桌面：列表默认卡片内滚动，超过约 5 行时给出明确的“查看全部”入口（触屏整页本就随页面滚动） -->
-        <button v-if="!touchUi && !listExpanded && filtered.length > 5" type="button" class="more see-all" @click="listExpanded = true">
+        <!-- 列表折叠时（桌面卡片内滚动约 5 行 / 触屏前 12 行）给出明确的“查看全部”入口，两端文案一致 -->
+        <button v-if="!listExpanded && filtered.length > COLLAPSED_VISIBLE" type="button" class="more see-all" @click="listExpanded = true">
           查看全部 {{ filtered.length }} 个<PopupIcon name="chevron" :size="14" class="down" />
         </button>
-      </section>
-
-      <!-- 总同步状态 -->
-      <section ref="syncCard" class="card sync" :class="[`sync-${syncOverall.tone}`, { collapsed: !syncExpanded }]">
-        <div class="sync-head">
-          <!-- 正常时折叠成一行，点标题展开各项；有出错/待处理项时固定展开 -->
-          <button
-            type="button"
-            class="sync-toggle"
-            :aria-expanded="syncExpanded"
-            :disabled="syncNeedsAttention || !syncChannels.length"
-            @click="syncExpandedByUser = !syncExpandedByUser"
-          >
-            <h2>同步</h2>
-            <span class="sync-overall" :class="`tone-${syncOverall.tone}`"><i class="dot" />{{ syncOverall.text }}</span>
-            <PopupIcon v-if="syncChannels.length && !syncNeedsAttention" name="chevron" :size="14" class="caret" />
-          </button>
-          <span class="spacer" />
-          <button
-            v-if="syncChannels.length > 1"
-            type="button"
-            class="btn small"
-            :disabled="syncBusy('all')"
-            @click="syncAll"
-          >
-            <PopupIcon name="refresh" :size="14" :class="{ spin: syncBusy('all') }" />全部同步
-          </button>
-        </div>
-        <ul v-if="syncChannels.length && syncExpanded" class="sync-list">
-          <li v-for="c in syncChannels" :key="c.id" class="sync-row">
-            <PopupIcon :name="CHANNEL_ICON[c.kind]" class="sync-ic" />
-            <span class="sync-text">
-              <span class="sync-label">{{ c.label }}</span>
-              <!-- 出错原因最多两行，完整文本见 title；按钮写具体修复动作 -->
-              <span class="sync-status" :class="`tone-${c.status.tone}`" :title="c.status.text">{{ c.status.text }}</span>
-            </span>
-            <button v-if="c.action === 'fix'" type="button" class="btn small fix" @click="openOptions(c.route)">
-              {{ syncFixVerb(c) }}<PopupIcon name="chevron" :size="14" />
-            </button>
-            <button
-              v-else
-              type="button"
-              class="btn small"
-              :disabled="syncBusy(c.id) || c.running"
-              :aria-label="`立即同步${c.label}`"
-              @click="syncChannel(c)"
-            >
-              <PopupIcon name="refresh" :size="14" :class="{ spin: syncBusy(c.id) || c.running }" />同步
-            </button>
-          </li>
-        </ul>
-        <div v-else-if="!syncChannels.length" class="sync-empty">
-          <span>连接有道 / 欧路生词本，或开启跨设备同步</span>
-          <button type="button" class="btn small" @click="openOptions(OPTIONS_ROUTES.sources)">去设置</button>
-        </div>
       </section>
     </div>
 
     <footer class="bottom">
-      <button type="button" class="btn" @click="openOptions(OPTIONS_ROUTES.importBooks)">导入词书</button>
-      <!-- 次要样式：主操作（授权 / 启用词书）才用实心主色，避免与之抢视线 -->
-      <button type="button" class="btn" @click="openOptions()">
-        <PopupIcon name="settings" :size="16" />全部设置
-      </button>
+      <!-- 总同步状态：一行固定在底栏（手机首屏也能看到“上次同步时间”），点开就地弹出各项详情；
+           有需要处理的项时右侧直接给第一项的修复动作，否则是“全部同步” -->
+      <div class="syncbar" :class="`sync-${syncOverall.tone}`">
+        <button
+          type="button"
+          class="syncbar-main"
+          :aria-label="`同步状态：${syncOverall.text}，查看详情`"
+          @click="syncChannels.length ? (syncSheetOpen = true) : openOptions(OPTIONS_ROUTES.sources)"
+        >
+          <PopupIcon name="cloud" :size="15" class="syncbar-ic" />
+          <span class="sync-overall" :class="`tone-${syncOverall.tone}`"><i class="dot" />{{ syncOverall.text }}</span>
+          <PopupIcon name="chevron" :size="14" class="caret" />
+        </button>
+        <button v-if="syncFix" type="button" class="btn small fix" @click="openOptions(syncFix.route)">
+          {{ syncFixVerb(syncFix) }}<PopupIcon name="chevron" :size="14" />
+        </button>
+        <button
+          v-else-if="syncChannels.length"
+          type="button"
+          class="btn small ghost"
+          :disabled="syncBusy('all')"
+          :aria-label="syncChannels.length > 1 ? '全部同步' : '立即同步'"
+          @click="syncAll"
+        >
+          <PopupIcon name="refresh" :size="14" :class="{ spin: syncBusy('all') }" />{{ syncChannels.length > 1 ? '全部同步' : '同步' }}
+        </button>
+        <button v-else type="button" class="btn small ghost" @click="openOptions(OPTIONS_ROUTES.sources)">去设置</button>
+      </div>
+      <div class="bottom-actions">
+        <button type="button" class="btn" @click="openOptions(OPTIONS_ROUTES.importBooks)">导入词书</button>
+        <!-- 次要样式：主操作（授权 / 启用词书）才用实心主色，避免与之抢视线 -->
+        <button type="button" class="btn" @click="openOptions()">
+          <PopupIcon name="settings" :size="16" />全部设置
+        </button>
+      </div>
     </footer>
 
     <BottomSheet v-model="pickerOpen" title="切换词书" subtitle="可多选组合；先启用的词书优先决定高亮颜色">
@@ -844,6 +878,21 @@ onBeforeUnmount(() => {
       <template #footer>
         <button type="button" class="btn" @click="openOptions(OPTIONS_ROUTES.books)">管理与排序</button>
         <button type="button" class="btn primary" @click="pickerOpen = false">完成</button>
+      </template>
+    </BottomSheet>
+
+    <!-- 同步状态面板：告警条“N 项需处理”与底栏同步行就地打开 -->
+    <BottomSheet v-model="syncSheetOpen" title="同步状态" :subtitle="syncOverall.text">
+      <SyncList :channels="syncChannels" :is-busy="syncBusy" @sync="syncChannel" @fix="(c) => openOptions(c.route)" />
+      <template #footer>
+        <!-- 有出错项时“全部同步”大概率再次失败：降为次要，主按钮换成第一项的修复动作 -->
+        <button v-if="syncChannels.length > 1" type="button" class="btn" :class="{ primary: !syncFix }" :disabled="syncBusy('all')" @click="syncAll">
+          <PopupIcon name="refresh" :size="16" :class="{ spin: syncBusy('all') }" />全部同步
+        </button>
+        <button v-else type="button" class="btn" @click="openOptions(OPTIONS_ROUTES.sync)">同步设置</button>
+        <button v-if="syncFix" type="button" class="btn primary" @click="openOptions(syncFix.route)">
+          {{ syncFixVerb(syncFix) }}：{{ syncFix.label }}
+        </button>
       </template>
     </BottomSheet>
 
@@ -883,7 +932,7 @@ onBeforeUnmount(() => {
 
 /* 顶部固定状态位：一行，高度 ≤ 36px，不把下面的内容推出首屏太多 */
 .status-alert {
-  display: flex; align-items: center; gap: 8px; min-height: 33px; padding: 3px 6px 3px 12px; font-size: 12.5px;
+  display: flex; align-items: center; gap: 6px; min-height: 33px; padding: 3px 12px; font-size: 12.5px;
   border-top: 1px solid var(--border);
 }
 .status-alert.al-error { background: var(--danger-soft); color: var(--danger); }
@@ -893,6 +942,11 @@ onBeforeUnmount(() => {
   flex: none; display: inline-flex; align-items: center; gap: 2px; min-height: 28px; padding: 0 8px; border-radius: 8px;
   border: 1px solid currentColor; background: var(--surface); color: inherit; font-weight: 650; font-size: 12.5px; cursor: pointer;
 }
+.al-x {
+  flex: none; display: grid; place-items: center; width: 28px; height: 28px; margin-right: -4px; border: 0; border-radius: 8px;
+  background: none; color: inherit; opacity: .75; cursor: pointer;
+}
+.al-x:hover { opacity: 1; background: color-mix(in srgb, currentColor 12%, transparent); }
 .logo { border-radius: 7px; }
 .brand { font-size: 15.5px; font-weight: 700; letter-spacing: .02em; }
 .spacer { flex: 1; }
@@ -903,7 +957,7 @@ onBeforeUnmount(() => {
 }
 .icon-btn:hover { background: var(--surface-2); color: var(--text); }
 
-.content { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; }
+.content { display: flex; flex-direction: column; gap: 8px; padding: 8px 12px 10px; }
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
@@ -939,7 +993,15 @@ h2 { margin: 0; font-size: 14px; font-weight: 650; }
 }
 .as-btn .head-text { flex: 1; }
 .link { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); font-size: 13px; font-weight: 600; flex: none; }
-.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 12px; }
+/* 一行卡片：标题 + 内容 + 右侧入口 */
+.row-card { flex-direction: row; align-items: center; gap: 10px; padding-top: 8px; padding-bottom: 8px; }
+.row-card h2 { flex: none; }
+.grow { flex: 1; min-width: 0; }
+.chips {
+  flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent);
+}
+.link.strong { font-weight: 700; }
 .chips::-webkit-scrollbar { display: none; }
 .chip { flex: none; }
 .chip {
@@ -965,32 +1027,41 @@ h2 { margin: 0; font-size: 14px; font-weight: 650; }
 .link-btn { border: 0; background: none; color: var(--accent); font-weight: 650; cursor: pointer; padding: 4px 2px; font-size: 12.5px; }
 .update .x { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--text-2); cursor: pointer; }
 
-/* 高亮样式预设 + 行内释义 */
-.look-head { display: flex; align-items: center; justify-content: space-between; }
-.as-link { border: 0; background: none; padding: 2px 0; cursor: pointer; }
-.presets {
-  display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 2px 12px 4px;
-  scroll-padding: 0 12px; overscroll-behavior-x: contain;
+/* 样式与行内释义：折叠时一行 */
+.look { padding-top: 6px; padding-bottom: 6px; }
+.look-row { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.look-toggle {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none;
+  color: inherit; cursor: pointer; text-align: left; min-height: 36px;
 }
-.presets::-webkit-scrollbar { display: none; }
-/* 右缘渐隐：提示还能横向滑动 */
-.presets { mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+.look-current { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.look-name { font-size: 13px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.look-toggle .caret { flex: none; color: var(--text-2); transition: transform .15s; }
+.look.open .look-toggle .caret { transform: rotate(90deg); }
+.divider { width: 1px; align-self: stretch; margin: 6px 2px; background: var(--border); flex: none; }
+.inline-quick { display: inline-flex; align-items: baseline; gap: 5px; flex: none; }
+.inline-title { font-weight: 650; font-size: 13.5px; }
+.inline-mode { font-size: 12px; color: var(--accent); font-weight: 600; }
+.inline-toggle { min-height: 0; flex: none; }
+.as-link { border: 0; background: none; padding: 2px 0; cursor: pointer; }
+.look-panel { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 4px; border-top: 1px solid var(--border); margin-top: 4px; }
+/* 预设平铺成网格（不横向滚动，不会裁掉半张） */
+.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; }
 .preset {
-  flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 64px; padding: 6px 4px 5px;
+  min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px 5px;
   border-radius: 10px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; color: var(--text);
 }
 .preset:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
 .preset[aria-checked='true'] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
 /* 样例词用固定的正文色与背景，与网页上看到的效果接近 */
 .preset-sample { font-size: 13.5px; line-height: 1.6; font-family: Georgia, 'Times New Roman', serif; color: var(--text); white-space: nowrap; }
+.preset-sample.mini { font-size: 13px; line-height: 1.4; }
 .preset-name { font-size: 11px; color: var(--text-2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preset[aria-checked='true'] .preset-name { color: var(--accent); font-weight: 650; }
-.inline-row { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid var(--border); min-height: 46px; }
-.inline-row .head-text { flex: 1; min-width: 0; }
-.inline-row .seg { flex: 0 1 172px; }
-
-.inline-title { font-weight: 650; font-size: 13.5px; }
-.inline-toggle { min-height: 0; }
+.inline-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.inline-label { font-weight: 650; font-size: 13px; flex: none; }
+.inline-row .seg { flex: 1; }
+.more-look { align-self: flex-start; font-size: 12.5px; }
 
 /* 单词列表 */
 .words { padding-bottom: 4px; }
@@ -1003,11 +1074,18 @@ h2 { margin: 0; font-size: 14px; font-weight: 650; }
 .tabs button.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); }
 .count { font-size: 11.5px; font-weight: 650; padding: 0 6px; line-height: 18px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); }
 .tabs button.on .count { background: var(--accent-soft); color: var(--accent); }
+.tabs button.on .count.na { background: var(--surface-2); color: var(--text-2); }
 .search {
   display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: var(--radius-sm);
   background: var(--surface-2); color: var(--text-2);
 }
-.search input { border: 0; background: transparent; min-height: 34px; padding: 0; outline: none; color: var(--text); }
+.tabs .tab-search {
+  display: grid; place-items: center; width: 34px; height: 34px; align-self: center; border: 0; border-radius: 9px;
+  background: none; color: var(--text-2); cursor: pointer;
+}
+.tabs .tab-search:hover { background: var(--surface-2); color: var(--text); }
+.search-x { display: grid; place-items: center; width: 30px; height: 30px; border: 0; background: none; color: var(--text-2); cursor: pointer; flex: none; }
+.search input { flex: 1; min-width: 0; border: 0; background: transparent; min-height: 34px; padding: 0; outline: none; color: var(--text); }
 .search:focus-within { box-shadow: 0 0 0 2px var(--accent); }
 /* 桌面 popup 高度有限：列表内部滚动，保证同步状态与底栏在首屏可见 */
 .list-wrap { max-height: 236px; overflow: auto; overscroll-behavior: contain; margin: 0 -6px; padding: 0 6px; }
@@ -1019,45 +1097,40 @@ h2 { margin: 0; font-size: 14px; font-weight: 650; }
 .more { width: 100%; min-height: 36px; border: 0; background: none; color: var(--accent); cursor: pointer; font-weight: 600; font-size: 13px; }
 .foot-note { margin: 4px 0 6px; text-align: center; font-size: 12px; color: var(--text-2); }
 
-/* 同步 */
-.sync { gap: 4px; }
-.sync-head { display: flex; align-items: center; gap: 8px; min-height: 30px; }
-.sync-toggle {
-  display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; text-align: left;
+/* 底栏同步行：一行总状态（含上次同步时间）+ 修复动作 / 全部同步 */
+.syncbar { display: flex; align-items: center; gap: 6px; min-height: 32px; }
+.syncbar-main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 6px; margin-left: -6px;
+  border: 0; border-radius: 8px; background: none; color: inherit; cursor: pointer; text-align: left;
 }
-.sync-toggle:disabled { cursor: default; }
-.sync-toggle .caret { flex: none; color: var(--text-2); transform: rotate(90deg); transition: transform .15s; }
-.sync.collapsed .sync-toggle .caret { transform: none; }
-.sync.collapsed { padding-top: 6px; padding-bottom: 6px; }
-.sync-overall { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sync-overall .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
-.sync-list { list-style: none; margin: 0; padding: 0; }
-.sync-row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 3px 0; }
-.sync-row + .sync-row { border-top: 1px solid var(--border); }
-.sync-ic { color: var(--text-2); }
-.sync-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.35; }
-.sync-label { font-size: 13px; font-weight: 600; }
-.sync-status { font-size: 12px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; word-break: break-word; }
-.sync-status.tone-ok, .sync-status.tone-muted { color: var(--text-2); }
+.syncbar-main:hover { background: var(--surface-2); }
+.syncbar-ic { flex: none; color: var(--text-2); }
+.syncbar-main .caret { flex: none; color: var(--text-2); }
+/* 块级 + 省略号：窄屏长文案截断而不是换行撑高底栏 */
+.sync-overall { display: block; min-width: 0; font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sync-overall .dot { display: inline-block; width: 7px; height: 7px; margin-right: 5px; vertical-align: 1px; border-radius: 50%; background: currentColor; }
+.sync-ok .sync-overall, .sync-muted .sync-overall { font-weight: 500; }
+.btn.ghost { border-color: transparent; background: none; color: var(--text-2); }
+.btn.ghost:hover { background: var(--surface-2); color: var(--text); }
 .btn.fix { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); font-weight: 650; gap: 0; }
-.sync-empty { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); }
-.sync-empty span { flex: 1; }
+.sync-warn .btn.fix { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--border)); }
 .btn.small { min-height: 30px; padding: 3px 10px; font-size: 12.5px; gap: 4px; flex: none; }
 .spin { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* 底栏 */
 .bottom {
-  position: sticky; bottom: 0; z-index: 5; display: flex; gap: 8px; padding: 10px 12px;
+  position: sticky; bottom: 0; z-index: 5; display: flex; flex-direction: column; gap: 6px; padding: 6px 12px 10px;
   background: var(--surface); border-top: 1px solid var(--border);
 }
-.bottom .btn { flex: 1; }
+.bottom-actions { display: flex; gap: 8px; }
+.bottom-actions .btn { flex: 1; }
 
 .detail-word { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: .01em; word-break: break-word; }
 
 /* 提示条 */
 .toast {
-  position: fixed; left: 12px; right: 12px; bottom: 68px; z-index: 30; display: flex; align-items: center; gap: 10px;
+  position: fixed; left: 12px; right: 12px; bottom: 100px; z-index: 30; display: flex; align-items: center; gap: 10px;
   padding: 10px 12px 10px 14px; border-radius: 12px; background: var(--toast-bg); color: var(--toast-fg); font-size: 13px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
 }
@@ -1090,8 +1163,15 @@ h2 { margin: 0; font-size: 14px; font-weight: 650; }
 .touch .card { padding: 12px 14px; }
 .touch .tabs { margin: -2px -14px 0; padding: 0 14px; gap: 22px; }
 .touch .tabs button { min-height: 44px; font-size: 14.5px; }
-.touch .chips { margin: 0 -14px; padding: 0 14px; }
+.touch .tabs .tab-search { width: 44px; height: 44px; min-height: 0; margin-right: -10px; }
+.touch .search-x { width: 40px; height: 40px; }
+.touch .row-card { padding-top: 6px; padding-bottom: 6px; }
 .touch .chip { min-height: 38px; font-size: 13.5px; }
+.touch .look { padding-top: 4px; padding-bottom: 4px; }
+.touch .look-row, .touch .look-toggle { min-height: 48px; }
+.touch .look-name { font-size: 14px; }
+.touch .al-x { width: 40px; height: 40px; }
+.touch :deep(.sync-main) { min-height: 54px; }
 /* 子组件的触屏尺寸（其自身用 pointer: coarse，这里按 touchUi 兜底） */
 .touch :deep(.list .main) { min-height: 52px; }
 .touch :deep(.list .act) { width: 46px; height: 46px; }
@@ -1101,25 +1181,22 @@ h2 { margin: 0; font-size: 14px; font-weight: 650; }
 .touch :deep(.speak) { min-height: 40px; }
 .touch .list-wrap { max-height: none; overflow: visible; }
 /* 触屏整页：本页生词放在同步之前（首屏能看到单词）；同步出错由顶部状态位提示 */
-.touch .presets { margin: 0 -14px; padding: 2px 14px 4px; scroll-padding: 0 14px; }
-.touch .preset { width: 74px; padding: 8px 4px 7px; }
+.touch .presets { grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 8px; }
+.touch .preset { padding: 8px 4px 7px; }
 .touch .preset-sample { font-size: 15px; }
 .touch .preset-name { font-size: 12px; }
 .touch .as-link { min-height: 44px; }
-.touch .inline-row { min-height: 52px; }
+.touch .inline-row { min-height: 48px; }
 .touch .inline-title { font-size: 14.5px; }
-.touch .look-head { margin: -6px 0 -4px; }
 .touch .grant { min-height: 44px; font-size: 15px; }
 .touch .access-note { font-size: 13px; }
 .touch .update .x { width: 40px; height: 40px; }
 .touch .link-btn { min-height: 40px; }
 .touch .search input { min-height: 42px; font-size: 15px; }
-.touch .sync-head { min-height: 40px; }
-.touch .sync-row { min-height: 54px; }
-.touch .sync-label { font-size: 14px; }
-.touch .sync-status { font-size: 12.5px; }
+.touch .syncbar, .touch .syncbar-main { min-height: 44px; }
+.touch .sync-overall { font-size: 13.5px; }
 .touch .btn.small { min-height: 38px; padding: 4px 12px; font-size: 13px; }
-.touch .bottom { padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-.touch .bottom .btn { min-height: 46px; font-size: 15px; }
-.touch .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
+.touch .bottom { padding: 4px 12px 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); gap: 4px; }
+.touch .bottom-actions .btn { min-height: 46px; font-size: 15px; }
+.touch .toast { bottom: calc(126px + env(safe-area-inset-bottom)); }
 </style>
