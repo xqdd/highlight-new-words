@@ -1,0 +1,16 @@
+{
+ "code": 0,
+ "msg": "SUCCESS",
+ "data": [
+  {
+   "bookId": "cb4d8e17b63e7fe6b08f4f228c901bcf",
+   "bookName": "未分组",
+   "isDefault": false
+  },
+  {
+   "bookId": "0",
+   "bookName": "无标签",
+   "isDefault": true
+  }
+ ]
+}

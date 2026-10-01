@@ -1,0 +1,27 @@
+{
+ "code": 0,
+ "msg": "SUCCESS",
+ "data": {
+  "total": 2,
+  "itemList": [
+   {
+    "itemId": "19d93054edfd61cefcfee5d7d01948d8",
+    "bookId": "0",
+    "bookName": "无标签",
+    "word": "zyzzyva",
+    "trans": "n.象鼻虫",
+    "phonetic": "",
+    "modifiedTime": 1790816162416
+   },
+   {
+    "itemId": "5f03136d5f797021e3ada4ac2895f54e",
+    "bookId": "0",
+    "bookName": "无标签",
+    "word": "zyzzyvas",
+    "trans": "n.象鼻虫",
+    "phonetic": "",
+    "modifiedTime": 1790816162462
+   }
+  ]
+ }
+}

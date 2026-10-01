@@ -1,0 +1,417 @@
+# 词形还原金标测试集（lemma 分片，手工整理，固定不随实现调整）
+# 列：单词<TAB>可接受的原形（|分隔）<TAB>类别<TAB>禁止出现在候选中的误还原（|分隔，可空；只列真实英语单词）
+# 类别：verb 规则动词变化 / irr-verb 不规则动词 / plural 规则复数 / irr-plural 不规则复数 /
+#       degree 比较级最高级 / possessive 所有格 / deriv 派生词（回到词根） / keep 不应还原的词
+walked	walk	verb
+studies	study	verb
+studied	study	verb
+studying	study	verb
+stopped	stop	verb
+stopping	stop	verb
+planned	plan	verb
+loved	love	verb
+loving	love	verb
+hoped	hope	verb	hop
+hoping	hope	verb	hop
+hopped	hop	verb	hope
+watches	watch	verb
+watched	watch	verb
+fixes	fix	verb
+cries	cry	verb
+cried	cry	verb
+lying	lie	verb
+dying	die	verb
+tying	tie	verb
+abandoned	abandon	verb
+admitted	admit	verb
+referred	refer	verb
+occurred	occur	verb
+travelled	travel	verb
+traveling	travel	verb
+panicked	panic	verb
+created	create	verb
+argued	argue	verb
+agreeing	agree	verb
+seeing	see	verb
+fleeing	flee	verb
+received	receive	verb
+analyzed	analyze	verb
+emphasizes	emphasize	verb
+goes	go	verb
+does	do	verb
+has	have	verb
+used	use	verb	us
+uses	use	verb	us
+caused	cause	verb
+reduced	reduce	verb
+judged	judge	verb
+offered	offer	verb
+visited	visit	verb
+happened	happen	verb
+controlled	control	verb
+preferred	prefer	verb
+went	go	irr-verb
+gone	go	irr-verb
+ran	run	irr-verb
+running	run	irr-verb
+began	begin	irr-verb
+begun	begin	irr-verb
+taught	teach	irr-verb
+thought	think	irr-verb
+brought	bring	irr-verb
+bought	buy	irr-verb
+caught	catch	irr-verb
+fought	fight	irr-verb
+sought	seek	irr-verb
+wrote	write	irr-verb
+written	write	irr-verb
+ate	eat	irr-verb
+eaten	eat	irr-verb
+drove	drive	irr-verb
+driven	drive	irr-verb
+spoke	speak	irr-verb
+spoken	speak	irr-verb
+chose	choose	irr-verb
+chosen	choose	irr-verb
+froze	freeze	irr-verb
+frozen	freeze	irr-verb
+swam	swim	irr-verb
+swum	swim	irr-verb
+sang	sing	irr-verb
+sung	sing	irr-verb
+drank	drink	irr-verb
+drunk	drink	irr-verb
+knew	know	irr-verb
+known	know	irr-verb
+grew	grow	irr-verb
+grown	grow	irr-verb
+threw	throw	irr-verb
+thrown	throw	irr-verb
+flew	fly	irr-verb
+flown	fly	irr-verb
+was	be	irr-verb
+were	be	irr-verb
+been	be	irr-verb
+is	be	irr-verb
+am	be	irr-verb
+had	have	irr-verb
+did	do	irr-verb
+done	do	irr-verb
+made	make	irr-verb
+said	say	irr-verb
+paid	pay	irr-verb
+laid	lay	irr-verb
+kept	keep	irr-verb
+slept	sleep	irr-verb
+felt	feel	irr-verb
+dealt	deal	irr-verb
+meant	mean	irr-verb
+built	build	irr-verb
+sent	send	irr-verb
+spent	spend	irr-verb
+lost	lose	irr-verb
+held	hold	irr-verb
+stood	stand	irr-verb
+understood	understand	irr-verb
+told	tell	irr-verb
+sold	sell	irr-verb
+struck	strike	irr-verb
+stuck	stick	irr-verb
+dug	dig	irr-verb
+hung	hang	irr-verb
+woke	wake	irr-verb
+woken	wake	irr-verb
+arose	arise	irr-verb
+arisen	arise	irr-verb
+forgot	forget	irr-verb
+forgotten	forget	irr-verb
+forgave	forgive	irr-verb
+forgiven	forgive	irr-verb
+overcame	overcome	irr-verb
+undertook	undertake	irr-verb
+withdrew	withdraw	irr-verb
+withdrawn	withdraw	irr-verb
+bore	bear	irr-verb
+borne	bear	irr-verb
+tore	tear	irr-verb
+torn	tear	irr-verb
+wore	wear	irr-verb
+worn	wear	irr-verb
+shook	shake	irr-verb
+shaken	shake	irr-verb
+rode	ride	irr-verb
+ridden	ride	irr-verb
+rose	rise	irr-verb
+risen	rise	irr-verb
+fell	fall	irr-verb
+fallen	fall	irr-verb
+lent	lend	irr-verb
+bent	bend	irr-verb
+fled	flee	irr-verb
+bled	bleed	irr-verb
+fed	feed	irr-verb
+led	lead	irr-verb
+sped	speed	irr-verb
+slid	slide	irr-verb
+hid	hide	irr-verb
+hidden	hide	irr-verb
+bit	bite	irr-verb
+bitten	bite	irr-verb
+lit	light	irr-verb
+won	win	irr-verb
+spun	spin	irr-verb
+swore	swear	irr-verb
+sworn	swear	irr-verb
+cats	cat	plural
+boxes	box	plural
+churches	church	plural
+dishes	dish	plural
+babies	baby	plural
+cities	city	plural
+days	day	plural
+toys	toy	plural
+potatoes	potato	plural
+heroes	hero	plural
+photos	photo	plural
+pianos	piano	plural
+buses	bus	plural
+classes	class	plural
+quizzes	quiz	plural
+houses	house	plural
+horses	horse	plural
+prices	price	plural
+roofs	roof	plural
+chiefs	chief	plural
+beliefs	belief	plural
+movies	movie	plural
+ties	tie	plural
+analyses	analysis	irr-plural
+crises	crisis	irr-plural
+theses	thesis	irr-plural
+hypotheses	hypothesis	irr-plural
+phenomena	phenomenon	irr-plural
+criteria	criterion	irr-plural
+cacti	cactus	irr-plural
+fungi	fungus	irr-plural
+stimuli	stimulus	irr-plural
+nuclei	nucleus	irr-plural
+appendices	appendix	irr-plural
+indices	index	irr-plural
+matrices	matrix	irr-plural
+children	child	irr-plural
+men	man	irr-plural
+women	woman	irr-plural
+feet	foot	irr-plural
+teeth	tooth	irr-plural
+geese	goose	irr-plural
+mice	mouse	irr-plural
+oxen	ox	irr-plural
+knives	knife	irr-plural
+wives	wife	irr-plural
+lives	life|live	irr-plural
+leaves	leaf|leave	irr-plural
+wolves	wolf	irr-plural
+halves	half	irr-plural
+shelves	shelf	irr-plural
+thieves	thief	irr-plural
+loaves	loaf	irr-plural
+selves	self	irr-plural
+businessmen	businessman	irr-plural
+policemen	policeman	irr-plural
+bigger	big	degree
+biggest	big	degree
+happier	happy	degree
+happiest	happy	degree
+larger	large	degree
+largest	large	degree
+nicer	nice	degree
+hotter	hot	degree
+thinner	thin	degree
+easier	easy	degree
+earliest	early	degree
+busier	busy	degree
+simpler	simple	degree
+gentler	gentle	degree
+narrower	narrow	degree
+cleverest	clever	degree
+quieter	quiet	degree
+better	good|well	degree
+best	good|well	degree
+worse	bad|badly|ill	degree
+worst	bad|badly|ill	degree
+further	far	degree
+furthest	far	degree
+farther	far	degree
+less	little	degree
+least	little	degree
+more	many|much	degree
+most	many|much	degree
+elder	old	degree
+eldest	old	degree
+children's	child	possessive
+teacher's	teacher	possessive
+women's	woman	possessive
+company's	company	possessive
+world's	world	possessive
+government's	government	possessive
+people's	people|person	possessive
+John’s	john	possessive
+happiness	happy	deriv
+happily	happy	deriv
+unhappiness	unhappy|happy	deriv
+quickly	quick	deriv
+slowly	slow	deriv
+carefully	careful|care	deriv
+careless	care	deriv
+carelessly	careless|care	deriv
+carelessness	careless|care	deriv
+hopeful	hope	deriv
+hopeless	hope	deriv
+hopelessly	hopeless|hope	deriv
+beautiful	beauty	deriv
+beautifully	beautiful|beauty	deriv
+painful	pain	deriv
+harmless	harm	deriv
+useful	use	deriv
+useless	use	deriv
+usefulness	useful|use	deriv
+kindness	kind	deriv
+darkness	dark	deriv
+weakness	weak	deriv
+illness	ill	deriv
+loneliness	lonely	deriv
+emptiness	empty	deriv
+development	develop	deriv
+government	govern	deriv
+agreement	agree	deriv
+argument	argue	deriv
+movement	move	deriv
+payment	pay	deriv
+enjoyment	enjoy	deriv
+achievement	achieve	deriv
+teacher	teach	deriv
+worker	work	deriv
+writer	write	deriv
+runner	run	deriv
+singer	sing	deriv
+reader	read	deriv
+player	play	deriv
+actor	act	deriv
+sailor	sail	deriv
+visitor	visit	deriv
+basically	basic	deriv
+dramatically	dramatic	deriv
+automatically	automatic	deriv
+economically	economic|economical|economy	deriv
+naturally	natural|nature	deriv
+finally	final	deriv
+easily	easy	deriv
+angrily	angry	deriv
+heavily	heavy	deriv
+possibly	possible	deriv
+probably	probable	deriv
+terribly	terrible	deriv
+truly	true	deriv
+fully	full	deriv
+completely	complete	deriv
+extremely	extreme	deriv
+friendship	friend	deriv
+childhood	child	deriv
+freedom	free	deriv
+creation	create	deriv
+decision	decide	deriv
+discussion	discuss	deriv
+education	educate	deriv
+explanation	explain	deriv
+organization	organize	deriv
+reality	real	deriv
+ability	able	deriv
+national	nation	deriv
+cultural	culture	deriv
+musical	music	deriv
+dangerous	danger	deriv
+famous	fame	deriv
+rainy	rain	deriv
+sunny	sun	deriv
+childish	child	deriv
+modernize	modern	deriv
+realize	real	deriv
+washable	wash	deriv
+creative	create	deriv
+difference	differ|different	deriv
+performance	perform	deriv
+news	news	keep	new
+business	business	keep	busy
+businesses	business	keep	busy
+series	series	keep
+species	species	keep	specie
+always	always	keep
+during	during	keep	dure
+nothing	nothing	keep
+something	something	keep
+morning	morning	keep	morn|mourn
+evening	evening	keep	even
+ceiling	ceiling	keep	ceil
+string	string	keep
+spring	spring	keep
+thing	thing	keep
+king	king	keep
+bus	bus	keep
+gas	gas	keep
+this	this	keep
+his	his	keep	hi
+its	its	keep	it
+us	us	keep
+yes	yes	keep	ye
+hardly	hardly	keep	hard
+lately	lately	keep	late
+corner	corner	keep	corn
+finger	finger	keep	fin
+summer	summer	keep	sum
+number	number	keep	numb
+letter	letter	keep	let
+matter	matter	keep	mat
+butter	butter	keep	butt|but
+hammer	hammer	keep	ham
+mother	mother	keep	moth
+brother	brother	keep	broth
+paper	paper	keep	pap
+flower	flower	keep	flow
+shower	shower	keep	show
+tower	tower	keep	tow
+early	early	keep	ear|earl
+only	only	keep	on
+family	family	keep
+apply	apply	keep	app
+reply	reply	keep	rep
+supply	supply	keep	sup
+witness	witness	keep	wit
+department	department	keep	depart
+apartment	apartment	keep	apart
+comment	comment	keep	com
+moment	moment	keep	mom
+element	element	keep
+animal	animal	keep
+metal	metal	keep	met
+capital	capital	keep
+bless	bless	keep
+unless	unless	keep
+seed	seed	keep	see
+speed	speed	keep
+feed	feed	keep	fee
+bleed	bleed	keep
+need	need	keep
+red	red	keep
+bed	bed	keep
+hundred	hundred	keep
+sacred	sacred	keep
+naked	naked	keep
+wicked	wicked	keep	wick
+rugged	rugged	keep	rug
+glasses	glass|glasses	keep
+goods	good|goods	keep
+politics	politics|politic	keep
+physics	physics	keep	physic
+mathematics	mathematics	keep	mathematic
+analysis	analysis	keep
+basis	basis	keep

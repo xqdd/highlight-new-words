@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notes on Deliberate Practice — a dark-themed blog</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0f1115; color: #d7dae0; font: 17px/1.7 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  nav { position: sticky; top: 0; background: rgba(15,17,21,.9); backdrop-filter: blur(6px); border-bottom: 1px solid #23262d; padding: 10px 16px; display: flex; gap: 16px; font-size: 14px; }
+  nav a { color: #9aa4b2; text-decoration: none; }
+  main { max-width: 700px; margin: 0 auto; padding: 28px 16px 80px; }
+  h1 { color: #f2f4f8; font-size: 32px; line-height: 1.2; }
+  h2 { color: #f2f4f8; margin-top: 36px; }
+  a { color: #7cb7ff; }
+  .meta { color: #7d8590; font-size: 14px; }
+  .callout { background: #171a21; border: 1px solid #2a2f3a; border-radius: 10px; padding: 14px 16px; margin: 24px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; } td, th { border-bottom: 1px solid #262a33; padding: 8px 6px; text-align: left; }
+  code { background: #1d2129; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<nav><a href="#">Home</a><a href="#">Essays</a><a href="#">Reading list</a><a href="#">About</a></nav>
+<main>
+  <h1>Notes on Deliberate Practice and the Illusion of Competence</h1>
+  <p class="meta">Posted on March 3 · 7 minute read · Filed under learning</p>
+  <p>Most of us overestimate how well we understand something immediately after reading about it. The explanation feels lucid, the examples seem obvious, and we walk away convinced that the knowledge has been permanently acquired. A week later, confronted with an unfamiliar problem, we discover that our grasp was superficial.</p>
+  <p>Psychologists describe this phenomenon as the illusion of competence. Fluency — the ease with which information is processed — is frequently mistaken for mastery. Rereading highlighted passages produces a comforting sense of familiarity without the effortful retrieval that actually strengthens memory.</p>
+  <div class="callout"><strong>Key idea:</strong> difficulty during practice is often desirable. Struggling to recall an answer consolidates it far more effectively than passively reviewing it.</div>
+  <h2>What deliberate practice looks like</h2>
+  <p>Deliberate practice is not merely repetition. It involves isolating specific weaknesses, designing exercises that target them, and seeking immediate, accurate feedback. Musicians rehearse the troublesome measures rather than the whole piece; chess players analyze positions where they habitually blundered.</p>
+  <p>Crucially, deliberate practice is uncomfortable. It deliberately operates at the boundary of current ability, where mistakes are frequent and progress feels painfully slow. This is precisely why so few people sustain it.</p>
+  <table>
+    <thead><tr><th>Technique</th><th>Perceived ease</th><th>Long-term retention</th></tr></thead>
+    <tbody>
+      <tr><td>Rereading</td><td>High</td><td>Low</td></tr>
+      <tr><td>Spaced retrieval</td><td>Moderate</td><td>High</td></tr>
+      <tr><td>Interleaved problems</td><td>Low</td><td>Very high</td></tr>
+    </tbody>
+  </table>
+  <h2>Applying it to vocabulary</h2>
+  <p>Language learners are particularly susceptible to the illusion. Recognizing a word in context is considerably easier than producing it spontaneously. Encountering the same vocabulary repeatedly across authentic articles, however, gradually transforms passive recognition into durable, active knowledge. Tools that unobtrusively annotate unfamiliar words while you read can accelerate that transition — provided you resist the temptation to rely on them indefinitely.</p>
+  <p>Try running <code>review --spaced</code> each morning and notice how the words that once seemed elusive become effortless.</p>
+</main>
+</body>
+</html>

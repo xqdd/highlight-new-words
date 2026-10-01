@@ -1,0 +1,19 @@
+{
+ "_note": "欧路 OpenAPI 响应样例，取自官方文档 https://my.eudic.net/doc/api_study.md（2026-10 查阅；调试账号网页登录被拒且出现验证码，未能实测）；unauthorized 为 2026-10 用无效 token 实测的 401 响应",
+ "category": {
+  "data": [
+   { "id": "0", "language": "en", "name": "我的生词本" },
+   { "id": "132303016416635230", "language": "en", "name": "nanana3" }
+  ],
+  "message": ""
+ },
+ "words": {
+  "data": [
+   { "word": "action", "phon": "/'ækʃn/", "exp": "n. 行动；活动；功能；情节；战斗", "add_time": "2020-10-29T18:23:29Z", "star": 1, "context_line": "He took immediate action to solve the problem when he noticed it." },
+   { "word": "and", "phon": "/ənd/", "exp": "conj. 和，与；而且；然后；就；但是", "add_time": "2020-10-29T18:23:29Z", "star": 1 }
+  ],
+  "message": ""
+ },
+ "addWords": { "message": "单词导入成功,导入数量 : 2" },
+ "unauthorized": { "type": "https://tools.ietf.org/html/rfc9110#section-15.5.2", "title": "Unauthorized", "status": 401 }
+}

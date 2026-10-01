@@ -1,0 +1,57 @@
+{
+ "_note": "2026-10 调试账号实测的有道单词本接口响应（已脱敏：itemId/bookId 替换为伪值，账号信息删除）",
+ "add": {
+  "code": 0,
+  "msg": "SUCCESS",
+  "data": null
+ },
+ "delete": {
+  "code": 0,
+  "msg": "SUCCESS",
+  "data": null
+ },
+ "deleteNonexistent": {
+  "code": 0,
+  "msg": "SUCCESS",
+  "data": null
+ },
+ "collect": {
+  "code": 0,
+  "msg": "SUCCESS",
+  "data": {
+   "collect": true
+  }
+ },
+ "anonymous": {
+  "accountinfo": {
+   "msg": "NO_LOGIN",
+   "code": 2035
+  },
+  "books": {
+   "code": 0,
+   "msg": "SUCCESS",
+   "data": []
+  },
+  "words": {
+   "code": 0,
+   "msg": "SUCCESS",
+   "data": {
+    "total": 0,
+    "itemList": []
+   }
+  },
+  "delete": {
+   "code": 0,
+   "msg": "SUCCESS",
+   "data": null
+  }
+ },
+ "accountinfoLoggedIn": {
+  "msg": "OK",
+  "code": 0,
+  "data": {
+   "login_method": "urstoken",
+   "from": "urscookie"
+  }
+ }
+}

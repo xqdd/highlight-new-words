@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hostile styles (card isolation fixture)</title>
+<!-- 卡片隔离 fixture：页面带有激进的全局样式，用于验证卡片 Shadow DOM 不被污染；页尾的长段落用于验证贴底单词的浮层翻转 -->
+<style>
+  *, *::before, *::after { font-family: "Comic Sans MS", cursive !important; color: #c00 !important; line-height: 3 !important; letter-spacing: 2px !important; box-sizing: content-box !important; }
+  button, a { all: unset; text-transform: uppercase !important; font-size: 30px !important; }
+  div { padding: 30px !important; border: 3px dashed lime !important; }
+  ul, li { list-style: square !important; margin: 20px !important; }
+  html, body { background: #fffbe6; }
+  body { max-width: 760px; margin: 0 auto; padding: 16px; font-size: 18px; }
+  .spacer { height: 520px; border: 0 !important; padding: 0 !important; }
+</style>
+</head>
+<body>
+<h1>Bureaucrats abandoned the premise</h1>
+<p>The committee was <a href="https://example.com/link">reluctantly abandoning</a> its earlier assumption, and officials scrutinized every proposal before the deadline.</p>
+<p>Researchers deliberately postponed the experiment because the apparatus had deteriorated considerably.</p>
+<div class="spacer"></div>
+<p>Near the bottom: the government ultimately abandoned the controversial legislation amid mounting criticism.</p>
+</body>
+</html>

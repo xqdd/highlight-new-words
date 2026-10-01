@@ -1,0 +1,63 @@
+{
+ "code": 0,
+ "msg": "SUCCESS",
+ "data": {
+  "total": 6,
+  "itemList": [
+   {
+    "itemId": "53365cae446a4efab26d56e4700ca5b2",
+    "bookId": "0",
+    "bookName": "无标签",
+    "word": "Algorithm",
+    "trans": "n. [计][数] 算法，运算法则",
+    "phonetic": "['ælgərɪð(ə)m]",
+    "modifiedTime": 1526871995000
+   },
+   {
+    "itemId": "cf69cb951bdb51f94291388563493509",
+    "bookId": "0",
+    "bookName": "无标签",
+    "word": "Asynchronous",
+    "trans": "adj. [电] 异步的；不同时的；不同期的",
+    "phonetic": "[e'sɪŋkrənəs]",
+    "modifiedTime": 1526387516000
+   },
+   {
+    "itemId": "fc1b9143980a4ce6122e4550e10af761",
+    "bookId": "0",
+    "bookName": "无标签",
+    "word": "Authentication",
+    "trans": "n. 证明；鉴定；证实",
+    "phonetic": "[ɔ,θɛntɪ'keʃən]",
+    "modifiedTime": 1524750003000
+   },
+   {
+    "itemId": "e2cac85c40ed9a87a90d6f941c5f87a0",
+    "bookId": "cb4d8e17b63e7fe6b08f4f228c901bcf",
+    "bookName": "未分组",
+    "word": "ADALINE",
+    "trans": "n. 学习机，适应机；线性适应元",
+    "phonetic": "",
+    "modifiedTime": 1563884739000
+   },
+   {
+    "itemId": "3d2c0f2eea5e8fff7b70f81e98b2915e",
+    "bookId": "cb4d8e17b63e7fe6b08f4f228c901bcf",
+    "bookName": "未分组",
+    "word": "Absorb",
+    "trans": "vt. 吸收；吸引；承受；理解；使…全神贯注",
+    "phonetic": "[əb'zɔːb; -'sɔːb]",
+    "modifiedTime": 1551404435000
+   },
+   {
+    "itemId": "0069f36b732966b8fca780a148f13023",
+    "bookId": "cb4d8e17b63e7fe6b08f4f228c901bcf",
+    "bookName": "未分组",
+    "word": "Acknowledgments",
+    "trans": "n. 感谢，鸣谢（acknowledgment的复数形式）；致谢",
+    "phonetic": "",
+    "modifiedTime": 1563793122000
+   }
+  ]
+ }
+}
