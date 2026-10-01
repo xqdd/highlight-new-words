@@ -17,7 +17,7 @@
 | [listing.zh_CN.md](../store/listing.zh_CN.md) / [listing.en.md](../store/listing.en.md) | 名称、简短描述、两家商店的详细描述、Edge 搜索词、分类 |
 | [permissions.md](../store/permissions.md) | 单一用途、逐项权限说明、远程代码、数据使用披露（隐私表单填写稿） |
 | [privacy-policy.md](../store/privacy-policy.md) / [privacy-policy.en.md](../store/privacy-policy.en.md) | 隐私政策（需公开托管） |
-| [review-notes.md](../store/review-notes.md) | 审核备注（Edge “Notes for certification”），含 YouTube 字幕、手机悬浮球的测试步骤与有道默认启用的说明 |
+| [review-notes.md](../store/review-notes.md) | 审核备注（Edge “Notes for certification”），含 YouTube 字幕、手机悬浮球的测试步骤与云端来源默认不连接的说明 |
 | [images/](../store/images) | 截图（中英各 6 张：Chrome 传 1–5，Edge 全传）、宣传图、商店图标、Edge 徽标；`raw/` 为真实运行原图 |
 | [scripts/](../store/scripts) | `capture.mjs` 采集原图，`render.mjs` 套模板出图 |
 
@@ -94,7 +94,7 @@ flowchart TD
 - **权限最小化**：两家都会逐项核对权限，每一项都要有真实调用（当前为 `storage`、`unlimitedStorage`、`tts`、`tabs`、`contextMenus`、`scripting`，`cookies` 已移除）。新增权限要同步更新 [permissions.md](../store/permissions.md)。
 - **广泛主机权限**：`http/https` 全站权限会触发更细的人工审核，延长审核时间；理由必须写清“内容脚本需在任意网页本地匹配，不上传页面内容”。
 - **简短描述 ≤ 132 字符**：Chrome 上传时校验，当前中文 55 字符、英文 124 字符。
-- **隐私披露一致**：商店表单、隐私政策、审核备注、实际网络请求必须一致；新增来源/同步方式时一起改。有道来源默认启用（未登录时每天最多一次读取失败、提示未登录或待设置），隐私政策与审核备注都已写明，改默认值时同步修改。
+- **隐私披露一致**：商店表单、隐私政策、审核备注、实际网络请求必须一致；新增来源/同步方式时一起改。云端来源（有道、欧路）默认不连接，安装后不向第三方发请求；用户打开来源即同步一次，之后每天同步一次。隐私政策与审核备注都已写明，改默认值时同步修改。
 - **无远程代码**：不得从网络加载并执行脚本；内置数据只能是扩展包内 JSON。
 - **截图真实**：截图来自真实运行（[capture.mjs](../store/scripts/capture.mjs)），界面改版后要重新采集，避免与实际不符。
 - **不得堆砌关键词**、不得在描述中冒用“有道”“欧路”等品牌暗示官方合作；描述中只说明“支持同步其生词本”。
@@ -198,7 +198,7 @@ npm run build:firefox            # 产物 ${OUT_DIR:-.output}/firefox-mv3
 - [x] 截图与当前界面一致，否则重新 `capture.mjs` + `render.mjs`（2026-10-01 18:36 在词书与释义数据最后一次重建（18:28）之后用当前构建重新采集，含 YouTube 字幕面板与手机悬浮球；之后若再改 `public/data` 或界面，须重新采集）
 - [x] 详细描述中列出的功能都已上线，且覆盖全部功能（YouTube 字幕、悬浮球、代码块标注、卡片触发方式、加入生词本、WebDAV 与手动备份）；中文约 1,300 字符、英文约 3,700 字符，符合 Edge 250–10,000
 - [x] [permissions.md](../store/permissions.md) 与 manifest 权限逐项一致
-- [ ] 隐私政策已托管且可公开访问，内容与实际网络请求一致，描述中的占位网址已替换 —— 内容已与实际请求一致（含有道默认启用说明）；托管与占位网址替换待推送公开仓库后完成
+- [ ] 隐私政策已托管且可公开访问，内容与实际网络请求一致，描述中的占位网址已替换 —— 内容已与实际请求一致（含云端来源默认不连接的说明）；托管与占位网址替换待推送公开仓库后完成
 - [ ] 更新说明（GitHub Release）写明新增权限或行为变化 —— 发版时编写
 
 **提交后**

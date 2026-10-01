@@ -88,7 +88,7 @@ flowchart LR
 | `code` | 代码块中标注生词（v8，engine 新增）：`enabled`（默认 false）、`scope` `comments`（默认，只处理语法高亮标出的注释和字符串）/ `all`、`display` `hover`（默认，代码中不显示译文）/ `float`（单词上方浮动小标注，不占位） |
 | `card.trigger` / `card.modifier` / `card.hoverDelay` | PC 端（鼠标）卡片触发方式（触屏/手机端始终点按，不受影响）：`auto`（旧默认值）/`hover` 悬停；`modifier` 按住修饰键 + 悬停（v11 card 新增，旧版本收到时按悬停处理）；`click` 点击（链接中的单词第一次点击弹卡，再点一次或带修饰键点击才跳转）。`modifier` 为 `alt`（默认）/`ctrl`/`shift`/`meta`（⌘，只在 macOS 提供，其他系统按 Ctrl 处理）。`hoverDelay` 为悬停弹卡延迟（ms）：`100` 灵敏 / `250` 标准（默认）/ `400` 稳妥，档位见 `CARD_HOVER_DELAYS`；悬停与“修饰键 + 悬停”移入单词时生效，指针已在单词上再按修饰键的 180ms 不受影响（card 修复轮新增，旧设置由 `normalizeSettings` 补齐，非法值按 250）。解析与文案用 [trigger-config.ts](../src/content/card/trigger-config.ts) 的纯函数，见 4.5“卡片触发方式” |
 | `tts` | 自动发音开关、`voice`（`chrome.tts.speak` 选项）、语速 |
-| `sources[providerId]` | 按来源配置 `SourceSettings`：`enabled`、`autoSync`（每天）、`deleteOnKnown`（默认 false，`wordActions.knownRemoveFrom='auto'` 时生效）、可选 `apiToken`（本机字段；只有勾选 `credentialSync["token:<id>"]` 时才作为凭据随同步上传） |
+| `sources[providerId]` | 按来源配置 `SourceSettings`：`enabled`（默认全部 false）、`autoSync`（每天）、`deleteOnKnown`（默认 false，`wordActions.knownRemoveFrom='auto'` 时生效）、可选 `apiToken`（本机字段；只有勾选 `credentialSync["token:<id>"]` 时才作为凭据随同步上传） |
 | `knownBooks` | 熟词本多来源：`enabled` 启用的来源熟词本 id（角色为 known 的来源词书，如欧路“已掌握单词”，首次同步成功自动加入）；`roles` 用户为来源词书指定的角色 `new`/`known`（覆盖 provider 声明）。本地熟词本始终生效，见 4.9 |
 | `wordActions` | 单词操作目标（见 4.9）：`sameLemma` 同原形开关（默认开）；`addTargets` 加入生词本写入的书（默认 `local:mine` “我的生词本”）；`addRemoveFromKnown` 加入时移出的熟词本（默认本地熟词本 `known:local`）；`knownTargets` 认识时写入的熟词本（默认 `known:local`）；`knownRemoveFrom` 认识时移除的生词本，`'auto'` = 沿用各来源 `deleteOnKnown` |
 | `sync` | 本机同步配置（不参与同步）：`enabled`/`include` 为 chrome.storage.sync 后端；`webdav` 为 WebDAV 后端（`enabled/url/username/password/dir/include(+sourceBooks)/autoSync{onChange,onStartup,intervalMinutes}`），见 4.11 |
@@ -134,7 +134,7 @@ flowchart TD
   F -- 是 --> H[migrateLegacy<br/>dictionaryType 0/1 -> src:youdao:default / src:eudic:-1<br/>newWords.wordInfos -> 来源词书数据] --> I[写入并删除旧键]
 ```
 
-v2.0.1 旧键 `toggle/ttsToggle/ttsVoices/highlight*/bubble*/dictionaryType/autoSync/syncTime/newWords.wordInfos` 全部保留迁移；旧 `cookie` 仅为记录用途（请求由浏览器自动带 cookie），不再迁移。旧用户只启用迁移出的来源词书，改过颜色的切到 `custom` 主题。新增字段只需在默认值中补齐，`normalizeSettings` 会深合并；不兼容调整需递增 `SETTINGS_SCHEMA_VERSION` 并在 migrate.ts 追加步骤。
+v2.0.1 旧键 `toggle/ttsToggle/ttsVoices/highlight*/bubble*/dictionaryType/autoSync/syncTime/newWords.wordInfos` 全部保留迁移；旧 `cookie` 仅为记录用途（请求由浏览器自动带 cookie），不再迁移。旧版用过云端生词本（`syncTime>0` 或有 `newWords.wordInfos`）时只启用对应来源和迁移出的来源词书（lastSyncAt 沿用 syncTime，每天自动同步照常）；从未用过的与新安装一致，不启用任何来源。改过颜色的切到 `custom` 主题。新增字段只需在默认值中补齐，`normalizeSettings` 会深合并；不兼容调整需递增 `SETTINGS_SCHEMA_VERSION` 并在 migrate.ts 追加步骤。
 
 ### 4.2 词书与词典
 
@@ -328,7 +328,7 @@ flowchart LR
 **总状态 `StatusSummary`**（[background/status.ts](../src/background/status.ts)）：popup 状态条与 options 概览共用，避免各页面自己拼 `syncState`/`webdavSyncState`/`sourceBooks`。
 
 - `items: StatusItem[]`：`storage-sync`、`webdav`、每个启用来源 `source:<providerId>` 各一项，含 `name`、`level`、一句中文 `text`、`lastSyncAt`、`retryAt?`、`detail?`（补充原因，如“未连接”时最近一次失败原文）、`href`（选项页位置：浏览器账号同步 `#sync/sync`、WebDAV `#sync/webdav`、来源 `#sources`）。
-- `level` 严重程度 `error > busy > pending > never > ok > off`，总 `level` 取最严重项，总 `text` 如“已全部同步”“欧路词典：授权失效…”“正在同步 WebDAV…”。**从未成功同步过的来源**（还没有任何远端生词本，或列表 / 各书刷新失败，如默认启用有道但用户从没登录）统一记为 `never`、`text`=“未连接”（口径见 `core/source/connect-status.ts`，原因放 `detail`），options 来源卡片、popup、悬浮球都按中性灰显示、不计入告警；已列出生词本但没同步过的是 `never`+“尚未同步…”；成功过之后再失败才是 `error`。
+- `level` 严重程度 `error > busy > pending > never > ok > off`，总 `level` 取最严重项，总 `text` 如“已全部同步”“欧路词典：授权失效…”“正在同步 WebDAV…”。**从未成功同步过的来源**（还没有任何远端生词本，或列表 / 各书刷新失败，如开启了有道但用户从没登录）统一记为 `never`、`text`=“未连接”（口径见 `core/source/connect-status.ts`，原因放 `detail`），options 来源卡片、popup、悬浮球都按中性灰显示、不计入告警；已列出生词本但没同步过的是 `never`+“尚未同步…”；成功过之后再失败才是 `error`。
 - popup 消费约定：`level=never` 用中性灰（muted）；`text`=“未连接”时给“去连接”入口（不进告警条），以“尚未同步”开头时先试一次同步；`level=error` 的登录类原因显示为“登录已过期”。行内译文在各界面的名称与模式标签统一取 `core/settings/inline-translation-labels.ts`。`lastSyncAt` 用于在正常行显示同步时间、在出错行显示“上次成功 …”。background 改动 `never` 的文案时请保持“尚未同步…”这一前缀表示“只是还没试过”。
 - storage.sync 已同步时 `text` 带用量与超配额取舍说明（“1 本本地词书超出配额未同步”/“只同步了单词”）。
 - `permissions { allSites, webdavOrigin?, text? }`：`allSites=false` 时页面不会高亮（platform `hasAllSitesAccess`）；授权按钮仍须由页面在点击处理里第一句调用 `requestAllSitesAccess()`（后台无法发起授权）。
@@ -389,7 +389,8 @@ flowchart LR
 - `syncSourceBook` 逐本独立更新状态（`syncing → ok / empty / error`），同一本书并发调用复用同一任务；空结果不覆盖缓存，返回 `ok:true, empty:true`；首次同步成功自动启用：角色为 new 的加入 `books.enabled`（若同来源有已启用的孤儿书，插到它的位置），角色为 known 的加入 `knownBooks.enabled`（绝不进高亮词书）
 - 按来源同步（`providerId` 或全部来源）总是先刷新列表；刷新失败（未登录/限流）时不逐本请求，直接把该来源各书标 error；同步后把被新书取代的已启用孤儿书（如迁移来的 `src:youdao:default`）移出启用列表，缓存保留
 - SW 被回收导致停在 `syncing` 的书在启动时复位为 error（`recoverInterruptedSyncs`）
-- `autoSyncIfDue` 在 SW 每次启动时检查：来源启用且 `autoSync`；同步过的来源要有书超过 24 小时未同步且距上次尝试超过 1 小时；从未同步成功的来源（与旧版 syncTime=0 一致）距上次尝试超过 24 小时即自动尝试
+- `autoSyncIfDue` 在 SW 每次启动时检查：来源启用且 `autoSync`，且至少有一本书成功同步过（含旧版迁移来的 syncTime）；有书超过 24 小时未同步且距上次尝试超过 1 小时才请求。从未同步成功的来源不在后台自动请求
+- 云端来源默认全部关闭（`createDefaultSettings`），新安装不向第三方发请求。选项页打开来源即“连接”：立即按来源同步一次，用 toast 反馈本数/词数或失败原因 + “去登录”（`SourcesSection#connectProvider`），之后由 `autoSyncIfDue` 每天同步
 
 **新增来源**：① 在 `SOURCE_PROVIDER_INFOS` 加静态描述；② 在 `background/sources/` 实现 `SourceProvider` 并加入 `background/sources/index.ts` 的 `PROVIDERS`；③ 在 `createDefaultSettings` 的 `sources` 中补默认配置。UI 自动按 `SOURCE_PROVIDER_INFOS` 渲染。
 
