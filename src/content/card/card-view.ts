@@ -20,7 +20,7 @@ import {
   type HintSegment,
   type Notice,
 } from './word-actions';
-import { describeForm, dictLinks, formatPhonetic, parseDefinitions } from './word-info';
+import { describeForm, dictLinks, formatPhonetic, parseDefinitions, prioritizeByForm } from './word-info';
 
 /** 视口宽度不超过该值（或设备无悬停能力）时使用底部卡片布局 */
 const SHEET_MAX_VIEWPORT = 600;
@@ -369,7 +369,8 @@ export class ShadowCardView implements CardView {
     const form = describeForm(data.surface, data.lemma);
     // 生词本里实际记的词与页面词形不同时单独标出（生词本记 running、页面是 runs，原形是 run）
     const bookWord = data.bookWords?.includes(surface) ? undefined : data.bookWords?.find((w) => w !== data.lemma.toLowerCase());
-    const defs = parseDefinitions(main?.short, main?.full);
+    // 显示原形释义时，按变形类型把对应词性排前（enrolled 先列动词义）；词形自己的词条本来就是它的义项，不调整
+    const defs = own ? parseDefinitions(main?.short, main?.full) : prioritizeByForm(parseDefinitions(main?.short, main?.full), form);
     const clamp = !this.expanded && defs.length > DEF_CLAMP_LINES;
 
     let defsNode: Child[];
@@ -417,8 +418,8 @@ export class ShadowCardView implements CardView {
           d,
           'div',
           { class: 'form' },
-          form && h(d, 'span', { class: 'rel' }, form),
-          form && h(d, 'span', {}, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma)),
+          // “enroll 的过去式，过去分词”：原形在前，关系在后
+          form && h(d, 'span', { class: 'rel' }, h(d, 'b', { lang: 'en' }, data.lemma), ` 的${form}`),
           bookWord && h(d, 'span', {}, '生词 ', h(d, 'b', { lang: 'en' }, bookWord)),
         ),
       ...defsNode,

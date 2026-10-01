@@ -4,7 +4,7 @@ import path from 'node:path';
 import { ShadowCardView, fitContrast, isDarkBackground, luminance } from '@/content/card/card-view';
 import { bindCardTrigger } from '@/content/card/trigger';
 import type { CardActions, CardData } from '@/content/card/types';
-import { describeForm, dictLinks, formatPhonetic, parseDefinitions } from '@/content/card/word-info';
+import { describeForm, dictLinks, formatPhonetic, parseDefinitions, prioritizeByForm } from '@/content/card/word-info';
 import {
   buildAddTargets,
   addNotice,
@@ -70,6 +70,16 @@ describe('word-info', () => {
     // 实体解码；认不出结构时退化为去标签
     expect(formatPhonetic(`${a('英', '/ri&#39;d/')}`)).toBe("/ri'd/");
     expect(formatPhonetic('<b>/ri:d/</b>')).toBe('/ri:d/');
+  });
+
+  it('prioritizeByForm：按变形类型把对应词性排前，其余顺序不变', () => {
+    const defs = parseDefinitions(undefined, 'n. 登记\n[计] 注册\nvt.vi. 登记；使加入\nadj. 已登记的\nadv. x');
+    expect(prioritizeByForm(defs, '过去式，过去分词').map((x) => x.pos)).toEqual(['vt.vi.', 'n.', '[计]', 'adj.', 'adv.']);
+    expect(prioritizeByForm(defs, '比较级').map((x) => x.pos)).toEqual(['adj.', 'n.', '[计]', 'vt.vi.', 'adv.']);
+    expect(prioritizeByForm(defs, '副词')[0]!.pos).toBe('adv.');
+    // 名动都可能的“复数，第三人称单数”与原形本身不调整
+    expect(prioritizeByForm(defs, '复数，第三人称单数')).toBe(defs);
+    expect(prioritizeByForm(defs, undefined)).toBe(defs);
   });
 
   it('dictLinks：URL 编码', () => {
@@ -163,11 +173,12 @@ describe('ShadowCardView', () => {
     expect(view.isOpen).toBe(true);
     expect(q('.loading')).not.toBeNull();
     expect(mark.hasAttribute('data-hnw-active')).toBe(true);
-    view.update(data({ entry: { word: 'abandon', phonetic: "ә'bændәn", short: 'vt. 放弃', full: 'vt. 放弃\nn. 放任\nadj. a\nadv. b' } }));
+    view.update(data({ entry: { word: 'abandon', phonetic: "ә'bændәn", short: 'vt. 放弃', full: 'n. 放任\nvt. 放弃\nadj. a\nadv. b' } }));
     // 标题是触发卡片的页面词形，下方标出与原形的关系；词形没有自己的词条时显示原形释义，但不标原形的音标
     expect(q('.word')!.textContent).toBe('abandoned');
-    expect(q('.form')!.textContent).toContain('过去式');
-    expect(q('.form')!.textContent).toContain('原形 abandon');
+    expect(q('.form')!.textContent).toContain('abandon 的过去式');
+    // 过去式先列动词义
+    expect(q('.defs li')!.textContent).toContain('放弃');
     expect(q('.phon')!.textContent).not.toContain("/ə'bændən/");
     expect(q('.tag')!.textContent).toBe('六级');
     expect(shadow().querySelectorAll('.defs li')).toHaveLength(4);
@@ -311,7 +322,7 @@ describe('ShadowCardView', () => {
     expect(backend.lookupDict).toHaveBeenCalledWith('advanced');
     expect(q('.word')!.textContent).toBe('advanced');
     expect(q('.phon')!.textContent).toContain("/əd'vɑ:nst/");
-    expect(q('.form')!.textContent).toContain('原形 advance');
+    expect(q('.form')!.textContent).toContain('advance 的过去式');
     expect(q('.defs')!.textContent).toContain('先进的；高级的');
     expect(q('.lemma-trans')!.textContent).toContain('前进');
     // 外部词典按页面词形查
@@ -323,7 +334,7 @@ describe('ShadowCardView', () => {
     view.open(mark, data({ surface: 'runs', lemma: 'run', bookWords: ['running'], entry: { word: 'run', short: '跑' } }));
     await flush();
     expect(q('.word')!.textContent).toBe('runs');
-    expect(q('.form')!.textContent).toContain('原形 run');
+    expect(q('.form')!.textContent).toContain('run 的复数');
     expect(q('.form')!.textContent).toContain('生词 running');
     // 页面词形就是生词本里记的词：不再重复标出
     view.update(data({ surface: 'running', lemma: 'run', bookWords: ['running'], entry: { word: 'run', short: '跑' } }));

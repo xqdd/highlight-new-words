@@ -129,6 +129,29 @@ export function parseDefinitions(short?: string, full?: string): DefinitionLine[
   return lines;
 }
 
+/** 变形类型（describeForm 的结果）-> 应排在前面的词性：词性标签以这些前缀开头即算（vt.vi. 算动词，a./adj. 算形容词） */
+const FORM_POS: Record<string, RegExp> = {
+  过去式: /^v/i,
+  过去分词: /^v/i,
+  '过去式，过去分词': /^v/i,
+  现在分词: /^v/i,
+  复数: /^n/i,
+  比较级: /^(a|adj)\./i,
+  最高级: /^(a|adj)\./i,
+  副词: /^adv\./i,
+  名词: /^n/i,
+};
+
+/**
+ * 按页面词形的变形类型把对应词性的义项排到前面（enrolled 先列 enroll 的动词义，worse 先列形容词义），其余顺序不变。
+ * 只看词形不看上下文：“复数，第三人称单数”名动都可能，不调整；同形多词性（book、record）也不处理，卡片里有全部义项。
+ */
+export function prioritizeByForm(defs: DefinitionLine[], form: string | undefined): DefinitionLine[] {
+  const want = form ? FORM_POS[form] : undefined;
+  if (!want) return defs;
+  return [...defs.filter((x) => want.test(x.pos)), ...defs.filter((x) => !want.test(x.pos))];
+}
+
 /** 单个音标去掉两端的 [] 或 //，ECDICT 中的西里尔字母 ә 替换为 IPA ə */
 function phoneticCore(p: string): string {
   return p.trim().replace(/^[[/]+|[\]/]+$/g, '').replace(/ә/g, 'ə').trim();
