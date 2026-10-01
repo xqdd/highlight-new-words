@@ -1,4 +1,5 @@
 import { defineConfig } from 'wxt';
+import { patchFirefoxManifest } from './src/core/platform/manifest';
 
 /**
  * WXT 构建配置。
@@ -45,5 +46,16 @@ export default defineConfig({
     web_accessible_resources: [
       { resources: ['data/*'], matches: ['<all_urls>'] },
     ],
+  },
+  // 所有目标统一 MV3：WXT 对 firefox 默认产出 MV2，这里固定为 MV3（Firefox 后台自动转为 background.scripts 事件页）。
+  // Firefox 产物仅用于开发调试（npm run build:firefox），暂不上架 AMO，见 docs/release.md
+  manifestVersion: 3,
+  // gecko id 与 data_collection_permissions 由下方 hooks 注入（WXT 在钩子之前检查，会误报），关闭这两条提示
+  suppressWarnings: { firefoxDataCollection: true, firefoxId: true },
+  hooks: {
+    // 目标浏览器专有的 manifest 字段（release 模块）：firefox 补 gecko id/最低版本/数据收集声明并去掉不支持的 tts 权限
+    'build:manifestGenerated': (wxt, manifest) => {
+      if (wxt.config.browser === 'firefox') patchFirefoxManifest(manifest as Parameters<typeof patchFirefoxManifest>[0]);
+    },
   },
 });

@@ -14,7 +14,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "qa:shot": "node scripts/qa/shot.mjs",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "build:firefox": "wxt build -b firefox",
+    "zip:edge": "wxt zip -b edge",
+    "zip:stores": "wxt zip && wxt zip -b edge"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",
