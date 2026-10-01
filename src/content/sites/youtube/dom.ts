@@ -1,0 +1,76 @@
+/**
+ * YouTube 播放器 DOM 约定（选择器集中在此，YouTube 改版时只改这里）。
+ * 结构（桌面与 m.youtube.com 一致，2026-10 实测）：
+ * `#movie_player > .ytp-caption-window-container > .caption-window[.ytp-caption-window-rollup] > .captions-text > .caption-visual-line > .ytp-caption-segment`
+ * - 人工字幕（pop-on）每条整窗重建；自动生成字幕（roll-up）窗口带 `ytp-caption-window-rollup`，高度固定、overflow:hidden，逐词原位追加
+ * - 自动字幕开头的 “English (auto-generated) / Click ⚙ for settings” 提示是一个单独的 `ytp-caption-window-top` 窗口
+ * - 侧栏推荐位的悬停预览播放器也是 `.html5-video-player`，但 id 不是 movie_player
+ */
+export const PLAYER_ID = 'movie_player';
+export const PLAYER_CLASS = 'html5-video-player';
+export const CAPTION_CONTAINER_CLASS = 'ytp-caption-window-container';
+export const CAPTION_WINDOW_SELECTOR = `#${PLAYER_ID} .${CAPTION_CONTAINER_CLASS} .caption-window`;
+export const CAPTION_SEGMENT_CLASS = 'ytp-caption-segment';
+/** 自动生成字幕（roll-up）窗口：高度固定，不能加字幕内译文 */
+export const ROLLUP_CLASS = 'ytp-caption-window-rollup';
+/** 播放器控件自动隐藏时播放器根元素带此类名（控件出现后字幕整体上移） */
+export const AUTOHIDE_CLASS = 'ytp-autohide';
+/** 播放广告时播放器根元素带此类名 */
+export const AD_SHOWING_CLASS = 'ad-showing';
+export const CHROME_BOTTOM_CLASS = 'ytp-chrome-bottom';
+
+/** 我们加在字幕窗口上的标记：自动字幕提示窗口（engine 跳过其子树） */
+export const ATTR_YT_HINT = 'data-hnw-yt-hint';
+/** 我们加在字幕内 hnw-mark 上的单词上方注解文本（CSS ::after 渲染，不进入 textContent） */
+export const ATTR_YT_GLOSS = 'data-hnw-yt-gloss';
+/** <html> 上的字幕内译文模式：above 时显示上方注解 */
+export const ATTR_YT_TR = 'data-hnw-yt-tr';
+export const YT_STYLE_ID = 'hnw-yt-style';
+
+/** YouTube 站点（含 m. 与 www.；YouTube Music 的播放器结构不同，不处理） */
+export function isYouTubeHost(hostname: string): boolean {
+  if (hostname === 'music.youtube.com') return false;
+  return hostname === 'youtube.com' || hostname.endsWith('.youtube.com') || hostname === 'youtube-nocookie.com' || hostname.endsWith('.youtube-nocookie.com');
+}
+
+/** 自动字幕提示（英文界面为 “English (auto-generated)” 与 “Click ⚙ for settings”） */
+export function isAutoCaptionHint(text: string): boolean {
+  return /\(auto-generated\)|\bclick\b.{0,6}\bfor settings\b/i.test(text);
+}
+
+export function getPlayer(doc: Document): HTMLElement | null {
+  return doc.getElementById(PLAYER_ID);
+}
+
+/** 主播放器的视频元素（广告与正片共用同一个 video） */
+export function getVideo(doc: Document): HTMLVideoElement | null {
+  return getPlayer(doc)?.querySelector<HTMLVideoElement>('video') ?? null;
+}
+
+/** 元素是否位于主播放器字幕容器内 */
+export function inMainCaptions(el: Element): boolean {
+  const c = el.closest(`.${CAPTION_CONTAINER_CLASS}`);
+  return !!c && c.parentElement?.id === PLAYER_ID;
+}
+
+/** 主播放器当前显示的字幕窗口（不含自动字幕提示窗口） */
+export function captionWindows(doc: Document): HTMLElement[] {
+  return [...doc.querySelectorAll<HTMLElement>(CAPTION_WINDOW_SELECTOR)].filter((w) => !w.hasAttribute(ATTR_YT_HINT));
+}
+
+/**
+ * engine 扫描跳过规则（O(1)，只看元素自身与父元素）：
+ * - 主播放器的直接子元素中，只放行字幕容器（字幕标注关闭时也跳过）；控件栏、章节标题、片尾推荐、设置菜单等整棵跳过
+ * - 其他播放器（侧栏悬停预览等）整个跳过
+ * - 自动字幕提示窗口跳过
+ * engine 处理增量时会逐个祖先调用，因此字幕内的文本也会经过“主播放器的直接子元素”这一层判断。
+ */
+export function createSkipRule(captionsEnabled: () => boolean): (el: Element) => boolean {
+  return (el) => {
+    if (el.parentElement?.id === PLAYER_ID) {
+      return !el.classList.contains(CAPTION_CONTAINER_CLASS) || !captionsEnabled();
+    }
+    if (el.id !== PLAYER_ID && el.classList.contains(PLAYER_CLASS)) return true;
+    return el.hasAttribute(ATTR_YT_HINT);
+  };
+}
