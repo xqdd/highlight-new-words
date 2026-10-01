@@ -108,11 +108,12 @@ export class FloatMenu {
     if (this.sheet) this.render();
   }
 
-  private render(): void {
+  /** 重绘抽屉；默认保留内容区滚动位置（设置变化、释义加载完成时不跳动），切换标签时 resetScroll 回到顶部 */
+  private render({ resetScroll = false }: { resetScroll?: boolean } = {}): void {
     const sheet = this.sheet;
     if (!sheet) return;
     const doc = this.deps.ctx.doc;
-    const scrollTop = sheet.querySelector('.body')?.scrollTop ?? 0;
+    const scrollTop = resetScroll ? 0 : (sheet.querySelector('.body')?.scrollTop ?? 0);
     const grab = h(doc, 'div', { class: 'grab', 'aria-hidden': 'true' });
     const head = h(
       doc,
@@ -175,8 +176,10 @@ export class FloatMenu {
     const count = this.deps.ctx.pageLemmas().length;
     const tab = (id: Tab, label: string) =>
       h(doc, 'button', { type: 'button', class: 'tab', role: 'tab', 'aria-selected': String(this.tab === id), onclick: () => {
+        if (this.tab === id) return;
         this.tab = id;
-        this.render();
+        // 切换标签：新标签页从顶部开始（沿用旧标签的滚动位置会让首行停在标签栏下沿，看上去被遮住一半）
+        this.render({ resetScroll: true });
       } }, label);
     return h(doc, 'div', { class: 'tabs', role: 'tablist' }, tab('words', `本页生词${count ? ` ${count}` : ''}`), tab('settings', '快捷设置'));
   }

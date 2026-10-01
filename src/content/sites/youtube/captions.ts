@@ -14,12 +14,18 @@ import {
   isAutoCaptionHint,
 } from './dom';
 
+/** 旧字幕窗口保留多久以供同文重建沿用（ms）：重建的移除与插入通常在同一任务内，留一点余量 */
+const CARRY_OVER_MS = 500;
 /** 窗口标记：after 放不下已退回 above */
 const ATTR_FIT_FALLBACK = 'data-hnw-yt-fit';
 const CAP = `#${PLAYER_ID}>.${CAPTION_CONTAINER_CLASS}`;
 const MARK_IN_CAP = `${CAP} ${TAG_MARK}`;
-/** 注解颜色：字幕底色固定为近黑半透明，用暖黄与白字区分（≥ 7:1） */
+/** 注解颜色：注解底色为近黑（GLOSS_BG），用暖黄与白字区分（≥ 7:1） */
 const GLOSS_COLOR = '#ffe08a';
+/** 注解底色：近乎不透明，不依赖字幕段自身的半透明背景（用户可能调成透明） */
+const GLOSS_BG = 'rgba(0,0,0,.86)';
+/** 注解字号（相对字幕字号）：评审要求不低于字幕字号的 55%，取 0.64 留余量 */
+const GLOSS_EM = '.64em';
 
 /**
  * 字幕专用样式（注入一次，与 engine 的页面样式相互独立）：
@@ -29,9 +35,11 @@ const GLOSS_COLOR = '#ffe08a';
  * - above：有注解的生词改为 inline-block 并加 padding-top（= 注解高度），注解绝对定位在这段留白里（宽度限制在单词附近，过长省略）。
  *   留白跟着单词所在的那一行走：字幕段折成两行时，第二行的生词只撑高第二行，注解不会压到第一行文字上（逐行定位）；
  *   单词本身是不可拆分的，inline-block 不改变折行位置。字幕窗贴底定位，只会向上长高：不改变宽度、不折行、不裁切。
- *   注解字号随字幕字号（em）缩放，全屏时字幕变大注解也变大；下限桌面 10px、触屏 12px（手机字幕本身只有约 15px）。
- *   注解加深色描边：留白区域在字幕段背景内，但用户把字幕背景调成透明时仍要看得清
- * - after：词后小字（0.62em）。字幕段改为不折行（white-space:pre），字幕行改为居中的 flex，超出 YouTube 测量的窗口宽度时
+ *   注解字号随字幕字号（em）缩放，全屏时字幕变大注解也变大：GLOSS_EM（≥ 字幕字号的 55%，桌面 20px 字幕约 13px），
+ *   下限桌面 12px、触屏 12px（手机字幕本身只有约 15px）。
+ *   对比度：注解自带近乎不透明的深色底（只包住文字，宽度不超过单词附近）并加黑色描边，
+ *   视频画面再亮、用户把字幕背景调成透明时，暖黄字与深底仍有 ≥ 7:1 的对比度
+ * - after：词后小字（GLOSS_EM，同样带深色底）。字幕段改为不折行（white-space:pre），字幕行改为居中的 flex，超出 YouTube 测量的窗口宽度时
  *   向两侧对称溢出（仍居中，背景随字幕段延伸）；超出播放器宽度的窗口由脚本改回 above
  * - 自动生成字幕（roll-up）窗口高度固定、逐词追加，不设置模式（只高亮）
  */
@@ -45,16 +53,19 @@ export function buildCaptionCss(): string {
     `${MARK_IN_CAP},${MARK_IN_CAP}>${TAG_WORD}{display:inline!important}`,
     `${CAP} [${ATTR_YT_HINT}] ${TAG_WORD}{background:none!important;color:inherit!important;text-decoration:none!important;border:0!important;box-shadow:none!important;font-weight:inherit!important}`,
     // above：注解字号与留白都由 --hnw-gf 推出（字号 × 1.25 行高 + 2px 间隙），触屏下限更高
-    `${win('above')} ${G}{--hnw-gf:max(.56em,10px);display:inline-block!important;position:relative!important;vertical-align:baseline!important;` +
-      `padding-top:calc(var(--hnw-gf) * 1.25 + 2px)!important}`,
-    `@media (hover:none) and (pointer:coarse){${win('above')} ${G}{--hnw-gf:max(.62em,12px)}}`,
-    `${win('above')} ${G}::after{content:attr(${ATTR_YT_GLOSS});position:absolute;left:-.45em;right:-.45em;top:0;` +
+    `${win('above')} ${G}{--hnw-gf:max(${GLOSS_EM},12px);display:inline-block!important;position:relative!important;vertical-align:baseline!important;` +
+      `padding-top:calc(var(--hnw-gf) * 1.25 + 3px)!important}`,
+    `@media (hover:none) and (pointer:coarse){${win('above')} ${G}{--hnw-gf:max(.7em,12px)}}`,
+    // 注解框：水平居中于单词，宽度随文字（max-content），最宽不超过“单词 + 两侧各 .45em”，超出省略
+    `${win('above')} ${G}::after{content:attr(${ATTR_YT_GLOSS});position:absolute;left:50%;top:0;transform:translateX(-50%);` +
+      `box-sizing:border-box;width:max-content;max-width:calc(100% + .9em);padding:0 .25em;border-radius:3px;background:${GLOSS_BG};` +
       `display:block;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--hnw-gf);line-height:1.25;color:${GLOSS_COLOR};${glossFont};` +
-      `text-shadow:0 0 2px #000,0 0 3px rgba(0,0,0,.8)}`,
+      `font-weight:500;text-shadow:0 0 1px #000,0 0 2px #000}`,
     // after
     `${win('after')} .caption-visual-line{display:flex!important;justify-content:center!important}`,
     `${win('after')} .${CAPTION_SEGMENT_CLASS}{white-space:pre!important;flex:none!important}`,
-    `${win('after')} ${G}::after{content:attr(${ATTR_YT_GLOSS});font-size:.62em;margin-left:.18em;color:${GLOSS_COLOR};${glossFont}}`,
+    `${win('after')} ${G}::after{content:attr(${ATTR_YT_GLOSS});font-size:${GLOSS_EM};margin-left:.18em;padding:0 .2em;border-radius:3px;background:${GLOSS_BG};color:${GLOSS_COLOR};${glossFont};` +
+      `text-shadow:0 0 1px #000,0 0 2px #000}`,
   ].join('\n');
 }
 
@@ -83,6 +94,8 @@ export class CaptionDecorator {
   private observer: MutationObserver | null = null;
   private container: Element | null = null;
   private scheduled = false;
+  /** 最近被 YouTube 移除的、带标注的字幕窗口（同文重建时沿用其中的标注节点） */
+  private removedWindows: Array<{ win: HTMLElement; at: number }> = [];
   /** 短释义缓存：查词键 -> 注解（null 表示无释义） */
   private readonly glossCache = new Map<string, string | null>();
 
@@ -99,9 +112,52 @@ export class CaptionDecorator {
     this.container = container;
     if (!container) return;
     ensureStyle(this.ctx.doc);
-    this.observer = new MutationObserver(() => this.schedule());
+    this.observer = new MutationObserver((records) => {
+      this.carryOver(records);
+      this.schedule();
+    });
     this.observer.observe(container, { childList: true, subtree: true, characterData: true });
     this.schedule();
+  }
+
+  /**
+   * 同文重建沿用标注：YouTube 在尺寸变化、进出全屏、控件显隐等时机会把**同一条**字幕整窗重建（实测手机全屏后截图时也会触发），
+   * 新窗口要等 engine 的空闲处理（最长 200ms）才重新标注，这一两帧里字幕没有高亮和注解（评审截到的“全屏字幕丢失标注”）。
+   * 这里在 MutationObserver 回调（早于下一帧绘制）中把刚被移除的旧字幕段里 engine 生成的节点（原文本节点 + 高亮片段）
+   * 整体移到文本相同的新字幕段中，并带上窗口的译文模式，新窗口第一帧就有标注。
+   * 移动的是 engine 自己的节点，切分记录（WeakMap）随节点保留，之后标熟词还原、重新高亮都照常工作；engine 随后扫描新窗口时，
+   * 这些节点已处理过，不会重复标注。自动生成字幕（roll-up）会原位改写文本节点，不沿用。
+   */
+  private carryOver(records: MutationRecord[]): void {
+    const now = performance.now();
+    this.removedWindows = this.removedWindows.filter((r) => now - r.at < CARRY_OVER_MS);
+    const added: HTMLElement[] = [];
+    for (const r of records) {
+      for (const n of r.removedNodes) {
+        if (n instanceof HTMLElement && n.classList.contains('caption-window') && n.querySelector(TAG_MARK)) this.removedWindows.push({ win: n, at: now });
+      }
+      for (const n of r.addedNodes) {
+        if (n instanceof HTMLElement && n.classList.contains('caption-window') && !n.classList.contains(ROLLUP_CLASS)) added.push(n);
+      }
+    }
+    if (added.length === 0 || this.removedWindows.length === 0) return;
+    for (const win of added) {
+      if (!win.isConnected) continue;
+      for (const seg of win.querySelectorAll<HTMLElement>(`.${CAPTION_SEGMENT_CLASS}`)) {
+        if (seg.querySelector(TAG_MARK)) continue;
+        const text = seg.textContent;
+        for (const old of this.removedWindows) {
+          const from = [...old.win.querySelectorAll<HTMLElement>(`.${CAPTION_SEGMENT_CLASS}`)].find((o) => o.textContent === text && o.querySelector(TAG_MARK));
+          if (!from) continue;
+          seg.replaceChildren(...from.childNodes);
+          for (const a of [ATTR_YT_GM, ATTR_FIT_FALLBACK]) {
+            const v = old.win.getAttribute(a);
+            if (v !== null && !win.hasAttribute(a)) win.setAttribute(a, v);
+          }
+          break;
+        }
+      }
+    }
   }
 
   /** 设置变化：重新计算各窗口的译文模式，并补写注解 */
@@ -196,6 +252,7 @@ export class CaptionDecorator {
   destroy(): void {
     this.observer?.disconnect();
     this.observer = null;
+    this.removedWindows = [];
     this.container?.querySelectorAll(`[${ATTR_YT_GM}]`).forEach((w) => w.removeAttribute(ATTR_YT_GM));
     this.container = null;
     this.ctx.doc.getElementById(YT_STYLE_ID)?.remove();

@@ -49,7 +49,7 @@ svg { display: block; flex: none; }
 .head .sub { font-weight: 400; font-size: 12px; color: var(--muted); margin-left: 6px; }
 .icon-btn { width: 44px; height: 44px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
 .icon-btn:active, .icon-btn:hover { background: var(--hover); color: var(--fg); }
-.body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 12px; }
+.body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 12px 12px; }
 .btn {
   min-height: 44px; padding: 0 16px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   background: var(--soft); font-weight: 500; white-space: nowrap;
@@ -78,8 +78,12 @@ ${BASE_CSS}
   transition: transform .25s cubic-bezier(.2, .8, .2, 1), opacity .25s; will-change: transform;
 }
 .ball.dragging { transition: none; box-shadow: 0 12px 28px -6px rgba(15, 23, 42, .45), 0 0 0 1px var(--line); }
-/* 空闲：缩成屏幕边缘的一条强调色小标签（图标在可见部分放不下，隐藏） */
-.ball.idle { opacity: .78; background: var(--accent); }
+/* 空闲：缩成屏幕边缘的一条强调色小标签（图标在可见部分放不下，隐藏）。
+   白色内描边 + 深色外阴影：深色页面上靠白边、浅色页面上靠阴影都能看清（缩放 0.62 后白边约 2px） */
+.ball.idle {
+  opacity: .92; background: var(--accent);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .92), 0 0 0 1px rgba(15, 23, 42, .28), 0 3px 10px rgba(0, 0, 0, .45);
+}
 .ball.idle svg { opacity: 0; }
 .ball .badge {
   position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
@@ -165,8 +169,11 @@ ${BASE_CSS}
 
 /** 空闲时缩小到的比例（46px → 约 28px） */
 export const IDLE_SCALE = 0.62;
-/** 空闲时露出屏幕的宽度（px）：手机网页正文左右一般留 16px 边距，露出部分落在边距里，不压正文行尾的字母 */
-export const IDLE_VISIBLE = 13;
+/**
+ * 空闲时露出屏幕的宽度（px）：至少 20px 才容易被发现、好点按（13px 时评审反馈难以发现）。
+ * 手机网页正文左右一般留 16px 边距，露出部分会压到正文行尾 4px 左右，球是半透明圆头标签，可接受
+ */
+export const IDLE_VISIBLE = 20;
 
 /**
  * 球在一侧贴边时的 x（transform 平移量，缩放以球心为原点）：展开时离边缘 EDGE_GAP；

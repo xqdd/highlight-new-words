@@ -168,6 +168,15 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .links a:hover { color: var(--accent); background: var(--hover); }
 .sheet .links { font-size: 14px; margin-top: 6px; }
 .sheet .links a { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; }
+/* 底部卡片：“词典”下拉与“i”共用一行；摘要文字只在展开说明时显示 */
+.foot-meta { display: flex; align-items: flex-start; gap: 4px; margin-top: 6px; }
+.foot-meta .dicts { flex: none; min-height: 44px; padding: 0 8px 0 10px; gap: 2px; font-size: 14px; color: var(--muted); border: 0; background: none; }
+.foot-meta .dicts svg { width: 16px; height: 16px; transition: transform .15s ease-out; }
+.foot-meta .dicts[aria-expanded="true"] svg { transform: rotate(180deg); }
+.foot-meta .hints { flex: 1 1 auto; min-width: 0; margin-top: 0; }
+.foot-meta .hint-sum { justify-content: flex-end; }
+.foot-meta:not(.open) .sum-text { display: none; }
+.sheet .foot-meta + .links { margin-top: 0; }
 
 /* ---------- 内联面板：加入目标 / 认识确认 ---------- */
 .panel { flex: 0 1 auto; min-height: 96px; padding: 10px 12px 12px 16px; border-top: 1px solid var(--line); background: var(--bg); max-height: 46vh; overflow: auto; overscroll-behavior: contain; }

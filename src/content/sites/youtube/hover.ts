@@ -12,7 +12,7 @@ const CONTROLS_SHIFT = 80;
 /** 暂停后这段时间内，落在“上移前位置”里的点击不交给控件（避免点到刚出现在指针下的进度条） */
 const MISCLICK_GUARD_MS = 800;
 
-interface Box {
+export interface Box {
   left: number;
   top: number;
   right: number;
@@ -21,8 +21,8 @@ interface Box {
 
 const inBox = (b: Box, x: number, y: number) => x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
 
-/** 当前主播放器字幕段的包围盒（外扩 HOT_PAD）；没有字幕时为 null */
-export function captionBox(doc: Document): Box | null {
+/** 当前主播放器字幕段的包围盒（外扩 pad，默认 HOT_PAD；含 above 模式的上方注解留白）；没有字幕时为 null */
+export function captionBox(doc: Document, pad = HOT_PAD): Box | null {
   let box: Box | null = null;
   for (const w of captionWindows(doc)) {
     for (const seg of w.querySelectorAll(`.${CAPTION_SEGMENT_CLASS}`)) {
@@ -33,7 +33,7 @@ export function captionBox(doc: Document): Box | null {
         : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
     }
   }
-  return box && { left: box.left - HOT_PAD, top: box.top - HOT_PAD, right: box.right + HOT_PAD, bottom: box.bottom + HOT_PAD };
+  return box && { left: box.left - pad, top: box.top - pad, right: box.right + pad, bottom: box.bottom + pad };
 }
 
 /**

@@ -1,6 +1,8 @@
+import { registerCardPlacer, type CardPlacement } from '../../card/card-view';
 import { registerCardTriggerZone } from '../../card/trigger';
 import { TAG_MARK } from '../../engine/dom';
-import { CAPTION_CONTAINER_CLASS, getPlayer, getVideo } from './dom';
+import { CAPTION_CONTAINER_CLASS, getPlayer, getVideo, inMainCaptions } from './dom';
+import { captionBox, type Box } from './hover';
 
 /** 生词命中外扩（px）：字幕字小，手指点按允许稍偏 */
 const TOUCH_PAD = 6;
@@ -55,7 +57,16 @@ export function registerCaptionCardZone(doc: Document, openCard: (anchor: HTMLEl
   const win = doc.defaultView ?? window;
   win.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
   win.addEventListener('touchend', onTouchEnd, { capture: true, passive: false });
+  // PC 浮层避让整块字幕（卡片默认放在单词下方，会盖住字幕的下一行）
+  const unplace = registerCardPlacer((anchor, card, vp) => {
+    if (!anchor.isConnected || !inMainCaptions(anchor)) return null;
+    const block = captionBox(doc, 0);
+    const player = getPlayer(doc);
+    if (!block || !player) return null;
+    return placeAroundCaptions(anchor.getBoundingClientRect(), block, player.getBoundingClientRect(), card, vp);
+  });
   return () => {
+    unplace();
     unregister();
     win.removeEventListener('touchstart', onTouchStart, true);
     win.removeEventListener('touchend', onTouchEnd, true);
@@ -82,4 +93,37 @@ export function captionMarkAt(doc: Document, x: number, y: number, pad: number):
     }
   }
   return best;
+}
+
+/** 卡片与字幕块、视口边缘的间距（px） */
+const CARD_GAP = 8;
+
+/**
+ * 字幕生词卡片的位置：卡片与整块字幕（所有字幕行，含上方注解）不相交，不盖住正在读的行。
+ * 依次尝试：
+ * 1. 字幕块上方（留 CARD_GAP），水平以单词为中心——字幕贴在画面底部，上方通常是画面，空间最充足
+ * 2. 播放器右侧 / 左侧（页面布局里播放器旁边的推荐栏或留白），底边与字幕块底边对齐
+ * 3. 字幕块右侧 / 左侧（全屏时播放器占满屏幕，只能放在画面内字幕旁边）
+ * 都放不下（窗口极小）返回 null，交回默认定位。
+ */
+export function placeAroundCaptions(
+  word: Pick<DOMRect, 'left' | 'width'>,
+  block: Box,
+  player: Box,
+  card: { width: number; height: number },
+  vp: { width: number; height: number },
+): CardPlacement | null {
+  const g = CARD_GAP;
+  const { width: cw, height: ch } = card;
+  const clampX = (x: number) => Math.min(Math.max(g, x), Math.max(g, vp.width - cw - g));
+  const clampY = (y: number) => Math.min(Math.max(g, y), Math.max(g, vp.height - ch - g));
+  const aboveTop = block.top - g - ch;
+  if (aboveTop >= g) return { top: aboveTop, left: clampX(word.left + word.width / 2 - cw / 2), above: true };
+  // 侧边：垂直方向让卡片底边与字幕块底边对齐（尽量靠近单词），水平方向与字幕块（或播放器）不重叠即可
+  const sideTop = clampY(block.bottom - ch);
+  const sides = [player.right + g, player.left - g - cw, block.right + g, block.left - g - cw];
+  for (const left of sides) {
+    if (left >= g && left + cw <= vp.width - g) return { top: sideTop, left, above: false };
+  }
+  return null;
 }

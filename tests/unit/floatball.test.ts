@@ -24,6 +24,7 @@ import { availableFloatActions, overlayRoot, registerFloatAction, registerOverla
 import { CaptionDecorator, buildCaptionCss } from '@/content/sites/youtube/captions';
 import { ATTR_YT_GLOSS, ATTR_YT_GM, ATTR_YT_HINT, createSkipRule } from '@/content/sites/youtube/dom';
 import { currentVideoId } from '@/content/sites/youtube/index';
+import { placeAroundCaptions } from '@/content/sites/youtube/zone';
 import { formatTime } from '@/content/sites/youtube/panel';
 import { PauseController } from '@/content/sites/youtube/playback';
 import { CaptionHistory, buildSentences, normalizeTimedtextUrl, parseJson3, sentenceIndexAt } from '@/content/sites/youtube/track';
@@ -84,13 +85,14 @@ describe('floatball 纯逻辑', () => {
     expect(wordAt(t, 5)?.word).toBe('a');
     expect(wordAt('  ...  ', 3)).toBeNull();
   });
-  it('空闲时缩小贴边，只露出一条，不压正文边距以内的文字', () => {
+  it('空闲时缩小贴边，露出至少 20px 的一条', () => {
     const vw = 390;
     const d = BALL_SIZE * IDLE_SCALE;
     // 缩放以球心为原点：可见圆左边缘 = 平移量 + 半径 - 缩放后半径
     const rightLeftEdge = ballX('right', vw, true) + BALL_SIZE / 2 - d / 2;
     expect(vw - rightLeftEdge).toBeCloseTo(IDLE_VISIBLE, 5);
-    expect(IDLE_VISIBLE).toBeLessThan(16);
+    expect(IDLE_VISIBLE).toBeGreaterThanOrEqual(20);
+    expect(IDLE_VISIBLE).toBeLessThan(d);
     const leftRightEdge = ballX('left', vw, true) + BALL_SIZE / 2 + d / 2;
     expect(leftRightEdge).toBeCloseTo(IDLE_VISIBLE, 5);
     expect(ballX('right', vw, false)).toBe(vw - BALL_SIZE - 8);
@@ -279,13 +281,48 @@ describe('YouTube 字幕译文模式', () => {
     dec3.destroy();
   });
 
+  it('同文整窗重建：沿用旧窗口的标注节点与译文模式（新窗口第一帧就有注解），文本不同或自动字幕不沿用', async () => {
+    const settings = createDefaultSettings();
+    const player = buildPlayer(['The deadline was looming']);
+    const container = player.querySelector('.ytp-caption-window-container')!;
+    const mark = markWord(player.querySelector('.ytp-caption-segment')!, 'looming', 'loom');
+    const dec = new CaptionDecorator(ctxWith(settings, { loom: '隐约出现' }));
+    dec.attach(container);
+    dec.process();
+    await flush();
+    expect(mark.getAttribute(ATTR_YT_GLOSS)).toBe('隐约出现');
+    // YouTube 重建：同一任务内移除旧窗口、插入文本相同的新窗口
+    const rebuild = (text: string, rollup = false) => {
+      const w = document.createElement('div');
+      w.className = `caption-window${rollup ? ' ytp-caption-window-rollup' : ''}`;
+      w.innerHTML = `<span class="captions-text"><span class="caption-visual-line"><span class="ytp-caption-segment">${text}</span></span></span>`;
+      container.replaceChildren(w);
+      return w;
+    };
+    const w1 = rebuild('The deadline was looming');
+    await Promise.resolve();
+    expect(w1.querySelector('hnw-mark')).toBe(mark);
+    expect(w1.getAttribute(ATTR_YT_GM)).toBe('above');
+    expect(w1.textContent).toBe('The deadline was looming');
+    const w2 = rebuild('Something else entirely');
+    await Promise.resolve();
+    expect(w2.querySelector('hnw-mark')).toBeNull();
+    dec.destroy();
+  });
+
   it('样式：above 逐词 inline-block 向上留位（逐行生效）、触屏注解下限 12px，after 不折行并居中', () => {
     const css = buildCaptionCss();
     expect(css).toContain(`[${ATTR_YT_GM}="above"]`);
     expect(css).toMatch(/hnw-mark\[data-hnw-yt-gloss\][^{]*\{[^}]*display:inline-block!important[^}]*padding-top/);
     // 不再给整个字幕段加 padding-top（两行字幕时第二行的注解会压到第一行上）
     expect(css).not.toContain('ytp-caption-segment:has(');
-    expect(css).toContain('max(.62em,12px)');
+    // 注解字号 ≥ 字幕字号的 55%（桌面/触屏），自带深色底提高对比度
+    for (const em of [...css.matchAll(/--hnw-gf:max\(([.\d]+)em,(\d+)px\)/g)]) {
+      expect(Number(em[1])).toBeGreaterThanOrEqual(0.55);
+      expect(Number(em[2])).toBeGreaterThanOrEqual(12);
+    }
+    expect(css).toContain('max(.7em,12px)');
+    expect(css).toMatch(/::after\{[^}]*background:rgba\(0,0,0,\.86\)/);
     expect(css).toContain('white-space:pre!important');
     expect(css).toContain('justify-content:center');
     // engine 的行内译文在字幕里一律隐藏
@@ -378,5 +415,29 @@ describe('YouTube 字幕数据', () => {
     expect(currentVideoId({ pathname: '/embed/arj7oStGLkU', search: '' })).toBe('arj7oStGLkU');
     expect(formatTime(75_000)).toBe('1:15');
     expect(formatTime(3_725_000)).toBe('1:02:05');
+  });
+});
+
+describe('YouTube 字幕生词卡片避让字幕', () => {
+  const card = { width: 360, height: 280 };
+  const inter = (p: { top: number; left: number }, b: { left: number; top: number; right: number; bottom: number }) =>
+    Math.max(0, Math.min(p.left + card.width, b.right) - Math.max(p.left, b.left)) * Math.max(0, Math.min(p.top + card.height, b.bottom) - Math.max(p.top, b.top));
+  it('优先放在字幕块上方并留 8px，水平以单词为中心', () => {
+    const block = { left: 300, top: 470, right: 600, bottom: 540 };
+    const p = placeAroundCaptions({ left: 420, width: 60 }, block, { left: 16, top: 68, right: 889, bottom: 558 }, card, { width: 1280, height: 800 })!;
+    expect(p.above).toBe(true);
+    expect(p.top + card.height).toBe(block.top - 8);
+    expect(p.left).toBe(450 - 180);
+    expect(inter(p, block)).toBe(0);
+  });
+  it('上方放不下：先放播放器右侧，再放字幕块侧边；均不与字幕相交', () => {
+    const block = { left: 300, top: 200, right: 600, bottom: 260 };
+    const side = placeAroundCaptions({ left: 420, width: 60 }, block, { left: 16, top: 68, right: 889, bottom: 300 }, card, { width: 1280, height: 800 })!;
+    expect(side.left).toBe(889 + 8);
+    expect(inter(side, block)).toBe(0);
+    // 全屏：播放器占满视口，只能放在字幕块旁边
+    const fs = placeAroundCaptions({ left: 420, width: 60 }, block, { left: 0, top: 0, right: 1280, bottom: 800 }, card, { width: 1280, height: 800 })!;
+    expect(fs.left).toBe(600 + 8);
+    expect(inter(fs, block)).toBe(0);
   });
 });

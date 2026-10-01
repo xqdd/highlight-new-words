@@ -71,6 +71,27 @@ const REANCHOR_MAX_DISTANCE = 240;
  * - 认识：按 wordActions 写熟词本并从生词本移除；含不可撤销的远端删除或同形异义词时先在卡片内确认；完成后关闭卡片并给出可撤销的 toast
  * - 加入生词本：默认写入设置中的目标，可在卡片上临时改选（本页有效）；结果 toast 写明加到了哪里，可撤销；不支持的目标置灰并说明原因
  */
+/** 浮层定位结果（视口坐标）；above 表示卡片在锚点上方（影响箭头/动画方向的 class） */
+export interface CardPlacement {
+  top: number;
+  left: number;
+  above: boolean;
+}
+
+/**
+ * 站点浮层定位钩子：站点适配层可以为特定锚点接管 PC 浮层的位置（如 YouTube 字幕生词：卡片整块避让字幕，不盖住正在读的行）。
+ * 返回 null 表示不处理，交给下一个钩子或默认定位；底部卡片（手机/触屏）不经过钩子。
+ */
+export type CardPlacer = (anchor: HTMLElement, card: { width: number; height: number }, viewport: { width: number; height: number }) => CardPlacement | null;
+
+const cardPlacers = new Set<CardPlacer>();
+
+/** 注册浮层定位钩子，返回注销函数 */
+export function registerCardPlacer(placer: CardPlacer): () => void {
+  cardPlacers.add(placer);
+  return () => cardPlacers.delete(placer);
+}
+
 export class ShadowCardView implements CardView {
   private readonly host: HTMLElement;
   private readonly root: ShadowRoot;
@@ -97,6 +118,8 @@ export class ShadowCardView implements CardView {
   private confirmHomographs = false;
   /** 说明行是否展开详情（默认只显示一行去向摘要） */
   private hintsOpen = false;
+  /** 底部卡片的“词典”下拉是否展开 */
+  private linksOpen = false;
   /** 锚点最近一次的位置（锚点被重建后据此找回同一位置的新 mark） */
   private anchorRect: DOMRect | null = null;
   /** 卡片打开期间监听锚点是否被移出文档 */
@@ -164,6 +187,7 @@ export class ShadowCardView implements CardView {
       this.onceHint = null;
       this.expanded = false;
       this.hintsOpen = false;
+      this.linksOpen = false;
       this.panel = 'none';
       this.busy = null;
       this.resetDeleteConfirm();
@@ -545,19 +569,37 @@ export class ShadowCardView implements CardView {
       if (this.hintsOpen) hints.push(h(d, 'div', { class: 'hint-details' }, ...details));
     }
 
+    const hintsEl = hints.length > 0 && h(d, 'div', { class: 'hints', lang: 'zh-CN' }, ...hints);
+    const links = h(
+      d,
+      'div',
+      { class: 'links' },
+      h(d, 'span', {}, '词典'),
+      ...dictLinks(data.lemma).map((l) => h(d, 'a', { href: l.url, target: '_blank', rel: 'noopener noreferrer', 'data-dict': l.id }, l.name)),
+    );
+    const actions = h(d, 'div', { class: 'actions' }, knownBtn, split, deleteBtn);
+    if (!this.sheet) return h(d, 'div', { class: 'foot' }, actions, hintsEl, links);
+    // 底部卡片（手机）：说明摘要收进“i”（CSS 在未展开时隐藏摘要文字），词典链接收进“词典”下拉，两者共用一行，
+    // 不再各占一行（评审：说明 + 词典链接占了近 1/4 屏）
     return h(
       d,
       'div',
       { class: 'foot' },
-      h(d, 'div', { class: 'actions' }, knownBtn, split, deleteBtn),
-      hints.length > 0 && h(d, 'div', { class: 'hints', lang: 'zh-CN' }, ...hints),
+      actions,
       h(
         d,
         'div',
-        { class: 'links' },
-        h(d, 'span', {}, '词典'),
-        ...dictLinks(data.lemma).map((l) => h(d, 'a', { href: l.url, target: '_blank', rel: 'noopener noreferrer', 'data-dict': l.id }, l.name)),
+        { class: `foot-meta${this.hintsOpen ? ' open' : ''}` },
+        h(
+          d,
+          'button',
+          { class: 'btn ghost dicts', 'data-act': 'links', 'aria-expanded': this.linksOpen ? 'true' : 'false', title: '外部词典' },
+          h(d, 'span', {}, '词典'),
+          icon(d, 'caret'),
+        ),
+        hintsEl,
       ),
+      this.linksOpen && links,
     );
   }
 
@@ -684,7 +726,7 @@ export class ShadowCardView implements CardView {
   }
 
   /**
-   * 浮层定位：优先在单词下方，空间不足放上方；水平以单词为中心并限制在视口内。
+   * 浮层定位：站点钩子（registerCardPlacer）优先；默认优先在单词下方，空间不足放上方；水平以单词为中心并限制在视口内。
    * 锚点已被移出文档（engine 重建了高亮）且找不到接替的 mark 时保持原位，不跳到视口左上角。
    */
   private positionPopover(): void {
@@ -697,6 +739,14 @@ export class ShadowCardView implements CardView {
     const vh = window.innerHeight;
     const cw = this.card.offsetWidth;
     const ch = this.card.offsetHeight;
+    for (const placer of cardPlacers) {
+      const p = placer(anchor, { width: cw, height: ch }, { width: vw, height: vh });
+      if (!p) continue;
+      this.card.classList.toggle('above', p.above);
+      this.card.style.top = `${Math.round(p.top)}px`;
+      this.card.style.left = `${Math.round(p.left)}px`;
+      return;
+    }
     const gap = 8;
     const below = r.bottom + gap;
     const above = r.top - gap - ch;
@@ -905,6 +955,10 @@ export class ShadowCardView implements CardView {
         break;
       case 'hints':
         this.hintsOpen = !this.hintsOpen;
+        this.rerender();
+        break;
+      case 'links':
+        this.linksOpen = !this.linksOpen;
         this.rerender();
         break;
       case 'opt-off':
