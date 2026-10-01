@@ -108,7 +108,7 @@ describe('首屏预隐藏', () => {
     vi.unstubAllGlobals();
   });
 
-  it('只有改变排版的设置才需要预隐藏；页面已解析完时不隐藏', () => {
+  it('只有改变排版的设置才需要预隐藏；隐藏样式未生效时不处理', () => {
     const s = createDefaultSettings();
     s.inlineTranslation.mode = 'off';
     s.style.themeId = 'wavy-line';
@@ -118,9 +118,9 @@ describe('首屏预隐藏', () => {
     s.style.themeId = 'wavy-line';
     s.inlineTranslation.mode = 'ruby';
     expect(layoutAffectingSettings(s)).toBe(true);
-    // jsdom 的 readyState 为 complete：不插入隐藏样式
+    // 隐藏样式未注册（未生效）时为空操作：不加 data-hnw-ready
     prehidePage(document)();
-    expect(document.getElementById('hnw-prehide')).toBeNull();
+    expect(document.documentElement.hasAttribute('data-hnw-ready')).toBe(false);
   });
 });
 

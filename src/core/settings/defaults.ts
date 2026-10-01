@@ -46,7 +46,7 @@ export function createDefaultSettings(): Settings {
     code: { enabled: false, scope: 'comments', display: 'hover' },
     youtube: { captions: true, hoverPause: false, captionTranslation: 'above' },
     floatBall: { enabled: true, hiddenSites: [] },
-    card: { trigger: 'auto' },
+    card: { trigger: 'auto', modifier: 'alt' },
     tts: { enabled: true, voice: { lang: 'en' }, rate: 1 },
     // 旧版默认来源为有道
     sources: {
@@ -70,6 +70,8 @@ export function createDefaultSettings(): Settings {
     },
     credentialSync: {},
     ui: { theme: 'auto' },
+    // 首屏预隐藏默认关：隐藏会推迟首次绘制（维基桌面约 +300ms），由用户按需开启
+    performance: { prehide: false },
     sites: { disabled: [] },
   };
 }

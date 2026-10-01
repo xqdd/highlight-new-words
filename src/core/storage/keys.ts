@@ -27,6 +27,8 @@ export const STORAGE_KEYS = {
   uiNotesSeen: 'uiNotesSeen',
   /** 悬浮球位置 `FloatBallPos { side: 'left'|'right', y: 视口高度比例 0–1 }`（按设备记忆、不参与同步）；仅内容脚本悬浮球写（floatball 模块新增） */
   floatBallPos: 'floatBallPos',
+  /** 已提示过的卡片触发方式签名（字符串，如 `modifier:alt`，见 card/trigger-config.ts `triggerSignature`）：PC 端卡片首次出现时提示一次当前触发方式，方式变化后再提示一次；按设备记忆、不参与同步；仅内容脚本卡片写（card v11 新增） */
+  cardTriggerHint: 'cardTriggerHint',
 } as const;
 
 /** 单本来源词书数据键前缀：`srcBook:<bookId>` -> SourceBookData */

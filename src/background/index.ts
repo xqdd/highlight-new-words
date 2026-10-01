@@ -8,6 +8,7 @@ import { WebDavSyncService } from '@/core/sync/webdav-service';
 import { getTabWords, reportFrameWords, setupBadge } from './badge';
 import { setupContextMenus } from './context-menu';
 import { addWord, getLemmatizer, getWordState, markKnown, previewWordAction, removeWord, unmarkKnown } from './known';
+import { setupPrehideRegistration } from './prehide';
 import { autoSyncIfDue, deleteFromSources, recoverInterruptedSyncs, refreshSourceBooks, syncSourceBooks } from './sources/service';
 import { dismissUpdateNotice, getStatusSummary, recordUpdate, syncAll } from './status';
 import { speak } from './tts';
@@ -122,6 +123,8 @@ export function setupBackground(): void {
       console.warn(`[hnw] 初始化${name}失败`, e);
     }
   }
+  // 首屏预隐藏样式：按设置动态注册/注销（每次启动对齐一次，含浏览器启动与安装/更新），见 prehide.ts
+  setupPrehideRegistration(ready);
   // 同步后端监听须同步注册；首次同步等迁移完成后再执行
   watchCredentialChanges();
   sync.listen();

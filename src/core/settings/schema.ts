@@ -158,11 +158,33 @@ export interface FloatBallSettings {
   hiddenSites: string[];
 }
 
+/**
+ * 加载性能相关选项（engine 第 3 轮新增；旧设置由 normalizeSettings 按默认值补齐）。
+ */
+export interface PerformanceSettings {
+  /**
+   * 加载时先隐藏页面，避免首屏译文插入造成跳动（默认关）：开启后由 background 动态注册 document_start 的隐藏样式，
+   * 首屏标注与译文写完（或 600ms 兜底）后显示。代价是首次绘制推迟，见 content/engine/prehide.ts
+   */
+  prehide: boolean;
+}
+
 /** 扩展页面（popup/options）界面配色：auto 跟随系统 */
 export type UiTheme = 'auto' | 'light' | 'dark';
 
-/** 卡片触发方式：auto=桌面悬停+移动端点按 */
-export type CardTrigger = 'auto' | 'hover' | 'click';
+/**
+ * 卡片触发方式（只影响 PC 端鼠标；触屏/手机端始终点按，见 card/trigger.ts）：
+ * - `auto` / `hover`：悬停（默认；`auto` 为旧默认值，与 `hover` 行为相同）
+ * - `modifier`：按住 `card.modifier` 指定的修饰键 + 悬停（v11 card 新增；旧版本收到该值时按悬停处理）
+ * - `click`：点击；链接中的单词第一次点击弹卡，再点一次或带修饰键点击才跳转
+ */
+export type CardTrigger = 'auto' | 'hover' | 'click' | 'modifier';
+
+/**
+ * 卡片修饰键（v11 card 新增）：alt=Alt/⌥、ctrl=Ctrl/⌃、shift=Shift/⇧、meta=⌘（只在 macOS 提供；
+ * 其他系统收到 meta 时按 Ctrl 处理，见 card/trigger-config.ts `effectiveModifier`）
+ */
+export type CardModifierKey = 'alt' | 'ctrl' | 'shift' | 'meta';
 
 /** 用户另存的样式（Settings.style.saved 的一项） */
 export interface SavedMarkStyle {
@@ -213,6 +235,8 @@ export interface Settings {
   floatBall: FloatBallSettings;
   card: {
     trigger: CardTrigger;
+    /** trigger='modifier' 时按住的修饰键（v11 card 新增，默认 alt；旧设置由 normalizeSettings 补齐） */
+    modifier: CardModifierKey;
   };
   tts: {
     /** 打开卡片时自动发音（旧 ttsToggle） */
@@ -234,6 +258,8 @@ export interface Settings {
    * 同步后端自身的凭据不会写进它自己的数据（WebDAV 密码只可能随 chrome.storage.sync 或手动备份上传）。
    */
   credentialSync: Record<CredentialId, boolean>;
+  /** 加载性能选项（engine 第 3 轮新增）：首屏预隐藏开关 */
+  performance: PerformanceSettings;
   /** 扩展页面界面偏好（options 分片新增；旧数据由 normalizeSettings 按默认值补齐） */
   ui: {
     theme: UiTheme;

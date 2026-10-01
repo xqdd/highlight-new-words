@@ -36,7 +36,7 @@ import { startPageExtras } from './sites/context';
 const DICT_SHARD_PROBES = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
 export interface ContentAppOptions {
-  /** 释放首屏预隐藏（content 入口在 document_start 同步设置，见 engine/prehide.ts）；幂等 */
+  /** 释放首屏预隐藏（可选功能，隐藏样式由 background 动态注册，见 engine/prehide.ts）；幂等 */
   releasePrehide?: () => void;
 }
 
@@ -61,10 +61,10 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
   const isTop = window.top === window;
 
   const active = () => settings.enabled && !isSiteDisabled(settings, location.hostname);
-  // 不标注、或标注不改变排版时不需要预隐藏：设置读到后立即显示页面（通常早于首次绘制）
-  if (!active() || !layoutAffectingSettings(settings)) releasePrehide();
-  else if (settings.inlineTranslation.mode === 'after' || settings.inlineTranslation.mode === 'ruby') {
-    // 首屏要在显示前写好译文：读到设置后立即预载全部短释义分片（按首字母，共约 2MB），与词书、词形数据并行。
+  // 未开启预隐藏、不标注、或标注不改变排版时不需要预隐藏：设置读到后立即释放（通常早于首次绘制；未开启时页面本来就没有隐藏）
+  if (!settings.performance.prehide || !active() || !layoutAffectingSettings(settings)) releasePrehide();
+  if (active() && (settings.inlineTranslation.mode === 'after' || settings.inlineTranslation.mode === 'ruby')) {
+    // 首屏要尽早写好译文（预隐藏时要在显示前写好）：读到设置后立即预载全部短释义分片（按首字母，共约 2MB），与词书、词形数据并行。
     // 页面解析繁忙后扩展资源请求会明显变慢（维基大页面首屏查释义要多等 200–300ms），趁解析刚开始时发出
     void packagedDict.lookupMany(DICT_SHARD_PROBES);
   }
@@ -111,6 +111,8 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
       doc,
       view: card,
       getTrigger: () => settings.card.trigger,
+      // v11：修饰键 + 悬停时按住的键（card 模块新增，只加这一行接线）
+      getModifier: () => settings.card.modifier,
       onOpen: (mark) => void openCard(mark),
     });
     return card;
