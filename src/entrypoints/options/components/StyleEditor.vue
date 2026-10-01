@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { isEmptyMarkStyle } from '@/core/theme/resolve';
 import type { BackgroundKind, BorderStyle, MarkFontWeight, MarkStyle, UnderlineStyle } from '@/core/theme/themes';
 import MarkPreview from '@/ui/components/MarkPreview.vue';
 import SegmentedControl from '@/ui/components/SegmentedControl.vue';
@@ -77,9 +78,7 @@ const BORDERS: { value: BorderStyle; label: string }[] = [
 
 /** 选项缩略：在当前样式上套用该选项 */
 const sample = (p: Partial<MarkStyle>): MarkStyle => ({ ...m.value, ...p });
-const isEmptyStyle = computed(
-  () => !m.value.background && !m.value.color && m.value.underline === 'none' && (!m.value.border || m.value.border === 'none') && !m.value.fontWeight && !m.value.italic,
-);
+const isEmptyStyle = computed(() => isEmptyMarkStyle(m.value));
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 import type { MarkStyle, Settings } from '@/core/settings/schema';
-import { markStyleParts, resolveMarkStyle, resolveTranslationStyle, translationLookDecls } from '@/core/theme/resolve';
+import { isEmptyMarkStyle, markStyleParts, resolveMarkStyle, resolveTranslationStyle, translationLookDecls } from '@/core/theme/resolve';
 import { TRANSLATION_BRACKETS, type TranslationBracket } from '@/core/theme/themes';
 import { DARK_PAGE_BG, LIGHT_PAGE_BG, ensureContrast, isOpaque, parseColor } from './color';
 import {
@@ -40,19 +40,29 @@ const DARK_BG_MAX_ALPHA = 0.32;
  * - 链接内（data-hnw-link）：只改文字色的样式会和链接色混淆，改为保留链接色 + 主题色浅底
  * - 行内译文与生词样式相互独立：词后括注 / 词上 ruby / 仅悬停浮层；受限容器、代码中退化为不占位的浮层；
  *   低置信度（大写的专有名词/界面标签）不显示行内译文；模糊自测时译文模糊、点按后清晰
- * - 悬停（仅有鼠标的设备）叠加一层随文字色变化的淡底色；卡片激活态（data-hnw-active）样式由 card 分片负责
+ * - 悬停（仅有鼠标的设备）叠加一层随文字色变化的淡底色并显示手形；“无样式”（不高亮，仅译文）或卡片要按修饰键/点击才打开时不加，
+ *   保持页面原来的指针与悬停外观（链接仍是手形、正文仍是文本光标）。卡片激活态（data-hnw-active）样式由 card 分片负责
  */
 export function buildPageCss(settings: Settings): string {
   const rules: string[] = [];
   rules.push(
-    `${M}{display:inline;font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}`,
+    `${M}{display:inline;font:inherit;-webkit-tap-highlight-color:transparent}`,
     `${W}{display:inline;font:inherit;border-radius:.22em;box-decoration-break:clone;-webkit-box-decoration-break:clone;transition:background-color .15s ease}`,
   );
+  // 悬停提示（手形 + 淡底色）：只在悬停即可打开卡片时加（触发方式 auto/hover）；要按修饰键或点击才打开时不加，
+  // “无样式”的生词也不加，保持页面原样
+  const hoverTrigger = settings.card.trigger === 'auto' || settings.card.trigger === 'hover';
+  const hoverable = (s: MarkStyle) => hoverTrigger && !isEmptyMarkStyle(s);
+  const globalStyle = resolveMarkStyle(settings);
+  // 全局的悬停规则匹配所有 mark，要排除不加悬停提示的词书（:where 不增加特异性）
+  const plainBooks = settings.books.enabled.filter((id) => !hoverable(resolveMarkStyle(settings, id)));
+  const globalHover = plainBooks.length ? `${M}:where(:not(${plainBooks.map((id) => `[${ATTR_BOOK}="${cssEscape(id)}"]`).join(',')}))` : M;
   // 全局主题：:where 降低特异性，保证按词书的规则总能覆盖
-  rules.push(...styleRules(`${M}`, (a) => `${M}:where([${a}])`, resolveMarkStyle(settings)));
+  rules.push(...styleRules(`${M}`, (a) => `${M}:where([${a}])`, globalStyle, hoverable(globalStyle) ? globalHover : null));
   for (const bookId of settings.books.enabled) {
     const sel = `${M}[${ATTR_BOOK}="${cssEscape(bookId)}"]`;
-    rules.push(...styleRules(sel, (a) => `${sel}:where([${a}])`, resolveMarkStyle(settings, bookId)));
+    const style = resolveMarkStyle(settings, bookId);
+    rules.push(...styleRules(sel, (a) => `${sel}:where([${a}])`, style, hoverable(style) ? sel : null));
   }
   rules.push(...translationRules(settings));
   return rules.join('\n');
@@ -61,13 +71,17 @@ export function buildPageCss(settings: Settings): string {
 /**
  * 一种 MarkStyle 的规则：常规、悬停、深色上下文、链接内。
  * @param attrSel 生成“带某属性的同一选择器”（用 :where 不增加特异性）
+ * @param hoverSel 加悬停提示（手形 + 淡底色）的选择器；null 表示不加，保持页面原来的指针与悬停外观
  */
-function styleRules(sel: string, attrSel: (attr: string) => string, style: MarkStyle): string[] {
+function styleRules(sel: string, attrSel: (attr: string) => string, style: MarkStyle, hoverSel: string | null): string[] {
   const { decls, bgImage } = markStyleParts(style);
   const out = [`${sel}>${W}{${decls.join(';')}${bgImage ? `;background-image:${bgImage}` : ''}}`];
   // 悬停：在主题背景之上叠一层文字色的淡色；马克笔色带也是 background-image，需要一起写出
   const tint = 'linear-gradient(color-mix(in srgb,currentColor 16%,transparent),color-mix(in srgb,currentColor 16%,transparent))';
-  out.push(`@media (hover:hover){${sel}:hover>${W}{background-image:${tint}${bgImage ? `,${bgImage}` : ''}}}`);
+  if (hoverSel) {
+    out.push(`${hoverSel}{cursor:pointer}`);
+    out.push(`@media (hover:hover){${hoverSel}:hover>${W}{background-image:${tint}${bgImage ? `,${bgImage}` : ''}}}`);
+  }
 
   const darkSel = attrSel(ATTR_ON_DARK);
   if (!isOpaque(style.background)) {
@@ -110,7 +124,7 @@ function styleRules(sel: string, attrSel: (attr: string) => string, style: MarkS
     if (light.length > 0) out.push(`${sel}:not([${ATTR_ON_DARK}])>${W}{${light.join(';')}}`);
     if (dark.length > 0) out.push(`${darkSel}>${W}{${dark.join(';')}}`);
     // 深色上下文的悬停只叠淡色（不带回亮色页的马克笔色带）；:hover 让特异性与常规悬停规则相同、靠后生效
-    if (bgImage) out.push(`@media (hover:hover){${darkSel}:hover>${W}{background-image:${tint}}}`);
+    if (bgImage && hoverSel) out.push(`@media (hover:hover){${hoverSel}:where([${ATTR_ON_DARK}]):hover>${W}{background-image:${tint}}}`);
   }
   // 链接内：保留站点链接的颜色与下划线（链接身份不丢），生词改用不冲突的通道——只用底色。
   // 自带背景的样式保留背景；没有背景的（文字色/装饰线/边框）改为主题色浅底。

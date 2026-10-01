@@ -79,6 +79,32 @@ describe('v5 样式契约', () => {
     expect(pill).toContain('box-shadow: 0 0 0 .16em');
   });
 
+  it('悬停提示（手形 + 淡底色）只在悬停即开卡片且有样式时加；修饰键/点击触发、无样式词书保持页面原样', () => {
+    const tint = 'color-mix(in srgb,currentColor 16%';
+    const s = createDefaultSettings();
+    s.books.enabled = ['cet4', 'gre'];
+    expect(buildPageCss(s)).toContain('hnw-mark{cursor:pointer}');
+    expect(buildPageCss(s)).toContain(tint);
+    for (const trigger of ['modifier', 'click'] as const) {
+      s.card.trigger = trigger;
+      const css = buildPageCss(s);
+      expect(css).not.toContain('cursor:pointer');
+      expect(css).not.toContain(tint);
+    }
+    s.card.trigger = 'hover';
+    // 全局“不高亮，仅译文”：不加；某本词书有自己的样式时只给这本加
+    s.style.themeId = 'gloss-only';
+    expect(buildPageCss(s)).not.toContain('cursor:pointer');
+    s.style.perBook.gre = { themeId: 'custom', mark: findTheme('highlighter')!.mark };
+    const mixed = buildPageCss(s);
+    expect(mixed).toContain('hnw-mark[data-book="gre"]{cursor:pointer}');
+    expect(mixed).not.toContain('hnw-mark{cursor:pointer}');
+    // 反过来：全局有样式、某本词书无样式时，全局规则排除这本
+    s.style.themeId = 'amber';
+    s.style.perBook = { gre: { themeId: 'gloss-only' } };
+    expect(buildPageCss(s)).toContain('hnw-mark:where(:not([data-book="gre"])){cursor:pointer}');
+  });
+
   it('“不高亮，仅译文”等预设携带建议译文模式，applyThemePreset 一并应用', () => {
     const s = createDefaultSettings();
     applyThemePreset(s, 'gloss-only');

@@ -103,6 +103,18 @@ export function markStyleToCss(s: MarkStyle): string {
   return (bgImage ? [...decls, `background-image: ${bgImage}`] : decls).join('; ');
 }
 
+/** “无样式”：不加任何标记（背景、文字色、装饰线、边框、字重、斜体都没有），生词只靠行内译文提示（如“不高亮，仅译文”） */
+export function isEmptyMarkStyle(s: MarkStyle): boolean {
+  return (
+    !s.background &&
+    !s.color &&
+    s.underline === 'none' &&
+    (!s.border || s.border === 'none') &&
+    (!s.fontWeight || s.fontWeight === 'inherit') &&
+    !s.italic
+  );
+}
+
 /** 样式是否“只改文字颜色”（无背景、无装饰线、无边框）：这类样式在链接里容易被误认为链接色，engine 会特殊处理 */
 export function isTextOnlyStyle(s: MarkStyle): boolean {
   return !!s.color && !s.background && s.underline === 'none' && (!s.border || s.border === 'none');
