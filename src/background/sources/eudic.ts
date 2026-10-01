@@ -38,7 +38,10 @@ const COOKIE_PAGE_DELAY_MS = 500;
 export const OPENAPI_MIN_INTERVAL_MS = 2_100;
 export const OPENAPI_PAGE_SIZE = 100;
 export const OPENAPI_MAX_PAGE = 50;
-/** 读请求遇到网络错误 / 5xx 时的重试次数 */
+/**
+ * 重试次数：读请求遇到网络错误 / 5xx、写请求遇到网络层错误（fetch 抛错、没有拿到响应）时重试。
+ * 常量名沿用旧名（单测与文档引用），实际对写请求的网络层错误同样生效
+ */
 export const OPENAPI_GET_RETRIES = 2;
 /** 批量删除/加词每次最多的单词数（文档未写上限，保守取 100） */
 const OPENAPI_BATCH = 100;
@@ -71,10 +74,12 @@ export function setOpenApiThrottle(ms: number): void {
 async function openApi<T>(ctx: SourceContext, method: string, path: string, body?: unknown): Promise<T> {
   const run = async (): Promise<T> => {
     let res: Response | undefined;
-    // 读请求（列分组、分页拉词）在网络错误 / 5xx 时指数退避重试（间隔 2.1s、4.2s）：实测偶发首个请求连接失败会让整个来源同步失败。
-    // 写请求（加词/删词）不重试：结果未知时重试可能重复执行，交给调用方报告失败、保留本地缓存。
+    // 网络层错误（fetch 抛 TypeError：连接重置、DNS 失败等，没有拿到任何响应）对所有请求指数退避重试（间隔 2.1s、4.2s）：
+    // 实测欧路接口偶发连接重置，首个请求失败会让整个来源同步失败、“认识”时远端删除失败（集成审核第 1 轮）。
+    // 写请求重试是安全的：DELETE 删除不存在的词、POST 加入已有的词（文档：重复单词不会添加）都是幂等的。
+    // 5xx 只对读请求重试：写请求拿到 5xx 时服务器可能已部分执行，交给调用方报告失败、保留本地缓存。
     // 重试同样排在全局串行链中并计入请求间隔，不会突破“1 分钟 30 次”的限流
-    const attempts = method === 'GET' ? 1 + OPENAPI_GET_RETRIES : 1;
+    const attempts = 1 + OPENAPI_GET_RETRIES;
     for (let attempt = 0; attempt < attempts; attempt++) {
       const wait = lastOpenApiAt + minIntervalMs * 2 ** attempt - Date.now();
       if (wait > 0) await sleep(wait);
@@ -92,7 +97,7 @@ async function openApi<T>(ctx: SourceContext, method: string, path: string, body
         }
         throw new SourceError('无法连接欧路服务器，请检查网络', 'network');
       }
-      if (res.status >= 500 && attempt + 1 < attempts) {
+      if (method === 'GET' && res.status >= 500 && attempt + 1 < attempts) {
         console.info('[hnw] 欧路服务器错误，重试', res.status, path, attempt + 1);
         continue;
       }
@@ -254,11 +259,17 @@ async function deleteEudicWords(remoteBookId: string, words: UserWord[], ctx: So
   }
   for (const w of words) {
     try {
-      const res = await fetch('https://dict.eudic.net/Dicts/SetStarRating', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating: -1, word: w.ref ?? w.word, lang: 'en' }),
+      // 取消收藏是幂等的：网络层错误（没有响应）时间隔 500ms 再试一次
+      const post = () =>
+        fetch('https://dict.eudic.net/Dicts/SetStarRating', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: -1, word: w.ref ?? w.word, lang: 'en' }),
+        });
+      const res = await post().catch(async () => {
+        await sleep(COOKIE_PAGE_DELAY_MS);
+        return post();
       });
       // 未登录时会被重定向到登录页（最终 200 HTML），以 URL 判断
       if (res.redirected && /login/i.test(res.url)) throw new SourceError('未登录欧路或登录已失效，请先登录 my.eudic.net', 'auth');

@@ -39,12 +39,24 @@ export interface YoudaoItem {
   modifiedTime?: number;
 }
 
-async function getJson<T>(path: string): Promise<YoudaoResp<T>> {
-  let res: Response;
-  try {
-    res = await fetch(BASE + path, { credentials: 'include' });
-  } catch {
-    throw new SourceError('无法连接有道服务器，请检查网络', 'network');
+/** 网络层错误（fetch 抛错、没有拿到响应）的重试次数与间隔 */
+const NETWORK_RETRIES = 2;
+const NETWORK_RETRY_DELAY_MS = 500;
+
+/**
+ * GET 有道接口。retry：网络层错误（偶发连接重置）时重试，HTTP 错误码直接报告。
+ * 列表/拉词只读，删除按 itemId（不存在的 itemId 也返回成功）都是幂等的，默认重试；
+ * 加词接口重复调用是否会产生重复条目未实测，调用方传 false 不重试
+ */
+async function getJson<T>(path: string, retry = true): Promise<YoudaoResp<T>> {
+  let res: Response | undefined;
+  for (let attempt = 0; !res; attempt++) {
+    try {
+      res = await fetch(BASE + path, { credentials: 'include' });
+    } catch {
+      if (!retry || attempt >= NETWORK_RETRIES) throw new SourceError('无法连接有道服务器，请检查网络', 'network');
+      await new Promise((r) => setTimeout(r, NETWORK_RETRY_DELAY_MS * (attempt + 1)));
+    }
   }
   if (!res.ok) throw new SourceError(`有道服务器返回 ${res.status}`, 'network');
   try {
@@ -186,7 +198,7 @@ export const youdaoProvider: SourceProvider = {
     let lastError: SourceError | undefined;
     for (const w of words) {
       try {
-        const body = await getJson<null>(`/wordbook/webapi/v2/ajax/add?word=${encodeURIComponent(w.word)}&lan=en`);
+        const body = await getJson<null>(`/wordbook/webapi/v2/ajax/add?word=${encodeURIComponent(w.word)}&lan=en`, false);
         if (body.code === 0) ok.add(w.word.toLowerCase());
         else lastError = new SourceError(`有道返回错误：${body.msg ?? body.code}`, 'network');
       } catch (e) {

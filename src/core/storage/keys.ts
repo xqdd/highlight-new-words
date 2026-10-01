@@ -29,6 +29,11 @@ export const STORAGE_KEYS = {
   floatBallPos: 'floatBallPos',
   /** 已提示过的卡片触发方式签名（字符串，如 `modifier:alt`，见 card/trigger-config.ts `triggerSignature`）：PC 端卡片首次出现时提示一次当前触发方式，方式变化后再提示一次；按设备记忆、不参与同步；仅内容脚本卡片写（card v11 新增） */
   cardTriggerHint: 'cardTriggerHint',
+  /**
+   * 单词操作撤销记录（`known:<lemma>` / `add:<lemma>` -> 记录，见 background/known.ts）：存 local 而不是 session，
+   * 浏览器重启后 10 分钟内仍可撤销；超过 10 分钟的记录只用于提示“撤销记录已失效”，24 小时后清理；仅 background 写（集成审核第 1 轮）
+   */
+  knownUndo: 'knownUndo',
 } as const;
 
 /** 单本来源词书数据键前缀：`srcBook:<bookId>` -> SourceBookData */
@@ -52,8 +57,6 @@ export const DEV_LEGACY_KEYS = { cloudBook: 'cloudBook' } as const;
 /** chrome.storage.session 键：各标签页已高亮的不同单词，用于徽章计数（SW 重启后可恢复） */
 export const SESSION_KEYS = {
   tabWords: 'tabWords',
-  /** 标记熟词时 deleteOnKnown 删除的来源词条（lemma -> 记录），供 10 分钟内撤销时加回，见 background/known.ts */
-  knownUndo: 'knownUndo',
 } as const;
 
 /**

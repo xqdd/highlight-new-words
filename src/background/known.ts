@@ -17,7 +17,7 @@ import type {
 import { LOCAL_KNOWN_BOOK_ID, MY_WORDS_BOOK_ID, type BookId, type Settings } from '@/core/settings/schema';
 import { getSettings, patchSettings } from '@/core/settings/store';
 import { getProviderInfo } from '@/core/source/providers';
-import { SESSION_KEYS, localBookKey } from '@/core/storage/keys';
+import { STORAGE_KEYS, localBookKey } from '@/core/storage/keys';
 import { withStorageLock } from '@/core/storage/lock';
 import { parseBookId } from '@/core/wordbook/ids';
 import type { LocalBookData, LocalBookIndex, SourceBookIndex, UserWord } from '@/core/wordbook/types';
@@ -87,16 +87,22 @@ interface UndoRecord {
 /** key：`known:<lemma>` / `add:<lemma>` */
 type UndoStore = Record<string, UndoRecord>;
 
-/** 撤销记录存在 storage.session：SW 被回收后仍在，浏览器关闭即清空 */
+/** 过期撤销记录的保留时长：只用于撤销时说明“撤销记录已失效”，之后清理 */
+const UNDO_KEEP_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * 撤销记录存在 storage.local（不是 session）：浏览器重启会清空 session，导致 10 分钟内撤销却加不回远端删除的词
+ * 且没有任何说明（集成审核第 1 轮）。有效期仍由 KNOWN_UNDO_TTL_MS 控制。
+ */
 async function loadUndo(): Promise<UndoStore> {
-  const res = await browser.storage.session.get(SESSION_KEYS.knownUndo);
-  return (res[SESSION_KEYS.knownUndo] as UndoStore | undefined) ?? {};
+  const res = await browser.storage.local.get(STORAGE_KEYS.knownUndo);
+  return (res[STORAGE_KEYS.knownUndo] as UndoStore | undefined) ?? {};
 }
 
 async function saveUndo(store: UndoStore): Promise<void> {
   const now = Date.now();
-  for (const [k, v] of Object.entries(store)) if (now - v.at > KNOWN_UNDO_TTL_MS || !Array.isArray(v.sourceRemoved)) delete store[k];
-  await browser.storage.session.set({ [SESSION_KEYS.knownUndo]: store });
+  for (const [k, v] of Object.entries(store)) if (now - v.at > UNDO_KEEP_MS || !Array.isArray(v.sourceRemoved)) delete store[k];
+  await browser.storage.local.set({ [STORAGE_KEYS.knownUndo]: store });
 }
 
 async function putUndo(key: string, record: UndoRecord): Promise<void> {
@@ -105,15 +111,15 @@ async function putUndo(key: string, record: UndoRecord): Promise<void> {
   await saveUndo(store);
 }
 
-/** 取出并删除撤销记录；过期或旧结构返回 undefined */
-async function takeUndo(key: string): Promise<UndoRecord | undefined> {
+/** 取出并删除撤销记录：有效期内返回 record；已过期返回 expired（供说明哪些词没有加回）；没有记录或旧结构都返回空 */
+async function takeUndo(key: string): Promise<{ record?: UndoRecord; expired?: UndoRecord }> {
   const store = await loadUndo();
   const record = store[key];
-  if (!record) return undefined;
+  if (!record) return {};
   delete store[key];
   await saveUndo(store);
-  if (Date.now() - record.at > KNOWN_UNDO_TTL_MS || !Array.isArray(record.sourceRemoved)) return undefined;
-  return record;
+  if (!Array.isArray(record.sourceRemoved)) return {};
+  return Date.now() - record.at > KNOWN_UNDO_TTL_MS ? { expired: record } : { record };
 }
 
 // ---------------- 上下文与目标解析 ----------------
@@ -418,8 +424,13 @@ export async function markKnown(word: string, lemma: string, opts: { confirmed?:
 export async function unmarkKnown(lemma: string): Promise<{ ok: boolean; restored?: string[]; message?: string }> {
   const target = lemma.trim().toLowerCase();
   await setKnownWords([target], false);
-  const record = await takeUndo(`known:${target}`);
+  const { record, expired } = await takeUndo(`known:${target}`);
   const notes: string[] = [];
+  if (expired) {
+    // 超过 10 分钟不再自动加回（避免误恢复很久以前删除的词），但要说清楚哪些词没有回来
+    const lost = [...new Set([...expired.sourceRemoved, ...expired.localRemoved].flatMap((r) => r.words.map((w) => w.word.toLowerCase())))];
+    if (lost.length) notes.push(`已从熟词本移除，但撤销记录已失效（超过 10 分钟），认识时从生词本删除的 ${lost.join('、')} 未加回`);
+  }
   const restored: string[] = [];
   if (record) {
     // 写入过的来源熟词本：删除刚加入的词（能删才删）
@@ -504,7 +515,8 @@ export async function addWord(data: {
         continue;
       }
       try {
-        const res = await addToSourceBook(id, [{ word: target }]);
+        // 带上卡片的释义/音标：远端只收单词，本地缓存据此保留释义（已有缓存词条的释义也会保留，见 addToSourceBook）
+        const res = await addToSourceBook(id, [entry]);
         const keys = res.map((w) => w.word.toLowerCase());
         sourceAdded.push({ bookId: id, keys });
         added.push({ bookId: id, name, ok: true, words: keys });
@@ -544,7 +556,7 @@ export async function removeWord(data: { lemma: string; bookIds?: BookId[] }): P
     }
   }
   const removal = await executeRemoval(plan, ctx);
-  const record = await takeUndo(`add:${target}`);
+  const { record } = await takeUndo(`add:${target}`);
   if (record?.knownLocalRemoved.length) await setKnownWords(record.knownLocalRemoved, true);
   if (record?.sourceRemoved.length) await restoreSourceWords(record.sourceRemoved);
   const ok = removal.results.every((r) => r.ok);

@@ -438,12 +438,33 @@ export async function addToSourceBook(bookId: BookId, words: UserWord[]): Promis
   const provider = state && getSourceProvider(state.providerId);
   if (!state || !provider) throw new SourceError('未知的来源生词本', 'unknown');
   if (!provider.addWords || !state.canAdd || state.orphaned) throw new SourceError(state.readOnlyReason ?? `“${state.name}”不支持加词`, 'unsupported');
-  const added = await provider.addWords(state.remoteId, words, await contextOf(state.providerId));
+  // 远端只收单词（欧路/有道加词接口都不接受释义）：只把单词与句柄交给 provider，释义/音标在下面写缓存时合并，
+  // 这样 provider 回传的词条里有释义就一定来自远端
+  const added = await provider.addWords(
+    state.remoteId,
+    words.map((w) => ({ word: w.word, ...(w.ref ? { ref: w.ref } : {}) })),
+    await contextOf(state.providerId),
+  );
   // provider 一个都没加进去却没抛错时也按失败处理，调用方（addWord/markKnown）据此写 ok=false，不能提示“已加入”
   if (words.length > 0 && added.length === 0) throw new SourceError(`加入“${state.name}”失败`, 'unknown');
   const count = await withStorageLock(sourceBookKey(bookId), async () => {
     const data = (await getSourceBook(bookId)) ?? { id: bookId, words: {}, updatedAt: 0 };
-    for (const w of added) data.words[w.word.toLowerCase()] = w;
+    for (const w of added) {
+      const key = w.word.toLowerCase();
+      // 句柄以 provider 返回的为准；provider 不回传释义/音标（欧路只回传单词、有道只补 itemId）时，
+      // 依次沿用该书已有缓存（从来源同步来的，最贴近远端）与调用方传入的（撤销加回时是删除前缓存的词条，卡片加入时是卡片释义），
+      // 避免冷僻词（打包词典没有）丢失来源释义直到下次全量同步（集成审核第 1 轮：卡片“加入”不带释义时覆盖了同步来的 trans/phonetic）
+      const input = words.find((x) => x.word.toLowerCase() === key);
+      const prev = data.words[key];
+      const merged: UserWord = { ...w };
+      const phonetic = w.phonetic ?? prev?.phonetic ?? input?.phonetic;
+      const trans = w.trans ?? prev?.trans ?? input?.trans;
+      if (phonetic) merged.phonetic = phonetic;
+      else delete merged.phonetic;
+      if (trans) merged.trans = trans;
+      else delete merged.trans;
+      data.words[key] = merged;
+    }
     await saveSourceBook({ ...data, updatedAt: Date.now() });
     return Object.keys(data.words).length;
   });

@@ -143,6 +143,8 @@ export interface StatusItem {
   level: StatusLevel;
   /** 一句中文说明（如“已同步 3 本生词本”“授权失效，请重新填写 token”“写入过于频繁，10:32 自动重试”） */
   text: string;
+  /** 补充原因（可选，options 审核修复新增）：如来源“未连接”时最近一次失败的原文（“未登录有道或登录已失效…”），供详情 / toast 展示 */
+  detail?: string;
   /** 上次成功同步时间 ms，0=从未 */
   lastSyncAt: number;
   /** 自动重试时间（退避中） */

@@ -101,9 +101,9 @@ describe('状态项（纯函数）', () => {
     idx.books['src:eudic:mastered']!.status = 'error';
     idx.providers.eudic = { lastListAt: 7, error: '授权失效，请重新填写 token' };
     expect(sourceItem('eudic', '欧路', idx)).toMatchObject({ level: 'error', text: '授权失效，请重新填写 token' });
-    // 从未成功同步过的来源失败（默认启用有道但没登录）：显示为尚未同步并附原因，不算错误
-    expect(sourceItem('youdao', '有道', { books: {}, providers: { youdao: { lastListAt: 1, error: '未登录有道' } } })).toMatchObject({ level: 'never', text: '未登录有道' });
-    expect(sourceItem('youdao', '有道', { books: {}, providers: {} }).level).toBe('never');
+    // 从未成功同步过的来源失败（默认启用有道但没登录）：统一显示中性的“未连接”，原因放 detail，不算错误
+    expect(sourceItem('youdao', '有道', { books: {}, providers: { youdao: { lastListAt: 1, error: '未登录有道' } } })).toMatchObject({ level: 'never', text: '未连接', detail: '未登录有道' });
+    expect(sourceItem('youdao', '有道', { books: {}, providers: {} })).toMatchObject({ level: 'never', text: '未连接' });
   });
 
   it('总级别与总述', () => {
@@ -162,7 +162,7 @@ describe('getStatusSummary / syncAll', () => {
     });
     expect(calls.sort()).toEqual(['sources', 'storage']);
     expect(res.ok).toBe(false);
-    expect(res.message).toBe('已同步：浏览器账号同步；未完成：有道词典（未登录有道词典）');
+    expect(res.message).toBe('已同步：浏览器账号同步；未完成：有道词典（未连接：未登录有道词典）');
     expect(res.summary.level).toBe('never');
     expect(res.sources).toHaveLength(1);
   });

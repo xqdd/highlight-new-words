@@ -3,6 +3,7 @@ import type { PermissionStatus, SourceSyncResult, StatusItem, StatusLevel, Statu
 import { hasAllSitesAccess, hasOriginAccess } from '@/core/platform';
 import type { Settings } from '@/core/settings/schema';
 import { getSettings } from '@/core/settings/store';
+import { isSourceNotConnected, SOURCE_NOT_CONNECTED_TEXT } from '@/core/source/connect-status';
 import { SOURCE_PROVIDER_INFOS } from '@/core/source/providers';
 import { STORAGE_KEYS } from '@/core/storage/keys';
 import type { BackendSyncStatus, SyncStatus } from '@/core/sync/types';
@@ -75,16 +76,19 @@ export function sourceItem(providerId: string, name: string, index: SourceBookIn
   if (books.some((b) => b.status === 'syncing')) return { ...base, level: 'busy', text: '正在同步…' };
   const listError = index.providers[providerId]?.error;
   const failed = books.filter((b) => b.status === 'error');
-  // 从未成功同步过的来源（如默认启用有道但用户从没登录）失败时不算“出错”，显示为“尚未同步”并附原因，避免新用户一打开就看到红色错误；
-  // 同步成功过之后再失败（登录过期、token 失效）才是需要处理的错误
-  const failLevel: StatusLevel = lastSyncAt > 0 ? 'error' : 'never';
+  // 从未成功同步过的来源（如默认启用有道但用户从没登录）不算“出错”：统一显示中性的“未连接”（口径见 core/source/connect-status），
+  // 避免新用户一打开就看到红色错误；同步成功过之后再失败（登录过期、token 失效）才是需要处理的错误
+  if (isSourceNotConnected({ lastSyncAt, failed: !!listError || failed.length > 0, bookCount: books.length })) {
+    const reason = listError || failed[0]?.error;
+    return { ...base, level: 'never', text: SOURCE_NOT_CONNECTED_TEXT, ...(reason ? { detail: reason } : {}) };
+  }
   // 列表刷新失败（未登录、token 失效、限流）时各书也会标 error，优先展示来源级原因
-  if (listError && (books.length === 0 || failed.length === books.length)) return { ...base, level: failLevel, text: listError };
+  if (listError && (books.length === 0 || failed.length === books.length)) return { ...base, level: 'error', text: listError };
   if (failed.length) {
     const reason = failed[0]!.error || '同步失败';
-    return { ...base, level: failLevel, text: failed.length === books.length ? reason : `${failed.length} 本同步失败：${reason}` };
+    return { ...base, level: 'error', text: failed.length === books.length ? reason : `${failed.length} 本同步失败：${reason}` };
   }
-  if (!books.length || lastSyncAt === 0) return { ...base, level: 'never', text: '尚未同步，点“立即同步”拉取生词本' };
+  if (lastSyncAt === 0) return { ...base, level: 'never', text: '尚未同步，点“立即同步”拉取生词本' };
   const newBooks = books.filter((b) => b.role !== 'known' && b.lastSyncAt > 0);
   const knownBooks = books.filter((b) => b.role === 'known' && b.lastSyncAt > 0);
   const words = newBooks.reduce((n, b) => n + b.wordCount, 0);
@@ -191,7 +195,7 @@ export function summarizeSyncAll(
   if (pending.length) parts.push(`等待同步：${pending.map((i) => `${i.name}（${waitText(i.retryAt, now)}）`).join('、')}`);
   if (busy.length) parts.push(`仍在同步：${busy.map((i) => i.name).join('、')}`);
   if (failed.length) parts.push(`失败：${failed.map((i) => `${i.name}（${i.text}）`).join('、')}`);
-  if (empty.length) parts.push(`未完成：${empty.map((i) => `${i.name}（${i.text}）`).join('、')}`);
+  if (empty.length) parts.push(`未完成：${empty.map((i) => `${i.name}（${i.detail ? `${i.text}：${i.detail}` : i.text}）`).join('、')}`);
   if (sourcesError) parts.push(`生词本来源同步出错：${sourcesError}`);
   const ok = !failed.length && !empty.length && !sourcesError;
   return { ok, complete: ok && !pending.length && !busy.length, message: parts.join('；') };

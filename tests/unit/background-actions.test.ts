@@ -335,7 +335,7 @@ describe('第 3 轮：O1–O4', () => {
     new PackagedDictionary(async (p) => JSON.parse(readFileSync(resolve(__dirname, '../../public/data/dict', `${p}.json`), 'utf8')) as DictShardFile);
   afterEach(() => setHomographDictionary(undefined));
 
-  it('O1 欧路列分组首个请求网络错误：GET 自动重试，整轮同步成功；写请求（POST）不重试', async () => {
+  it('O1 欧路列分组首个请求网络错误：GET 自动重试，整轮同步成功；写请求（POST）网络层错误同样重试 2 次后报告失败', async () => {
     await patchSettings(tokenSettings);
     let categoryCalls = 0;
     let postCalls = 0;
@@ -360,7 +360,8 @@ describe('第 3 轮：O1–O4', () => {
     expect(results.every((r) => r.ok)).toBe(true);
     await patchSettings({ wordActions: { addTargets: ['src:eudic:0'] } });
     const res = await addWord({ word: 'zyzzyva', lemma: 'zyzzyva' });
-    expect(postCalls).toBe(1);
+    // 欧路加词幂等（重复单词不会添加）：网络层错误重试 2 次（集成审核第 1 轮）
+    expect(postCalls).toBe(3);
     expect(res.added[0]).toMatchObject({ ok: false });
   });
 
