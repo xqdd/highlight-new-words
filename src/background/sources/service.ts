@@ -431,7 +431,7 @@ export async function deleteFromSources(
 
 /**
  * 向来源词书加词（远端 + 本地缓存）：只对 canAdd 的书调用 provider.addWords，成功的词写入缓存（带新句柄）。
- * 抛出 SourceError 时由调用方转成提示。
+ * 抛出 SourceError 时由调用方转成提示；一个词都没加成功（provider 返回空）也抛 SourceError。
  */
 export async function addToSourceBook(bookId: BookId, words: UserWord[]): Promise<UserWord[]> {
   const state = (await getSourceIndex()).books[bookId];
@@ -439,7 +439,8 @@ export async function addToSourceBook(bookId: BookId, words: UserWord[]): Promis
   if (!state || !provider) throw new SourceError('未知的来源生词本', 'unknown');
   if (!provider.addWords || !state.canAdd || state.orphaned) throw new SourceError(state.readOnlyReason ?? `“${state.name}”不支持加词`, 'unsupported');
   const added = await provider.addWords(state.remoteId, words, await contextOf(state.providerId));
-  if (added.length === 0) return added;
+  // provider 一个都没加进去却没抛错时也按失败处理，调用方（addWord/markKnown）据此写 ok=false，不能提示“已加入”
+  if (words.length > 0 && added.length === 0) throw new SourceError(`加入“${state.name}”失败`, 'unknown');
   const count = await withStorageLock(sourceBookKey(bookId), async () => {
     const data = (await getSourceBook(bookId)) ?? { id: bookId, words: {}, updatedAt: 0 };
     for (const w of added) data.words[w.word.toLowerCase()] = w;

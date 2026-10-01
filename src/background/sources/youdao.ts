@@ -182,11 +182,18 @@ export const youdaoProvider: SourceProvider = {
     if (remoteId !== YOUDAO_DEFAULT_GROUP_ID) throw new SourceError(READONLY_GROUP_REASON, 'unsupported');
     await assertLoggedIn();
     const ok = new Set<string>();
+    // 最后一次失败原因：全部失败时抛出，避免调用方把空结果当成“已加入”（5xx、code≠0 都算失败）
+    let lastError: SourceError | undefined;
     for (const w of words) {
-      const body = await getJson<null>(`/wordbook/webapi/v2/ajax/add?word=${encodeURIComponent(w.word)}&lan=en`).catch(() => undefined);
-      if (body?.code === 0) ok.add(w.word.toLowerCase());
+      try {
+        const body = await getJson<null>(`/wordbook/webapi/v2/ajax/add?word=${encodeURIComponent(w.word)}&lan=en`);
+        if (body.code === 0) ok.add(w.word.toLowerCase());
+        else lastError = new SourceError(`有道返回错误：${body.msg ?? body.code}`, 'network');
+      } catch (e) {
+        lastError = e instanceof SourceError ? e : new SourceError(String(e), 'unknown');
+      }
     }
-    if (ok.size === 0) return [];
+    if (ok.size === 0) throw lastError ?? new SourceError('有道加词失败', 'unknown');
     const fresh = await this.fetchWords(YOUDAO_DEFAULT_GROUP_ID, { settings: { enabled: true, autoSync: false, deleteOnKnown: false } });
     // 找不到新条目时去掉 ref（宁可让下次删除提示“请先重新同步”，也不要用失效 itemId 误报删除成功）
     return words

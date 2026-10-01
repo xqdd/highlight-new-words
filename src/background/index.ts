@@ -110,6 +110,12 @@ export function setupBackground(): void {
       return syncAll(deps, { background: !!data?.background });
     },
     dismissUpdateNotice: () => dismissUpdateNotice(),
+    // 悬浮球“完整设置”“去处理”：内容脚本无法自己打开扩展页面，由后台打开（带路由时 openOptionsPage 不支持 hash，只能新开标签页）
+    openOptions: async ({ hash }) => {
+      const route = (hash ?? '').replace(/^#/, '');
+      if (!route) await browser.runtime.openOptionsPage();
+      else await browser.tabs.create({ url: `${browser.runtime.getURL('/options.html' as '/')}#${route}` });
+    },
   });
 
   // 徽章与右键菜单是可选能力（移动端可能缺 action/contextMenus）：单独兜底，失败不影响下面的同步初始化

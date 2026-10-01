@@ -282,6 +282,28 @@ describe('第二阶段 F2/F3/F5/F7：syncAll 分类、后台受理与锚点', ()
     expect((await getStatusSummary(deps)).syncAll!.result).toMatchObject({ ok: true, complete: true, message: '已同步：浏览器账号同步' });
   });
 
+  it('B1：全部同步项关闭 + background=true 时同步在受理前就结束，不抛异常且返回 accepted=true', async () => {
+    await patchSettings({ sync: { enabled: false }, sources: { youdao: { enabled: false }, eudic: { enabled: false } } });
+    let summaryCalls = 0;
+    const deps = {
+      // 第一次读状态来自 background 分支：故意拖慢，确保 runSyncAll 先完成并清空进行中标记（真实 Chromium 中的时序）
+      getStorageSync: async () => {
+        if (summaryCalls++ === 0) await new Promise((r) => setTimeout(r, 20));
+        return storageSync({ enabled: false, phase: 'disabled' });
+      },
+      getWebDav: async () => webdav(),
+      syncStorage: async () => storageSync(),
+      syncWebDav: async () => webdav(),
+      syncSources: async () => [],
+    };
+    const res = await syncAll(deps, { background: true });
+    expect(res).toMatchObject({ accepted: true, ok: true });
+    expect(typeof res.startedAt).toBe('number');
+    expect(res.startedAt).toBeGreaterThan(0);
+    // 后台那一次已完成：总状态带上结果
+    expect((await getStatusSummary(deps)).syncAll).toMatchObject({ running: false, result: { ok: true } });
+  });
+
   it('WebDAV 状态项指向 #sync/webdav，浏览器账号同步指向 #sync/sync', () => {
     const s = createDefaultSettings();
     s.sync.webdav = { ...s.sync.webdav, enabled: true };
@@ -321,5 +343,42 @@ describe('移动端没有 contextMenus', () => {
     } finally {
       if (desc) Object.defineProperty(fakeBrowser, 'contextMenus', desc);
     }
+  });
+});
+
+describe('B2：openOptions 消息（悬浮球“完整设置”“去处理”）', () => {
+  /** 与悬浮球 openOptionsPage 相同的原始信封发送方式，按响应 ok 判断成功 */
+  const send = (data: unknown) => fakeBrowser.runtime.sendMessage({ ns: 'hnw', type: 'openOptions', data }) as Promise<{ ok: boolean; error?: string } | undefined>;
+
+  beforeEach(async () => {
+    vi.spyOn(fakeBrowser.permissions, 'contains').mockImplementation((async () => true) as never);
+    const { setupBackground } = await import('@/background/index');
+    setupBackground();
+  });
+
+  it('不带 hash：调用 runtime.openOptionsPage，不新开标签页', async () => {
+    const openPage = vi.fn(async () => {});
+    vi.spyOn(fakeBrowser.runtime, 'openOptionsPage').mockImplementation(openPage);
+    const create = vi.spyOn(fakeBrowser.tabs, 'create');
+    for (const data of [{}, { hash: '' }, { hash: '#' }]) expect(await send(data)).toMatchObject({ ok: true });
+    expect(openPage).toHaveBeenCalledTimes(3);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('带 hash：新标签页打开 options.html#hash（前导 # 可有可无）', async () => {
+    const openPage = vi.spyOn(fakeBrowser.runtime, 'openOptionsPage').mockImplementation(async () => {});
+    const create = vi.spyOn(fakeBrowser.tabs, 'create').mockImplementation((async () => ({})) as never);
+    expect(await send({ hash: 'sync/webdav' })).toMatchObject({ ok: true });
+    expect(await send({ hash: '#sources' })).toMatchObject({ ok: true });
+    const base = fakeBrowser.runtime.getURL('/options.html' as '/');
+    expect(create.mock.calls.map(([p]) => (p as { url: string }).url)).toEqual([`${base}#sync/webdav`, `${base}#sources`]);
+    expect(openPage).not.toHaveBeenCalled();
+  });
+
+  it('打开失败时响应 ok=false（悬浮球据此提示从扩展菜单进入）', async () => {
+    vi.spyOn(fakeBrowser.runtime, 'openOptionsPage').mockImplementation(async () => {
+      throw new Error('no options page');
+    });
+    expect(await send({})).toMatchObject({ ok: false, error: 'no options page' });
   });
 });

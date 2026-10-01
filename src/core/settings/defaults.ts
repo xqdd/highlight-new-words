@@ -46,7 +46,7 @@ export function createDefaultSettings(): Settings {
     code: { enabled: false, scope: 'comments', display: 'hover' },
     youtube: { captions: true, hoverPause: false, captionTranslation: 'above' },
     floatBall: { enabled: true, hiddenSites: [] },
-    card: { trigger: 'auto', modifier: 'alt' },
+    card: { trigger: 'auto', modifier: 'alt', hoverDelay: 250 },
     tts: { enabled: true, voice: { lang: 'en' }, rate: 1 },
     // 旧版默认来源为有道
     sources: {

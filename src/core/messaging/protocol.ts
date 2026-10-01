@@ -304,6 +304,12 @@ export interface BackgroundProtocol {
   syncAll(data: { background?: boolean }): SyncAllResult;
   /** 用户已看过升级说明：清除 storage `updateNotice` */
   dismissUpdateNotice(data: Record<string, never>): void;
+  /**
+   * 打开选项页（floatball 第 1 轮修复新增）：内容脚本不能调用 runtime.openOptionsPage，也不能直接打开扩展页面，由 background 代为打开。
+   * hash 为选项页路由（如 `sync/webdav`、`#sources`，前导 # 可有可无）：不传或为空时 runtime.openOptionsPage()（复用已打开的选项页）；
+   * 传入时新标签页打开 options.html#hash。打开失败时 handler 抛错，发送方收到 ok=false。
+   */
+  openOptions(data: { hash?: string }): void;
 
   /** 内容脚本上报本 frame 已高亮的不同词条（全量，非增量），用于徽章计数 */
   reportPageWords(data: { lemmas: string[] }): void;

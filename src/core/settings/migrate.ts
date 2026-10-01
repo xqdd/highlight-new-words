@@ -1,4 +1,4 @@
-import { LEGACY_CLOUD_BOOK_ID, SETTINGS_SCHEMA_VERSION, type Settings } from './schema';
+import { CARD_HOVER_DELAYS, LEGACY_CLOUD_BOOK_ID, SETTINGS_SCHEMA_VERSION, type Settings } from './schema';
 import { createDefaultSettings, createDefaultSourceSettings } from './defaults';
 import { CUSTOM_THEME_ID } from '../theme/themes';
 import { EUDIC_PROVIDER_ID, LEGACY_REMOTE_BOOK_ID, YOUDAO_PROVIDER_ID } from '../source/providers';
@@ -198,6 +198,8 @@ export function normalizeSettings(raw: unknown): Settings {
   if (!raw || typeof raw !== 'object') return defaults;
   const merged = deepMerge(defaults, raw as Record<string, unknown>) as Settings;
   merged.schemaVersion = SETTINGS_SCHEMA_VERSION;
+  // 悬停弹卡延迟只允许固定档位：被写坏或来自未来版本的值按默认处理（缺省时 deepMerge 已补齐）
+  if (!CARD_HOVER_DELAYS.includes(merged.card.hoverDelay)) merged.card.hoverDelay = defaults.card.hoverDelay;
   return merged;
 }
 

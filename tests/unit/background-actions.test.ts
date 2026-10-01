@@ -452,6 +452,30 @@ describe('第二阶段 F1：addWord 的 targets 完全取代默认 addTargets', 
     expect(calls.filter((c) => /ajax\/add/.test(c.url))).toHaveLength(0);
   });
 
+  it('B3：有道加词接口返回 500 时 added 记 ok=false 并带原因，toast 文案为“加入失败”而不是“已加入”', async () => {
+    await seedSourceBook({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签', canAdd: true, canDelete: true }, {});
+    await patchSettings({ sources: { youdao: { enabled: true } }, wordActions: { addTargets: ['src:youdao:0'] } });
+    const calls = mockFetch(on(/accountinfo/, () => json(YD_MISC.accountinfoLoggedIn)), on(/wordbook\/webapi\/v2\/ajax\/add/, () => new Response('oops', { status: 500 })));
+    const res = await addWord({ word: 'zyzzyva', lemma: 'zyzzyva' });
+    expect(calls.filter((c) => /ajax\/add/.test(c.url))).toHaveLength(1);
+    expect(res.ok).toBe(false);
+    expect(res.added).toEqual([expect.objectContaining({ bookId: 'src:youdao:0', ok: false, words: [], error: '有道服务器返回 500' })]);
+    expect(res.message).toContain('加入失败');
+    expect(res.message).toContain('有道服务器返回 500');
+    expect(res.message).not.toContain('已加入');
+    expect((await getSourceBook('src:youdao:0'))!.words.zyzzyva).toBeUndefined();
+  });
+
+  it('B3：有道加词返回 code≠0 时同样判为失败', async () => {
+    await seedSourceBook({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签', canAdd: true, canDelete: true }, {});
+    await patchSettings({ sources: { youdao: { enabled: true } }, wordActions: { addTargets: ['src:youdao:0'] } });
+    mockFetch(on(/accountinfo/, () => json(YD_MISC.accountinfoLoggedIn)), on(/ajax\/add/, () => json({ code: 4001, msg: 'LIMIT' })));
+    const res = await addWord({ word: 'zyzzyva', lemma: 'zyzzyva' });
+    expect(res.ok).toBe(false);
+    expect(res.added[0]).toMatchObject({ ok: false, error: '有道返回错误：LIMIT' });
+    expect(res.message).toContain('加入失败');
+  });
+
   it('T2 启用有道且默认 addTargets 含有道：targets=[我的生词本] 时有道加词接口调用 0 次', async () => {
     await seedSourceBook({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签', canAdd: true, canDelete: true }, {});
     await patchSettings({ sources: { youdao: { enabled: true } }, wordActions: { addTargets: ['src:youdao:0'] } });

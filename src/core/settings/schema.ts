@@ -186,6 +186,14 @@ export type CardTrigger = 'auto' | 'hover' | 'click' | 'modifier';
  */
 export type CardModifierKey = 'alt' | 'ctrl' | 'shift' | 'meta';
 
+/**
+ * PC 端悬停弹卡延迟（ms，card 修复轮新增）：指针在单词上停留满该时长才弹卡，防止扫过段落时误触。
+ * 100 灵敏 / 250 标准（默认）/ 400 稳妥；悬停与“修饰键 + 悬停”移入单词时生效，指针已在单词上再按修饰键的延迟不受影响
+ */
+export type CardHoverDelay = 100 | 250 | 400;
+/** 可选的悬停弹卡延迟档位（options 设置 UI 与 normalizeSettings 校验共用） */
+export const CARD_HOVER_DELAYS: readonly CardHoverDelay[] = [100, 250, 400];
+
 /** 用户另存的样式（Settings.style.saved 的一项） */
 export interface SavedMarkStyle {
   id: string;
@@ -237,6 +245,8 @@ export interface Settings {
     trigger: CardTrigger;
     /** trigger='modifier' 时按住的修饰键（v11 card 新增，默认 alt；旧设置由 normalizeSettings 补齐） */
     modifier: CardModifierKey;
+    /** 悬停弹卡延迟 ms（card 修复轮新增，默认 250；旧设置由 normalizeSettings 补齐，非法值按 250） */
+    hoverDelay: CardHoverDelay;
   };
   tts: {
     /** 打开卡片时自动发音（旧 ttsToggle） */

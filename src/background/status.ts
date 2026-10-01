@@ -249,10 +249,13 @@ export async function syncAll(deps: SyncAllDeps, opts: { background?: boolean } 
     runningSyncAll = { startedAt, promise };
   }
   if (!opts.background) return runningSyncAll.promise;
+  // 先存到局部变量：下面 await getStatusSummary 期间同步可能已经结束（如全部同步项关闭时几乎立即完成），
+  // runningSyncAll 会被 runSyncAll / finally 清空，await 之后不能再读它
+  const { startedAt, promise } = runningSyncAll;
   // 后台模式不等待结果：失败只记日志（各项错误已写入各自的持久化状态，popup 轮询可见）
-  runningSyncAll.promise.catch((e) => console.warn('[hnw] 立即同步全部失败', e));
+  promise.catch((e) => console.warn('[hnw] 立即同步全部失败', e));
   const summary = await getStatusSummary(deps);
-  return { summary, sources: [], ok: true, complete: false, accepted: true, startedAt: runningSyncAll.startedAt, message: '已开始同步，关闭弹窗也会在后台继续' };
+  return { summary, sources: [], ok: true, complete: false, accepted: true, startedAt, message: '已开始同步，关闭弹窗也会在后台继续' };
 }
 
 /** onInstalled(reason=update)：记录升级提示，供 options/popup 首次打开时展示“更新说明”（同版本重载不提示） */

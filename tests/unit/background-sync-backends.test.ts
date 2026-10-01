@@ -1103,3 +1103,29 @@ describe('WebDAV 目录被删除 / 锁异常恢复（第 4 轮 J1 / Q1 / Q2 / Q3
     expect(st.notice).toMatch(/被另一设备锁定.*60 秒.*秒后自动重试/);
   });
 });
+
+describe('B4：WebDAV 定时同步链', () => {
+  it('syncNow 第一次 reject 后定时同步不中断，第二个周期仍会执行', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const svc = davService();
+      const syncNow = vi
+        .spyOn(svc, 'syncNow')
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValue({ backend: 'webdav', enabled: true, phase: 'idle', lastSyncAt: 1, lastPullAt: 1, lastPushAt: 1 });
+      // armInterval 为私有方法：直接调用以只验证续排逻辑（onStartup 末尾同样调用它）
+      (svc as unknown as { armInterval(ms: number): void }).armInterval(60_000);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(syncNow).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith('[hnw] WebDAV 定时同步失败', expect.any(Error));
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(syncNow).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(syncNow).toHaveBeenCalledTimes(3);
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+});

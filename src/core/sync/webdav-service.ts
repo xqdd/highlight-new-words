@@ -131,7 +131,16 @@ export class WebDavSyncService {
 
   private armInterval(intervalMs: number): void {
     clearTimeout(this.intervalTimer);
-    if (intervalMs > 0) this.intervalTimer = setTimeout(() => void this.syncNow().then(() => this.armInterval(intervalMs)), intervalMs);
+    if (intervalMs > 0) {
+      // 本轮失败只记日志，finally 中照常续排下一轮：用 .then 续排时一次 reject 就会让定时同步链永久中断
+      this.intervalTimer = setTimeout(
+        () =>
+          void this.syncNow()
+            .catch((e) => console.warn('[hnw] WebDAV 定时同步失败', e))
+            .finally(() => this.armInterval(intervalMs)),
+        intervalMs,
+      );
+    }
   }
 
   /** 防抖同步：最后一次变化后 debounceMs；连续变化时从第一次未同步的变化起最多 maxWaitMs */
