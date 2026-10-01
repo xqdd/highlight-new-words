@@ -109,7 +109,7 @@ const INLINE_MODE_DESC: Record<InlineTranslationMode, string> = {
   hover: '指到生词时浮出，不占位置；触屏设备上没有悬停，请点按单词查看卡片',
 };
 const INLINE_MODES = INLINE_MODE_ORDER.map((value) => ({ value, label: INLINE_MODE_LABELS[value], desc: INLINE_MODE_DESC[value] }));
-function patchTr(p: Partial<{ blur: boolean; color: string; opacity: number; fontScale: number }>) {
+function patchTr(p: Partial<{ blur: boolean; color: string; opacity: number; fontScale: number; oncePerParagraph: boolean }>) {
   settings.value.inlineTranslation = { ...settings.value.inlineTranslation, ...p };
 }
 
@@ -304,7 +304,13 @@ const cardColor = computed({
         description="译文先模糊显示，想不起来时点一下才看清，适合检验记忆"
         @update:model-value="(v: boolean) => patchTr({ blur: v })"
       />
-      <p class="muted small">单行标题、按钮、导航等放不下的位置，译文会自动改为悬停显示，不会撑破排版。</p>
+      <ToggleSwitch
+        :model-value="settings.inlineTranslation.oncePerParagraph !== false"
+        label="同段重复的词只在第一次显示译文"
+        description="关闭后，词每次出现都显示译文"
+        @update:model-value="(v: boolean) => patchTr({ oncePerParagraph: v })"
+      />
+      <p class="muted small">链接、标题、按钮等位置同样显示译文；按钮、单行导航等放不下词上小字的地方，译文改为附在词后。</p>
     </template>
     <!-- 高级：首屏预隐藏（settings.performance.prehide，默认关）。不只与译文有关（粗体/斜体样式同样会改变排版），所以不随译文模式隐藏 -->
     <details class="advanced" :open="settings.performance.prehide" @toggle="advOpen.prehide = ($event.target as HTMLDetailsElement).open">

@@ -167,6 +167,7 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
       dictionary,
       inlineTranslation: settings.inlineTranslation.mode,
       translationBlur: !!settings.inlineTranslation.blur,
+      glossOncePerParagraph: settings.inlineTranslation.oncePerParagraph !== false,
       code: settings.code,
       onLemmasChanged: (lemmas) => void sendToBackground('reportPageWords', { lemmas }).catch(() => {}),
     });
@@ -253,7 +254,7 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     }
     applyPageStyle(doc, settings);
     card?.setStyle(resolveCardStyle(settings));
-    engine?.setInlineTranslation(settings.inlineTranslation.mode, !!settings.inlineTranslation.blur);
+    engine?.setInlineTranslation(settings.inlineTranslation.mode, !!settings.inlineTranslation.blur, settings.inlineTranslation.oncePerParagraph !== false);
   });
 
   if (isTop) {

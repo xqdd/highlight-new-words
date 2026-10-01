@@ -37,12 +37,7 @@ export const ATTR_TIGHT = 'data-hnw-tight';
 /** hnw-mark 上的标记：位于代码（pre/code/语法高亮容器）中，永远不插入占位译文 */
 export const ATTR_CODE = 'data-hnw-code';
 /**
- * hnw-mark 上的标记：低置信度（首字母大写却不在句首，或单独成段的大写词，多为专有名词/界面标签，如导航里的 “Premium”）。
- * 仍然高亮，但不显示行内译文（卡片照常可看完整释义）。
- */
-export const ATTR_LOW_CONFIDENCE = 'data-hnw-lowconf';
-/**
- * hnw-mark 上的标记：行内译文密度控制省略了这个词的括注（同段重复出现的词条、窄屏上每段超出密度上限的较常见词）。
+ * hnw-mark 上的标记：同段重复出现的词条省略了括注（开关 inlineTranslation.oncePerParagraph，见 engine 的 thinGlosses）。
  * 仍然高亮，悬停/卡片照常可看释义。
  */
 export const ATTR_NO_GLOSS = 'data-hnw-nogloss';

@@ -42,7 +42,7 @@ export function createDefaultSettings(): Settings {
       },
       perBook: {},
     },
-    inlineTranslation: { mode: 'off', blur: false, color: '' },
+    inlineTranslation: { mode: 'off', blur: false, color: '', oncePerParagraph: true },
     code: { enabled: false, scope: 'comments', display: 'hover' },
     youtube: { captions: true, hoverPause: false, captionTranslation: 'above' },
     floatBall: { enabled: true, hiddenSites: [] },

@@ -124,11 +124,16 @@ describe('v5 样式契约', () => {
     s.style.themeId = 'wavy-line';
     // 装饰线类样式在链接里同样让位：去掉自身波浪线，改用同色浅底
     expect(buildPageCss(s)).toContain('hnw-mark:where([data-hnw-link])>hnw-w{color:inherit;text-decoration-line:none;outline:none;background-color:color-mix(in srgb,#f43f5e 20%,transparent)}');
-    // 代码中装饰线收为 1px 直线；标题、密度省略的不显示括注，链接内照常显示
+    // 代码中装饰线收为 1px 直线；只有同段重复省略的不显示括注，链接、标题、受限容器照常显示
     expect(css2).toContain('hnw-mark[data-hnw-code]>hnw-w{text-decoration-style:solid!important;text-decoration-thickness:1px!important');
     expect(css2).not.toContain('html[data-hnw-tr="after"] hnw-mark[data-hnw-link]>hnw-tr');
-    expect(css2).toContain('html[data-hnw-tr="after"] :is(h1,h2,h3,h4,h5,h6) hnw-mark>hnw-tr');
+    expect(css2).not.toContain('html[data-hnw-tr="after"] :is(h1,h2,h3,h4,h5,h6) hnw-mark>hnw-tr');
+    expect(css2).not.toContain('html[data-hnw-tr="after"] hnw-mark[data-hnw-tight]>hnw-tr');
     expect(css2).toContain('html[data-hnw-tr="after"] hnw-mark[data-hnw-nogloss]>hnw-tr');
+    // ruby 模式下受限容器的译文改为词后括注
+    s.inlineTranslation.mode = 'ruby';
+    expect(buildPageCss(s)).toContain('html[data-hnw-tr="ruby"] hnw-mark[data-hnw-tight]>hnw-tr[data-tr]::before{content:"(" attr(data-tr) ")"}');
+    s.inlineTranslation.mode = 'off';
     // 按词书覆盖的 v5 字段也能生效
     s.style.perBook.cet6 = { mark: { underline: 'wavy', underlineColor: '#f43f5e', italic: true } };
     expect(resolveMarkStyle(s, 'cet6').italic).toBe(true);
@@ -207,33 +212,6 @@ const volatileElement = 1;</code></pre><p>see <code>scrutinizeInput</code></p>
     expect(document.querySelectorAll('hnw-tr').length).toBe(0);
     expect(document.querySelector('pre')!.textContent).toBe('function getElementById(premium) { return abandonDefault; }');
     engine.stop();
-  });
-});
-
-describe('大小写置信度', () => {
-  it('句中大写词、单独成段的大写词判为低置信度；句首不受影响', () => {
-    document.body.innerHTML = `<p>Upgrade to Premium now. Meticulous work. "Abandon" ship.</p><nav><a>Premium</a></nav><p>they <em>Scrutinize</em> it</p>`;
-    const [p1, , p3] = document.querySelectorAll('p, nav');
-    const m1 = highlightTextNode(p1!.firstChild as Text, match);
-    expect(m1.map((m) => [m.textContent, m.hasAttribute('data-hnw-lowconf')])).toEqual([
-      ['Premium', true],
-      ['Meticulous', false],
-      ['Abandon', false],
-    ]);
-    const nav = highlightTextNode(document.querySelector('nav a')!.firstChild as Text, match);
-    expect(nav[0]!.hasAttribute('data-hnw-lowconf')).toBe(true);
-    const em = highlightTextNode(p3!.querySelector('em')!.firstChild as Text, match);
-    expect(em[0]!.hasAttribute('data-hnw-lowconf')).toBe(true);
-  });
-
-  it('句首紧跟另一个大写词判为低置信度（多词专有名词），后面是单字母 I 不算', () => {
-    document.body.innerHTML = `<p>Premium Senate seat</p><p>Meticulous I am. Abandon ship.</p>`;
-    const [p1, p2] = document.querySelectorAll('p');
-    expect(highlightTextNode(p1!.firstChild as Text, match).map((m) => [m.textContent, m.hasAttribute('data-hnw-lowconf')])).toEqual([['Premium', true]]);
-    expect(highlightTextNode(p2!.firstChild as Text, match).map((m) => [m.textContent, m.hasAttribute('data-hnw-lowconf')])).toEqual([
-      ['Meticulous', false],
-      ['Abandon', false],
-    ]);
   });
 });
 

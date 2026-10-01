@@ -138,7 +138,7 @@ function splitSelectors(list: string): string[] {
   return out;
 }
 
-describe('E5 桌面端不显示括注的 mark 悬停兜底浮层', () => {
+describe('E5 桌面端同段重复省略括注的 mark 悬停兜底浮层', () => {
   const settings = () => {
     const s = createDefaultSettings();
     s.inlineTranslation.mode = 'after';
@@ -153,7 +153,7 @@ describe('E5 桌面端不显示括注的 mark 悬停兜底浮层', () => {
     return splitSelectors(rule.replace(/^@media \(hover:hover\)\{/, '').split('{')[0]!).map((x) => x.replace(':hover', ''));
   }
 
-  it('标题、低置信度、密度省略的 mark 都有译文并命中悬停浮层规则；链接内与普通 mark 不命中', async () => {
+  it('同段重复省略的 mark 有译文并命中悬停浮层规则；标题、链接、大写词与普通 mark 照常显示、不命中', async () => {
     const css = buildPageCss(settings());
     const sels = fallbackSelectors(css);
     document.documentElement.setAttribute('data-hnw-tr', 'after');
@@ -164,15 +164,15 @@ describe('E5 桌面端不显示括注的 mark 悬停兜底浮层', () => {
     await flush();
     const marks = [...document.querySelectorAll('hnw-mark')];
     const kinds = marks.map((m) =>
-      m.closest('h2') ? 'heading' : m.hasAttribute('data-hnw-link') ? 'link' : m.hasAttribute('data-hnw-lowconf') ? 'lowconf' : m.hasAttribute('data-hnw-nogloss') ? 'nogloss' : 'normal',
+      m.closest('h2') ? 'heading' : m.hasAttribute('data-hnw-link') ? 'link' : m.hasAttribute('data-hnw-nogloss') ? 'nogloss' : 'normal',
     );
-    expect(kinds).toEqual(['heading', 'link', 'lowconf', 'normal', 'nogloss']);
+    // 句中大写的 Premise 与链接里的 premise 同段重复，按重复省略
+    expect(kinds).toEqual(['heading', 'link', 'nogloss', 'normal', 'nogloss']);
     for (const [i, m] of marks.entries()) {
       const tr = m.querySelector('hnw-tr')!;
       expect(tr.getAttribute('data-tr')).toBeTruthy();
       const hit = sels.some((s) => tr.matches(s));
-      // 链接内照常显示括注，不走兜底浮层
-      expect(hit, `${kinds[i]} 是否命中兜底浮层`).toBe(kinds[i] !== 'normal' && kinds[i] !== 'link');
+      expect(hit, `${kinds[i]} 是否命中兜底浮层`).toBe(kinds[i] === 'nogloss');
     }
     document.documentElement.removeAttribute('data-hnw-tr');
   });

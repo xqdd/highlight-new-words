@@ -8,7 +8,6 @@ import {
   ATTR_CODE_FLOAT,
   ATTR_IN_LINK,
   ATTR_LEMMA,
-  ATTR_LOW_CONFIDENCE,
   ATTR_NO_GLOSS,
   ATTR_ON_DARK,
   ATTR_REVEALED,
@@ -43,6 +42,8 @@ export interface EngineOptions {
   inlineTranslation: InlineTranslationMode;
   /** 模糊自测（v5）：译文模糊，点按译文切换清晰；engine 拦截点按，不触发卡片与链接 */
   translationBlur?: boolean;
+  /** 同一段落里同一词条只在第一次出现时显示行内译文（默认开），见 thinGlosses */
+  glossOncePerParagraph?: boolean;
   /** 代码块中标注生词（v8）；变化时由调用方 rebuild */
   code?: CodeBlockSettings;
   /** 已高亮的不同词条集合变化（节流后）回调，用于徽章计数上报 */
@@ -82,11 +83,6 @@ const TIGHT_MAX_DEPTH = 6;
 /** 视为“按钮类控件”的标签与 role：标签文字一般不换行、宽度由内容决定，插入占位译文会撑宽控件 */
 const CONTROL_TAGS = new Set(['BUTTON', 'SUMMARY']);
 const CONTROL_ROLES = new Set(['button', 'tab', 'menuitem', 'menuitemradio', 'menuitemcheckbox', 'option', 'switch']);
-/** 标题：只标记、不插行内译文（样式见 style.ts） */
-const HEADING_SELECTOR = 'h1,h2,h3,h4,h5,h6';
-/** 窄屏（手机）判定宽度与括注密度：每段约每 GLOSS_CHARS_NARROW 个字符最多一个括注（390px 宽约 1.5 行） */
-const NARROW_MAX_PX = 600;
-const GLOSS_CHARS_NARROW = 70;
 /** 动词变形词尾（-s 与名词复数同形，不算） */
 const VERB_INFLECTION = /(?:ing|ed)$/;
 
@@ -110,8 +106,6 @@ export class HighlightEngine {
   private processed = new WeakSet<Text>();
   private readonly lemmas = new Set<string>();
   private readonly translations = new Map<string, string | null>();
-  /** 词条 -> 词频排名（越大越罕见；密度控制时优先给罕见词保留括注） */
-  private readonly ranks = new Map<string, number>();
   /** 词条 -> 动词短释义（DictEntry.shortVerb：short 取的是名词/形容词义时才有，如 advocate 提倡者 / 提倡） */
   private readonly verbTranslations = new Map<string, string>();
   /** 乐观移除（标记熟词）的词条：在 matcher 更新前也不再高亮，rebuild 时清空 */
@@ -233,7 +227,6 @@ export class HighlightEngine {
     this.stop();
     this.opts = { ...this.opts, matcher, dictionary };
     this.translations.clear();
-    this.ranks.clear();
     this.verbTranslations.clear();
     this.start();
   }
@@ -247,13 +240,20 @@ export class HighlightEngine {
     this.redoGroups(this.opts.root.querySelectorAll(TAG_MARK));
   }
 
-  /** 行内翻译模式变化：off 时不再查询词典；切换为开启时为已有 mark 补齐翻译；blur 为模糊自测开关 */
-  setInlineTranslation(mode: InlineTranslationMode, blur = this.opts.translationBlur): void {
+  /**
+   * 行内翻译设置变化：off 时不再查询词典；切换为开启时为已有 mark 补齐翻译；blur 为模糊自测开关；
+   * oncePerParagraph 为“同段重复只显示首次”开关，变化时按段落重算。
+   */
+  setInlineTranslation(mode: InlineTranslationMode, blur = this.opts.translationBlur, oncePerParagraph = this.opts.glossOncePerParagraph): void {
     const prev = this.opts.inlineTranslation;
+    const prevOnce = this.opts.glossOncePerParagraph;
     this.opts.inlineTranslation = mode;
     this.opts.translationBlur = blur;
+    this.opts.glossOncePerParagraph = oncePerParagraph;
     if (prev === 'off' && mode !== 'off') {
       void this.fillTranslations([...this.opts.root.querySelectorAll<HTMLElement>(TAG_MARK)]);
+    } else if (prevOnce !== oncePerParagraph) {
+      this.thinGlosses([...this.opts.root.querySelectorAll<HTMLElement>(TAG_MARK)]);
     }
   }
 
@@ -490,7 +490,7 @@ export class HighlightEngine {
    * 读 mark 所在元素（mark 的父元素，也就是被高亮文本节点的父元素）的上下文，只读不写：
    * - 深色上下文：依据父元素的计算文字颜色，浅色文字 ≈ 深色背景，比逐级查找背景色（透明、背景图）更可靠也更便宜；
    *   链接常用中等亮度的强调色，改用链接外层元素的文字颜色判断
-   * - 链接内、标题内：只看 DOM，不读样式
+   * - 链接内：只看 DOM，不读样式
    * - 受限容器：见 isTightContext（代码中的 mark 本来就不占位，不必判断）
    * - flex/grid 容器：见 applyMarkContexts 的空格折叠处理
    */
@@ -499,7 +499,6 @@ export class HighlightEngine {
       dark: this.isDarkContext(parent),
       link: !!parent?.closest('a'),
       tight: !code && this.isTightContext(parent),
-      heading: !!parent?.closest(HEADING_SELECTOR),
       flex: !code && this.isFlexContainer(parent),
     };
   }
@@ -521,8 +520,8 @@ export class HighlightEngine {
         m.toggleAttribute(ATTR_ON_DARK, ctx.dark);
         m.toggleAttribute(ATTR_IN_LINK, ctx.link);
         m.toggleAttribute(ATTR_TIGHT, ctx.tight);
-        // 标题、低置信度、受限容器、代码中不显示占位译文，不预留（链接内照常显示，见 style.ts 的 noGloss）
-        if (ruby && !ctx.tight && !ctx.heading && !m.hasAttribute(ATTR_CODE) && !m.hasAttribute(ATTR_LOW_CONFIDENCE)) {
+        // 受限容器中的 ruby 译文改为附在词后（不撑高单行，见 style.ts），代码中不显示占位译文，二者都不预留
+        if (ruby && !ctx.tight && !m.hasAttribute(ATTR_CODE)) {
           reserveTranslationSlot(m);
         }
       }
@@ -651,7 +650,6 @@ export class HighlightEngine {
       for (const lemma of missing) {
         const e = found.get(lemma);
         this.translations.set(lemma, e?.short ?? null);
-        if (e?.rank) this.ranks.set(lemma, e.rank);
         if (e?.shortVerb) this.verbTranslations.set(lemma, e.shortVerb);
       }
     }
@@ -669,47 +667,27 @@ export class HighlightEngine {
   }
 
   /**
-   * 行内括注密度控制（评审反馈：手机首屏几乎每行 2–3 个括注，噪声大）。按段落整体重算（无状态，重做切分组后结果一致）：
-   * - 同一段落里同一词条只在第一次出现时显示括注
-   * - 窄屏（≤600px）每段最多 max(1, 字数/70) 个括注，超出时优先保留词频更低（更难）的词
-   * 被省略的 mark 加 data-hnw-nogloss（CSS 隐藏其占位译文），仍然高亮，悬停/卡片照常可看释义。
-   * 链接、标题、低置信度、受限容器、代码中的 mark 本来就不显示括注，不参与计数。
+   * 同段重复词的行内译文（开关 glossOncePerParagraph，默认开）：同一段落里同一词条只在第一次出现时显示译文。
+   * 按段落整体重算（无状态，重做切分组后结果一致）。被省略的 mark 加 data-hnw-nogloss（CSS 隐藏其译文），
+   * 仍然高亮，悬停/卡片照常可看释义；开关关闭时清掉该标记，每次出现都显示。代码中的 mark 不参与计数。
    */
   private thinGlosses(marks: HTMLElement[]): void {
-    const view = this.opts.root.ownerDocument.defaultView;
-    const narrow = !!view && view.innerWidth <= NARROW_MAX_PX;
+    const once = this.opts.glossOncePerParagraph !== false;
     const blocks = new Set<Element>();
     for (const m of marks) {
       const b = blockOf(m);
       if (b) blocks.add(b);
     }
     for (const block of blocks) {
-      const all = [...block.querySelectorAll<HTMLElement>(TAG_MARK)].filter(
-        (m) =>
-          !m.hasAttribute(ATTR_LOW_CONFIDENCE) &&
-          !m.hasAttribute(ATTR_TIGHT) &&
-          !m.hasAttribute(ATTR_CODE) &&
-          !m.parentElement?.closest(HEADING_SELECTOR) &&
-          !!this.translationOf(m),
-      );
+      const all = [...block.querySelectorAll<HTMLElement>(TAG_MARK)].filter((m) => !m.hasAttribute(ATTR_CODE));
       const seen = new Set<string>();
-      const firsts: HTMLElement[] = [];
       for (const m of all) {
         const lemma = m.getAttribute(ATTR_LEMMA)!;
-        if (!seen.has(lemma)) {
-          seen.add(lemma);
-          firsts.push(m);
-        }
+        // 没有释义的不占“首次”名额，让后面有释义的同词条照常显示
+        const first = !seen.has(lemma) && !!this.translationOf(m);
+        if (first) seen.add(lemma);
+        m.toggleAttribute(ATTR_NO_GLOSS, once && !first);
       }
-      let keep = new Set(firsts);
-      if (narrow) {
-        const budget = Math.max(1, Math.round((block.textContent?.length ?? 0) / GLOSS_CHARS_NARROW));
-        if (firsts.length > budget) {
-          const rarity = (m: HTMLElement) => this.ranks.get(m.getAttribute(ATTR_LEMMA)!) ?? Number.MAX_SAFE_INTEGER;
-          keep = new Set([...firsts].sort((a, b) => rarity(b) - rarity(a)).slice(0, budget));
-        }
-      }
-      for (const m of all) m.toggleAttribute(ATTR_NO_GLOSS, !keep.has(m));
     }
   }
 
@@ -726,11 +704,9 @@ export class HighlightEngine {
     if (keys.length > 1) {
       const own = this.translations.get(keys[0]!);
       if (own) return own;
-      // -ing/-ed 词形自身无词条、但处在形容词位置（a compelling scenario、very promising）：
-      // 原形动词义（compel 强迫）会译错，行内不显示，只在卡片中看原形释义
-      if (VERB_INFLECTION.test(keys[0]!) && isAdjectivePosition(m)) return null;
-      // 动词释义取屈折原形的（没有屈折原形时 keys[1] 即匹配原形）
-      if (VERB_INFLECTION.test(keys[0]!)) {
+      // 动词释义取屈折原形的（没有屈折原形时 keys[1] 即匹配原形）；
+      // 处在形容词位置（a compelling scenario、very promising）时不强行用动词义，按下面的词条顺序取（可能不准，卡片里有完整释义）
+      if (VERB_INFLECTION.test(keys[0]!) && !isAdjectivePosition(m)) {
         const verb = this.verbTranslations.get(keys[1]!);
         if (verb) return verb;
       }
@@ -857,7 +833,7 @@ export class HighlightEngine {
       const target = e.target;
       if (!(target instanceof Element) || target.tagName.toLowerCase() !== TAG_TRANSLATION) return;
       const mark = target.parentElement;
-      if (!mark || mark.hasAttribute(ATTR_TIGHT) || mark.hasAttribute(ATTR_CODE)) return;
+      if (!mark || mark.hasAttribute(ATTR_CODE)) return;
       e.stopPropagation();
       if (e.type === 'click') {
         e.preventDefault();
@@ -906,7 +882,6 @@ interface MarkContext {
   dark: boolean;
   link: boolean;
   tight: boolean;
-  heading: boolean;
   /** 父元素是 flex/grid 容器（代码中不判断） */
   flex: boolean;
 }

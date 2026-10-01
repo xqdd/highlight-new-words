@@ -41,14 +41,13 @@ describe('分词：非 ASCII 字母', () => {
   });
 });
 
-describe('行内括注：链接、标题与密度控制', () => {
-  it('标题内的 mark 在 ruby 模式不预留占位注解；链接内与正文一样预留', async () => {
+describe('行内括注：链接、标题与同段重复', () => {
+  it('标题、链接内与正文一样，在 ruby 模式创建 mark 的同一帧预留占位注解', async () => {
     document.body.innerHTML = '<h2>The premise</h2><p>See <a href="#">abandon</a> and premise.</p>';
     const engine = startEngine('ruby');
     const [h, a, p] = [...document.querySelectorAll('hnw-mark')];
     expect(a!.hasAttribute('data-hnw-link')).toBe(true);
-    expect(h!.querySelector('hnw-tr')).toBeNull();
-    // 链接内、正文 mark 都在创建的同一帧预留注解
+    expect(h!.querySelector('hnw-tr')).not.toBeNull();
     expect(a!.querySelector('hnw-tr')).not.toBeNull();
     expect(p!.querySelector('hnw-tr')).not.toBeNull();
     engine.stop();
@@ -62,24 +61,16 @@ describe('行内括注：链接、标题与密度控制', () => {
     expect(marks.map((m) => m.hasAttribute('data-hnw-nogloss'))).toEqual([false, true, false]);
     // 不同段落各自独立
     expect(document.querySelector('p:last-child hnw-mark')!.hasAttribute('data-hnw-nogloss')).toBe(false);
+    // 关闭开关后每次出现都显示，重新打开恢复
+    engine.setInlineTranslation('after', false, false);
+    expect(document.querySelectorAll('hnw-mark[data-hnw-nogloss]').length).toBe(0);
+    engine.setInlineTranslation('after', false, true);
+    expect(marks.map((m) => m.hasAttribute('data-hnw-nogloss'))).toEqual([false, true, false]);
     engine.stop();
   });
 
-  it('窄屏按段落字数限制括注数量，优先保留更罕见的词', async () => {
+  it('窄屏也不限密度：每个词条首次出现都显示译文', async () => {
     vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(390);
-    // 约 60 个字符、4 个生词 -> 窄屏只保留 1 个：最罕见的 scrutinize
-    document.body.innerHTML = '<p>Abandon the volatile premise; scrutinize it, be ambitious.</p>';
-    const engine = startEngine();
-    await flush();
-    const kept = [...document.querySelectorAll('hnw-mark:not([data-hnw-nogloss])')].map((m) => m.getAttribute('data-lemma'));
-    expect(kept).toEqual(['scrutinize']);
-    // 被省略的仍然高亮
-    expect(document.querySelectorAll('hnw-mark').length).toBe(5);
-    engine.stop();
-  });
-
-  it('宽屏不限密度', async () => {
-    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1280);
     document.body.innerHTML = '<p>Abandon the volatile premise; scrutinize it, be ambitious.</p>';
     const engine = startEngine();
     await flush();

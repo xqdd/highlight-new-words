@@ -234,6 +234,8 @@ export interface Settings {
   /** 行内译文：模式 + 样式（v5 新增 blur/color/opacity/fontScale，可选，见 TranslationStyle） */
   inlineTranslation: {
     mode: InlineTranslationMode;
+    /** 同一段落里重复出现的词只在第一次显示译文；缺省视为开启（旧设置没有此字段） */
+    oncePerParagraph?: boolean;
   } & TranslationStyle;
   /** 代码块中标注生词（v8，engine 新增） */
   code: CodeBlockSettings;

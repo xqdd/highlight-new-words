@@ -6,7 +6,6 @@ import {
   ATTR_CODE,
   ATTR_CODE_FLOAT,
   ATTR_IN_LINK,
-  ATTR_LOW_CONFIDENCE,
   ATTR_NO_GLOSS,
   ATTR_ON_DARK,
   ATTR_REVEALED,
@@ -205,20 +204,24 @@ function translationRules(settings: Settings): string[] {
     `${mode('ruby')} ${TR}{display:ruby-text;ruby-align:center;text-align:center;font-size:max(${t.fontScale}em,10px);line-height:1.2;opacity:${t.opacity};${color}white-space:nowrap}`,
     `${mode('ruby')} ${TR}:not([${ATTR_TR_TEXT}])::before{content:"\\a0"}`,
   );
-  // 不占位的浮层：仅悬停模式、受限容器、代码中的浮动标注共用。绝对定位在单词上方，不参与布局
+  // 不占位的浮层：悬停模式、代码中的浮动标注、同段重复词的悬停兜底共用。绝对定位在单词上方，不参与布局
   const float =
     `display:block;position:absolute;left:50%;bottom:100%;transform:translate(-50%,-3px);z-index:2147483000;` +
     `padding:1px 6px;border-radius:6px;background:#1f2328;color:#f6f8fa;opacity:1;font-size:max(.75em,11px);line-height:1.45;` +
     `white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25)`;
   const hoverable = `${M}:hover>${TR}`;
   out.push(
-    `${mode('hover')} ${M},${mode('after')} ${M}[${ATTR_TIGHT}],${mode('ruby')} ${M}[${ATTR_TIGHT}],${M}[${ATTR_CODE}]{position:relative}`,
-    // 受限容器中的 ruby 退回普通行内，避免撑高单行
+    `${mode('hover')} ${M},${M}[${ATTR_CODE}]{position:relative}`,
+    // 受限容器（按钮、单行容器等）与代码中的 ruby 退回普通行内，避免撑高单行
     `${mode('ruby')} ${M}[${ATTR_TIGHT}],${mode('ruby')} ${M}[${ATTR_CODE}]{display:inline}`,
     `${mode('ruby')} ${M}[${ATTR_TIGHT}]>${W},${mode('ruby')} ${M}[${ATTR_CODE}]>${W}{display:inline}`,
-    `${mode('after')} ${M}[${ATTR_TIGHT}]>${TR},${mode('ruby')} ${M}[${ATTR_TIGHT}]>${TR},${mode('hover')} ${TR}{display:none}`,
-    `@media (hover:hover){${mode('hover')} ${hoverable},${mode('after')} ${M}[${ATTR_TIGHT}]:hover>${TR},${mode('ruby')} ${M}[${ATTR_TIGHT}]:hover>${TR}{${float}}}`,
-    `${mode('after')} ${M}[${ATTR_TIGHT}]>${TR}::before,${mode('ruby')} ${M}[${ATTR_TIGHT}]>${TR}::before,${mode('hover')} ${TR}::before{content:attr(${ATTR_TR_TEXT})}`,
+    // 受限容器中的 ruby 译文改为附在词后的括注（与词后模式同样式），照常显示
+    `${mode('ruby')} ${M}[${ATTR_TIGHT}]{white-space:nowrap}`,
+    `${mode('ruby')} ${M}[${ATTR_TIGHT}]>${TR}{display:inline-block;margin-inline-start:.1em;font-size:${t.fontScale}em;line-height:1;opacity:${t.opacity};${color}white-space:nowrap;vertical-align:baseline}`,
+    `${mode('ruby')} ${M}[${ATTR_TIGHT}]>${TR}[${ATTR_TR_TEXT}]::before{content:"(" attr(${ATTR_TR_TEXT}) ")"}`,
+    `${mode('hover')} ${TR}{display:none}`,
+    `@media (hover:hover){${mode('hover')} ${hoverable}{${float}}}`,
+    `${mode('hover')} ${TR}::before{content:attr(${ATTR_TR_TEXT})}`,
   );
   // 代码：永远不显示占位译文；浮动小标注模式下常显（不占位，复制代码不会带出）
   out.push(`${M}[${ATTR_CODE}]>${TR}{display:none!important}`);
@@ -232,14 +235,11 @@ function translationRules(settings: Settings): string[] {
       `@media (hover:hover){${M}[${ATTR_CODE}][${ATTR_CODE_FLOAT}=none]:hover>${TR}{display:block!important}}`,
     );
   }
-  // 不显示占位译文的位置（悬停模式仍可看，卡片照常）：
-  // - 低置信度（专有名词/界面标签）
-  // - 标题：大字号里的括注很突兀，标题统一只标记
-  // - 密度控制省略的（data-hnw-nogloss，见 engine 的 thinGlosses）
-  // 链接内的词照常显示：维基等页面大量生词在链接里，隐藏后行内译文形同缺失
-  const noGloss = [`${M}[${ATTR_LOW_CONFIDENCE}]`, `${HEADINGS} ${M}`, `${M}[${ATTR_NO_GLOSS}]`];
+  // 行内译文在链接、标题、按钮、专有名词等所有位置照常显示（译文不准时看卡片）。
+  // 唯一例外由用户开关控制：同段重复出现的词只在第一次显示（data-hnw-nogloss，见 engine 的 thinGlosses）
+  const noGloss = [`${M}[${ATTR_NO_GLOSS}]`];
   out.push(`${[mode('after'), mode('ruby')].flatMap((p) => noGloss.map((x) => `${p} ${x}>${TR}`)).join(',')}{display:none}`);
-  // 桌面端兜底：上述不显示括注的 mark 悬停时复用受限容器的不占位浮层显示短释义（触屏没有悬停，点按照常打开卡片）。
+  // 桌面端兜底：上述不显示括注的 mark 悬停时复用不占位浮层显示短释义（触屏没有悬停，点按照常打开卡片）。
   // 只对已有释义的（带 data-tr）生效，ruby 占位注解不弹空浮层；模糊自测不作用于浮层（浮层本就需要悬停才出现）
   const noGlossMarks = [mode('after'), mode('ruby')].flatMap((p) => noGloss.map((x) => `${p} ${x}`));
   out.push(
@@ -253,7 +253,7 @@ function translationRules(settings: Settings): string[] {
   out.push(`${M}[${ATTR_CODE}]>${W}{text-decoration-style:solid!important;text-decoration-thickness:1px!important;text-underline-offset:1px!important}`);
   // 模糊自测：译文模糊且可点按（engine 拦截点按，切换 data-hnw-revealed，不触发卡片/链接）
   if (t.blur) {
-    const quiz = [mode('after'), mode('ruby')].map((p) => `${p} ${M}:not([${ATTR_TIGHT}]):not([${ATTR_CODE}])>${TR}:not([${ATTR_REVEALED}])`).join(',');
+    const quiz = [mode('after'), mode('ruby')].map((p) => `${p} ${M}:not([${ATTR_CODE}])>${TR}:not([${ATTR_REVEALED}])`).join(',');
     out.push(`${quiz}{filter:blur(.28em);pointer-events:auto;cursor:pointer;transition:filter .15s ease}`);
     const revealed = [mode('after'), mode('ruby')].map((p) => `${p} ${TR}[${ATTR_REVEALED}]`).join(',');
     out.push(`${revealed}{pointer-events:auto;cursor:pointer}`);

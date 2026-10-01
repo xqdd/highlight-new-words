@@ -81,7 +81,7 @@ describe('A2 用户词书与熟词本中的变形条目按屈折原形参与匹�
   });
 });
 
-describe('A1 -ing/-ed 词形缺词条、处在形容词位置时不显示原形动词义', () => {
+describe('A1 -ing/-ed 词形缺词条、处在形容词位置时照常显示原形释义（不准时看卡片）', () => {
   // compelling 在词典中没有自己的词条，词形还原到 compel
   const lemmatizer: Lemmatizer = {
     analyze: (w) => {
@@ -96,7 +96,7 @@ describe('A1 -ing/-ed 词形缺词条、处在形容词位置时不显示原形�
   };
   const dict = dictOf({ compel: { short: 'vt. 强迫, 迫使' } });
 
-  it('a compelling scenario / very compelling 不显示“强迫”；was compelling them、compelled to 仍回退动词义', async () => {
+  it('a compelling scenario / very compelling 也显示译文，不留空', async () => {
     document.body.innerHTML =
       '<p id="a">a compelling scenario.</p><p id="b">It is very compelling.</p><p id="c">He was compelling them.</p><p id="d">They felt compelled to act.</p><p id="e">the compelling of witnesses</p>';
     const matcher = new WordMatcher({ lemmatizer, books: [createSetWordBook(meta('b', 'builtin'), ['compel'])], known: new Set() });
@@ -105,8 +105,8 @@ describe('A1 -ing/-ed 词形缺词条、处在形容词位置时不显示原形�
     await flush();
     const tr = (id: string) => document.querySelector(`#${id} hnw-mark hnw-tr`)?.getAttribute('data-tr') ?? null;
     expect(document.querySelectorAll('hnw-mark')).toHaveLength(5);
-    expect(tr('a')).toBeNull();
-    expect(tr('b')).toBeNull();
+    expect(tr('a')).toBe('强迫');
+    expect(tr('b')).toBe('强迫');
     expect(tr('c')).toBe('强迫');
     expect(tr('d')).toBe('强迫');
     // 限定词 + -ing + 虚词：动名词，保留动词义
