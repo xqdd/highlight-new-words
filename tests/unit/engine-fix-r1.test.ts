@@ -181,7 +181,7 @@ describe('E5 桌面端同段重复省略括注的 mark 悬停兜底浮层', () =
     const s = settings();
     s.inlineTranslation.mode = 'ruby';
     const sels = fallbackSelectors(buildPageCss(s));
-    expect(sels.some((x) => x.startsWith('html[data-hnw-tr="ruby"]'))).toBe(true);
+    expect(sels.some((x) => x.startsWith(':is(html[data-hnw-tr="ruby"],html[data-hnw-tr="below"])'))).toBe(true);
     expect(sels.every((x) => x.endsWith('>hnw-tr[data-tr]'))).toBe(true);
   });
 });

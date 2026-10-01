@@ -140,7 +140,7 @@ describe('P1-3 行内译文统一叫法', () => {
   });
 
   it('四个界面使用同一组标签，UI 字符串中不再用“释义”指代行内译文', () => {
-    expect(INLINE_MODE_ORDER.map((m) => INLINE_MODE_LABELS[m])).toEqual(['关闭', '词后', '词上方', '仅悬停']);
+    expect(INLINE_MODE_ORDER.map((m) => INLINE_MODE_LABELS[m])).toEqual(['关闭', '词后', '词上方', '词下方', '仅悬停']);
     const files = [
       'src/entrypoints/options/pages/AppearancePage.vue',
       'src/entrypoints/options/pages/WelcomeGuide.vue',

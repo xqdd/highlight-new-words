@@ -318,6 +318,9 @@ describe('YouTube 字幕译文模式', () => {
     const css = buildCaptionCss();
     expect(css).toContain(`[${ATTR_YT_GM}="above"]`);
     expect(css).toMatch(/hnw-mark\[data-hnw-yt-gloss\][^{]*\{[^}]*display:inline-block!important[^}]*padding-top/);
+    // below 与 above 对称：留白在下方，注解贴底
+    expect(css).toMatch(/="below"\] hnw-mark\[data-hnw-yt-gloss\][^{]*\{[^}]*display:inline-block!important[^}]*padding-bottom/);
+    expect(css).toMatch(/="below"\] hnw-mark\[data-hnw-yt-gloss\][^{]*::after\{[^}]*bottom:0/);
     // 不再给整个字幕段加 padding-top（两行字幕时第二行的注解会压到第一行上）
     expect(css).not.toContain('ytp-caption-segment:has(');
     // 注解字号 ≥ 字幕字号的 55%（桌面/触屏），自带深色底提高对比度

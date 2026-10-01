@@ -23,6 +23,8 @@ const W = TAG_WORD;
 const TR = TAG_TRANSLATION;
 /** 按 <html data-hnw-tr> 模式限定的选择器前缀（options 预览会把 `html[data-hnw-tr=` 替换为容器属性选择器，务必保持此写法） */
 const mode = (m: string) => `html[${ATTR_TR_MODE}="${m}"]`;
+/** 小字注解模式（词上方 ruby、词下方 below）共用的选择器；词下方只多一条 ruby-position:under */
+const RUBY = `:is(${mode('ruby')},${mode('below')})`;
 /** 深色上下文中半透明背景的最大不透明度：亮色文字压在高饱和底色上会发灰，限制后对比度 ≥ 4.5 */
 const DARK_BG_MAX_ALPHA = 0.32;
 
@@ -199,10 +201,11 @@ function translationRules(settings: Settings): string[] {
   // 预留行高：engine 在创建 mark 的同一帧插入无释义的占位注解（没有 data-tr 属性，显示一个不换行空格），
   // 这一行的行高一次到位，之后释义到达时只换文字、行高不再跳变
   out.push(
-    `${mode('ruby')} ${M}{display:ruby}`,
-    `${mode('ruby')} ${W}{display:ruby-base}`,
-    `${mode('ruby')} ${TR}{display:ruby-text;ruby-align:center;text-align:center;font-size:max(${t.fontScale}em,10px);line-height:1.2;opacity:${t.opacity};${color}white-space:nowrap}`,
-    `${mode('ruby')} ${TR}:not([${ATTR_TR_TEXT}])::before{content:"\\a0"}`,
+    `${RUBY} ${M}{display:ruby}`,
+    `${mode('below')} ${M}{ruby-position:under}`,
+    `${RUBY} ${W}{display:ruby-base}`,
+    `${RUBY} ${TR}{display:ruby-text;ruby-align:center;text-align:center;font-size:max(${t.fontScale}em,10px);line-height:1.2;opacity:${t.opacity};${color}white-space:nowrap}`,
+    `${RUBY} ${TR}:not([${ATTR_TR_TEXT}])::before{content:"\\a0"}`,
   );
   // 不占位的浮层：悬停模式、代码中的浮动标注、同段重复词的悬停兜底共用。绝对定位在单词上方，不参与布局
   const float =
@@ -213,12 +216,12 @@ function translationRules(settings: Settings): string[] {
   out.push(
     `${mode('hover')} ${M},${M}[${ATTR_CODE}]{position:relative}`,
     // 受限容器（按钮、单行容器等）与代码中的 ruby 退回普通行内，避免撑高单行
-    `${mode('ruby')} ${M}[${ATTR_TIGHT}],${mode('ruby')} ${M}[${ATTR_CODE}]{display:inline}`,
-    `${mode('ruby')} ${M}[${ATTR_TIGHT}]>${W},${mode('ruby')} ${M}[${ATTR_CODE}]>${W}{display:inline}`,
+    `${RUBY} ${M}[${ATTR_TIGHT}],${RUBY} ${M}[${ATTR_CODE}]{display:inline}`,
+    `${RUBY} ${M}[${ATTR_TIGHT}]>${W},${RUBY} ${M}[${ATTR_CODE}]>${W}{display:inline}`,
     // 受限容器中的 ruby 译文改为附在词后的括注（与词后模式同样式），照常显示
-    `${mode('ruby')} ${M}[${ATTR_TIGHT}]{white-space:nowrap}`,
-    `${mode('ruby')} ${M}[${ATTR_TIGHT}]>${TR}{display:inline-block;margin-inline-start:.1em;font-size:${t.fontScale}em;line-height:1;opacity:${t.opacity};${color}white-space:nowrap;vertical-align:baseline}`,
-    `${mode('ruby')} ${M}[${ATTR_TIGHT}]>${TR}[${ATTR_TR_TEXT}]::before{content:"(" attr(${ATTR_TR_TEXT}) ")"}`,
+    `${RUBY} ${M}[${ATTR_TIGHT}]{white-space:nowrap}`,
+    `${RUBY} ${M}[${ATTR_TIGHT}]>${TR}{display:inline-block;margin-inline-start:.1em;font-size:${t.fontScale}em;line-height:1;opacity:${t.opacity};${color}white-space:nowrap;vertical-align:baseline}`,
+    `${RUBY} ${M}[${ATTR_TIGHT}]>${TR}[${ATTR_TR_TEXT}]::before{content:"(" attr(${ATTR_TR_TEXT}) ")"}`,
     `${mode('hover')} ${TR}{display:none}`,
     `@media (hover:hover){${mode('hover')} ${hoverable}{${float}}}`,
     `${mode('hover')} ${TR}::before{content:attr(${ATTR_TR_TEXT})}`,
@@ -238,10 +241,10 @@ function translationRules(settings: Settings): string[] {
   // 行内译文在链接、标题、按钮、专有名词等所有位置照常显示（译文不准时看卡片）。
   // 唯一例外由用户开关控制：同段重复出现的词只在第一次显示（data-hnw-nogloss，见 engine 的 thinGlosses）
   const noGloss = [`${M}[${ATTR_NO_GLOSS}]`];
-  out.push(`${[mode('after'), mode('ruby')].flatMap((p) => noGloss.map((x) => `${p} ${x}>${TR}`)).join(',')}{display:none}`);
+  out.push(`${[mode('after'), RUBY].flatMap((p) => noGloss.map((x) => `${p} ${x}>${TR}`)).join(',')}{display:none}`);
   // 桌面端兜底：上述不显示括注的 mark 悬停时复用不占位浮层显示短释义（触屏没有悬停，点按照常打开卡片）。
   // 只对已有释义的（带 data-tr）生效，ruby 占位注解不弹空浮层；模糊自测不作用于浮层（浮层本就需要悬停才出现）
-  const noGlossMarks = [mode('after'), mode('ruby')].flatMap((p) => noGloss.map((x) => `${p} ${x}`));
+  const noGlossMarks = [mode('after'), RUBY].flatMap((p) => noGloss.map((x) => `${p} ${x}`));
   out.push(
     `@media (hover:hover){` +
       `${noGlossMarks.join(',')}{position:relative}` +
@@ -253,9 +256,9 @@ function translationRules(settings: Settings): string[] {
   out.push(`${M}[${ATTR_CODE}]>${W}{text-decoration-style:solid!important;text-decoration-thickness:1px!important;text-underline-offset:1px!important}`);
   // 模糊自测：译文模糊且可点按（engine 拦截点按，切换 data-hnw-revealed，不触发卡片/链接）
   if (t.blur) {
-    const quiz = [mode('after'), mode('ruby')].map((p) => `${p} ${M}:not([${ATTR_CODE}])>${TR}:not([${ATTR_REVEALED}])`).join(',');
+    const quiz = [mode('after'), RUBY].map((p) => `${p} ${M}:not([${ATTR_CODE}])>${TR}:not([${ATTR_REVEALED}])`).join(',');
     out.push(`${quiz}{filter:blur(.28em);pointer-events:auto;cursor:pointer;transition:filter .15s ease}`);
-    const revealed = [mode('after'), mode('ruby')].map((p) => `${p} ${TR}[${ATTR_REVEALED}]`).join(',');
+    const revealed = [mode('after'), RUBY].map((p) => `${p} ${TR}[${ATTR_REVEALED}]`).join(',');
     out.push(`${revealed}{pointer-events:auto;cursor:pointer}`);
   }
   return out;

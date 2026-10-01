@@ -217,6 +217,7 @@ function choosePreset(id: string) {
 const inlineShowOptions: { value: Exclude<InlineTranslationMode, 'off'>; label: string }[] = [
   { value: 'after', label: INLINE_MODE_LABELS.after },
   { value: 'ruby', label: INLINE_MODE_LABELS.ruby },
+  { value: 'below', label: INLINE_MODE_LABELS.below },
   { value: 'hover', label: INLINE_MODE_LABELS.hover },
 ];
 type InlineShowMode = (typeof inlineShowOptions)[number]['value'];

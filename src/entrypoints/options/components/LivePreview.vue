@@ -109,11 +109,11 @@ onUnmounted(releasePreviewCss);
 .preview.dark { background: #16181d; color: #e6e6e6; }
 .sample { margin: 0; padding: 14px 16px; font: 17px/1.9 Georgia, 'Times New Roman', serif; }
 /* 词上方译文需要更大行距，避免注解压到上一行（预览容器固定了行高） */
-.preview[data-pv-tr='ruby'] .sample { line-height: 2.4; }
+.preview:is([data-pv-tr='ruby'], [data-pv-tr='below']) .sample { line-height: 2.4; }
 /* 手机：预览吸顶，压缩字号与行距，给下方设置留出空间 */
 @media (max-width: 560px) {
   .sample { font-size: 15px; line-height: 1.75; padding: 10px 12px; }
-  .preview[data-pv-tr='ruby'] .sample { line-height: 2.2; }
+  .preview:is([data-pv-tr='ruby'], [data-pv-tr='below']) .sample { line-height: 2.2; }
   .caption { padding: 6px 10px; gap: 4px 10px; }
 }
 .sample :deep(a) { color: #1a5fb4; text-decoration: underline; }

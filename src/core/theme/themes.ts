@@ -50,7 +50,8 @@ export interface MarkStyle {
 }
 
 /** 行内译文模式：关闭 / 词后括注 / 词上方（ruby）/ 仅悬停时浮现（不占位） */
-export type InlineTranslationMode = 'off' | 'after' | 'ruby' | 'hover';
+/** ruby = 词上方小字，below = 词下方小字（同一套 CSS ruby，ruby-position:under） */
+export type InlineTranslationMode = 'off' | 'after' | 'ruby' | 'below' | 'hover';
 
 /**
  * 行内译文样式（v5，与生词样式相互独立）。所有字段可选，缺省值见 TRANSLATION_STYLE_DEFAULTS。
@@ -369,8 +370,8 @@ export const V5_PRESET_IDS: readonly string[] = [
 /** 行内译文样式缺省值（按模式区分：词后括注较大、ruby 注解较小） */
 export const TRANSLATION_STYLE_DEFAULTS = {
   color: '',
-  opacity: { after: 0.58, ruby: 0.7, hover: 1 },
-  fontScale: { after: 0.88, ruby: 0.55, hover: 0.8 },
+  opacity: { after: 0.58, ruby: 0.7, below: 0.7, hover: 1 },
+  fontScale: { after: 0.88, ruby: 0.55, below: 0.55, hover: 0.8 },
 } as const;
 
 export function findTheme(id: string): HighlightTheme | undefined {

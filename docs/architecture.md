@@ -95,7 +95,7 @@ flowchart LR
 | `credentialSync` | 凭据是否随同步上传：`token:<providerId>`（来源 API token）、`webdav`（WebDAV 连接信息含密码），默认全部 false；本字段参与设置同步，各设备一致，见 4.11 |
 | `sites.disabled` | 禁用站点（含子域名，见 `isSiteDisabled`） |
 | `ui.theme` | 扩展页面（popup/options）界面主题 `auto`/`light`/`dark`（options 分片新增，默认 `auto`）；页面在根元素设置 `data-theme`，`auto` 时不设置、跟随系统 |
-| `youtube` | YouTube 字幕（v9，floatball 负责）：`captions` 字幕中标注生词（默认开）；`captionTranslation` 字幕内生词译文 `above` 上方注解（默认）/ `after` 词后小字 / `off` 只高亮；`hoverPause` 桌面悬停字幕自动暂停（默认关）。见 4.12 |
+| `youtube` | YouTube 字幕（v9，floatball 负责）：`captions` 字幕中标注生词（默认开）；`captionTranslation` 字幕内生词译文 `above` 上方注解（默认）/ `below` 下方注解 / `after` 词后小字 / `off` 只高亮；`hoverPause` 桌面悬停字幕自动暂停（默认关）。见 4.12 |
 | `floatBall` | 通用悬浮球（v10，floatball 新增）：`enabled` 全局开关（默认开）、`hiddenSites` 隐藏悬浮球的站点（规则同 `sites.disabled`）。只在触屏/手机端显示 |
 | `performance.prehide` | 加载时先隐藏页面，避免首屏译文插入造成跳动（engine 第 3 轮新增，默认 `false`，旧设置由 `normalizeSettings` 补齐）。开启后由 background 动态注册隐藏样式，见 4.5“首屏预隐藏” |
 
@@ -219,7 +219,7 @@ flowchart LR
   - 主题样式只作用于 `hnw-w`，释义不被染上高亮背景/下划线；释义文本放在 `data-tr` 属性、由 `::before` 渲染，不进入页面 textContent（复制、查找、页面脚本不受影响），读取释义用 `getAttribute('data-tr')`，读取原词用 `markSurface`。
   - `data-hnw-dark`：engine 按 mark 父元素的计算文字色判断深色上下文（浅色文字≈深色背景），文字色类主题在深色上下文自动提亮到 4.5:1；页面切换明暗（html/body 属性、`prefers-color-scheme`）时重算。
   - `data-hnw-active`：卡片锚定单词，由 card 分片设置并提供样式。
-  - `<html data-hnw-tr="off|after|ruby|hover">` 控制行内翻译：`after` 为词后灰色括注 `(译)`（inline-block，mark 不换行，词与括注总在同一行）；`ruby` 为原生 CSS ruby（`display:ruby`，注解居中、最小 10px，只在需要的行增加行高、不与上一行重叠）；`hover` 为悬停时在单词上方浮现的小标签（绝对定位，不占位）。样式由 `buildPageCss` 生成。
+  - `<html data-hnw-tr="off|after|ruby|below|hover">` 控制行内翻译：`after` 为词后灰色括注 `(译)`（inline-block，mark 不换行，词与括注总在同一行）；`ruby` 为原生 CSS ruby（`display:ruby`，注解居中、最小 10px，只在需要的行增加行高、不与上一行重叠）；`below` 为词下方小字，与 `ruby` 共用全部规则（`style.ts` 的 `RUBY` 选择器、占位预留、受限容器退化），只多 `ruby-position:under`；`hover` 为悬停时在单词上方浮现的小标签（绝对定位，不占位）。样式由 `buildPageCss` 生成。
   - mark 上的上下文标记（engine 第二阶段新增，均在每片“先写后读”的读阶段统一计算）：
     - `data-hnw-link`：位于链接内。所有样式在链接里都保留站点链接的颜色与下划线（去掉自身文字色、装饰线、边框），生词只用底色表示：自带背景的保留背景，其余改为主题色浅底；`after`/`ruby` 与正文一样显示括注（维基等页面大量生词在链接里）。
     - `data-hnw-nogloss`：同段重复省略的 mark。开关 `settings.inlineTranslation.oncePerParagraph`（默认开，缺省视为开）打开时，同一段落同一词条只给第一次有释义的出现加括注；关闭时每次都显示。仍高亮，CSS 隐藏其译文。这是行内译文唯一的省略规则，其余位置（链接、标题、按钮、大写词等）一律显示，译文不准时看卡片。

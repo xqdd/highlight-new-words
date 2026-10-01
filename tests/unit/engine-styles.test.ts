@@ -132,7 +132,9 @@ describe('v5 样式契约', () => {
     expect(css2).toContain('html[data-hnw-tr="after"] hnw-mark[data-hnw-nogloss]>hnw-tr');
     // ruby 模式下受限容器的译文改为词后括注
     s.inlineTranslation.mode = 'ruby';
-    expect(buildPageCss(s)).toContain('html[data-hnw-tr="ruby"] hnw-mark[data-hnw-tight]>hnw-tr[data-tr]::before{content:"(" attr(data-tr) ")"}');
+    expect(buildPageCss(s)).toContain(':is(html[data-hnw-tr="ruby"],html[data-hnw-tr="below"]) hnw-mark[data-hnw-tight]>hnw-tr[data-tr]::before{content:"(" attr(data-tr) ")"}');
+    // 词下方：同一套 ruby 规则，只多 ruby-position:under
+    expect(buildPageCss(s)).toContain('html[data-hnw-tr="below"] hnw-mark{ruby-position:under}');
     s.inlineTranslation.mode = 'off';
     // 按词书覆盖的 v5 字段也能生效
     s.style.perBook.cet6 = { mark: { underline: 'wavy', underlineColor: '#f43f5e', italic: true } };

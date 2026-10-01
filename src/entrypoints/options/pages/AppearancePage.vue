@@ -106,6 +106,7 @@ const INLINE_MODE_DESC: Record<InlineTranslationMode, string> = {
   off: '只标记生词，点按或悬停看释义卡片',
   after: '生词后括号附简短中文',
   ruby: '小字译文在生词上方',
+  below: '小字译文在生词下方',
   hover: '指到生词时浮出，不占位置；触屏设备上没有悬停，请点按单词查看卡片',
 };
 const INLINE_MODES = INLINE_MODE_ORDER.map((value) => ({ value, label: INLINE_MODE_LABELS[value], desc: INLINE_MODE_DESC[value] }));

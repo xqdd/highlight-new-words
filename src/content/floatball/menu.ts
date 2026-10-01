@@ -26,6 +26,7 @@ type Tab = 'words' | 'settings';
 const INLINE_MODES: Array<{ value: InlineTranslationMode; label: string }> = INLINE_MODE_ORDER.map((value) => ({ value, label: INLINE_MODE_LABELS[value] }));
 const CAPTION_MODES: Array<{ value: Settings['youtube']['captionTranslation']; label: string }> = [
   { value: 'above', label: '上方' },
+  { value: 'below', label: '下方' },
   { value: 'after', label: '词后' },
   { value: 'off', label: '只高亮' },
 ];

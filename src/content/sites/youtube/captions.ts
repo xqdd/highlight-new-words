@@ -39,6 +39,7 @@ const GLOSS_EM = '.64em';
  *   下限桌面 12px、触屏 12px（手机字幕本身只有约 15px）。
  *   对比度：注解自带近乎不透明的深色底（只包住文字，宽度不超过单词附近）并加黑色描边，
  *   视频画面再亮、用户把字幕背景调成透明时，暖黄字与深底仍有 ≥ 7:1 的对比度
+ * - below：与 above 对称，留白加在生词下方（padding-bottom），注解贴底；字幕窗贴底定位，同样只向上长高。
  * - after：词后小字（GLOSS_EM，同样带深色底）。字幕段改为不折行（white-space:pre），字幕行改为居中的 flex，超出 YouTube 测量的窗口宽度时
  *   向两侧对称溢出（仍居中，背景随字幕段延伸）；超出播放器宽度的窗口由脚本改回 above
  * - 自动生成字幕（roll-up）窗口高度固定、逐词追加，不设置模式（只高亮）
@@ -58,6 +59,14 @@ export function buildCaptionCss(): string {
     `@media (hover:none) and (pointer:coarse){${win('above')} ${G}{--hnw-gf:max(.7em,12px)}}`,
     // 注解框：水平居中于单词，宽度随文字（max-content），最宽不超过“单词 + 两侧各 .45em”，超出省略
     `${win('above')} ${G}::after{content:attr(${ATTR_YT_GLOSS});position:absolute;left:50%;top:0;transform:translateX(-50%);` +
+      `box-sizing:border-box;width:max-content;max-width:calc(100% + .9em);padding:0 .25em;border-radius:3px;background:${GLOSS_BG};` +
+      `display:block;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--hnw-gf);line-height:1.25;color:${GLOSS_COLOR};${glossFont};` +
+      `font-weight:500;text-shadow:0 0 1px #000,0 0 2px #000}`,
+    // below：与 above 对称，留白与注解放在生词下方
+    `${win('below')} ${G}{--hnw-gf:max(${GLOSS_EM},12px);display:inline-block!important;position:relative!important;vertical-align:baseline!important;` +
+      `padding-bottom:calc(var(--hnw-gf) * 1.25 + 3px)!important}`,
+    `@media (hover:none) and (pointer:coarse){${win('below')} ${G}{--hnw-gf:max(.7em,12px)}}`,
+    `${win('below')} ${G}::after{content:attr(${ATTR_YT_GLOSS});position:absolute;left:50%;bottom:0;transform:translateX(-50%);` +
       `box-sizing:border-box;width:max-content;max-width:calc(100% + .9em);padding:0 .25em;border-radius:3px;background:${GLOSS_BG};` +
       `display:block;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--hnw-gf);line-height:1.25;color:${GLOSS_COLOR};${glossFont};` +
       `font-weight:500;text-shadow:0 0 1px #000,0 0 2px #000}`,
@@ -166,7 +175,7 @@ export class CaptionDecorator {
   }
 
   /** 当前设置下字幕内译文模式（off = 只高亮） */
-  private mode(): 'off' | 'above' | 'after' {
+  private mode(): 'off' | 'above' | 'below' | 'after' {
     const s = this.ctx.getSettings();
     return this.ctx.isActive() && s.youtube.captions ? s.youtube.captionTranslation : 'off';
   }

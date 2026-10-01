@@ -1,3 +1,4 @@
+import { isRubyMode } from '@/core/settings/inline-translation-labels';
 import { collocationShort } from '@/core/dict/collocation';
 import type { Dictionary } from '@/core/dict/types';
 import type { MatchResult, WordMatcher } from '@/core/match/matcher';
@@ -508,7 +509,7 @@ export class HighlightEngine {
    * ruby 模式下，正文 mark 在同一帧插入占位注解，预留行高（见 style.ts）。
    */
   private applyMarkContexts(items: { marks: HTMLElement[]; ctx: MarkContext }[]): void {
-    const ruby = this.opts.inlineTranslation === 'ruby';
+    const ruby = isRubyMode(this.opts.inlineTranslation);
     const undo = new Set<Text>();
     for (const { marks, ctx } of items) {
       for (const m of marks) {
@@ -654,7 +655,7 @@ export class HighlightEngine {
       }
     }
     const mode = this.opts.inlineTranslation;
-    if (mode === 'after' || mode === 'ruby') this.thinGlosses(targets);
+    if (mode === 'after' || isRubyMode(mode)) this.thinGlosses(targets);
     const io = immediate ? undefined : this.translationObserver;
     const now: HTMLElement[] = [];
     for (const m of targets) {

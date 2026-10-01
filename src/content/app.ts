@@ -1,3 +1,4 @@
+import { isRubyMode } from '@/core/settings/inline-translation-labels';
 import { browser } from 'wxt/browser';
 import { CompositeDictionary, PackagedDictionary } from '@/core/dict/packaged';
 import type { Dictionary } from '@/core/dict/types';
@@ -68,7 +69,7 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
   if (!settings.performance.prehide || !active() || !layoutAffectingSettings(settings)) releasePrehide();
   /** 短释义分片预载（after/ruby 模式）；首次启动 engine 前等它就绪，见 startEngine */
   let dictPreload: Promise<unknown> = Promise.resolve();
-  if (active() && (settings.inlineTranslation.mode === 'after' || settings.inlineTranslation.mode === 'ruby')) {
+  if (active() && (settings.inlineTranslation.mode === 'after' || isRubyMode(settings.inlineTranslation.mode))) {
     // 首屏要尽早写好译文（预隐藏时要在显示前写好）：读到设置后立即预载全部短释义分片（按首字母，共约 2MB），与词书、词形数据并行。
     // 页面解析繁忙后扩展资源请求会明显变慢（维基大页面首屏查释义要多等 200–300ms），趁解析刚开始时发出
     dictPreload = packagedDict.lookupMany(DICT_SHARD_PROBES).catch(() => {});

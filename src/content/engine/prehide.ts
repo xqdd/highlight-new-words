@@ -1,3 +1,4 @@
+import { isRubyMode } from '@/core/settings/inline-translation-labels';
 import type { Settings } from '@/core/settings/schema';
 import { resolveMarkStyle } from '@/core/theme/resolve';
 
@@ -54,7 +55,7 @@ export function prehidePage(doc: Document): () => void {
  */
 export function layoutAffectingSettings(settings: Settings): boolean {
   const mode = settings.inlineTranslation.mode;
-  if (mode === 'after' || mode === 'ruby') return true;
+  if (mode === 'after' || isRubyMode(mode)) return true;
   const styles = [resolveMarkStyle(settings), ...settings.books.enabled.map((id) => resolveMarkStyle(settings, id))];
   return styles.some((s) => (!!s.fontWeight && s.fontWeight !== 'inherit') || !!s.italic);
 }

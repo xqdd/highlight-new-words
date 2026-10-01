@@ -14,6 +14,7 @@ const panelKey = isMacPlatform() ? '⌥L' : 'Alt+L';
 
 const TR_MODES = [
   { value: 'above' as const, label: '上方注解', desc: '默认，译文在生词上方，字幕行不变宽' },
+  { value: 'below' as const, label: '下方注解', desc: '译文在生词下方，字幕行不变宽' },
   { value: 'after' as const, label: '词后', desc: '译文跟在生词后面，放不下时自动改为上方' },
   { value: 'off' as const, label: '只高亮', desc: '字幕里不显示译文，查词看卡片' },
 ];
@@ -57,7 +58,7 @@ const TR_MODES = [
 <style scoped>
 .lbl { font-size: 13px; font-weight: 600; color: var(--text-2); }
 .small { font-size: 12px; margin: 0; }
-.cap-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.cap-modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 @media (max-width: 720px) { .cap-modes { grid-template-columns: 1fr; } }
 .cap-mode { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; border-radius: 12px; border: 1.5px solid var(--border);
   background: var(--surface); cursor: pointer; text-align: left; color: var(--text); min-height: var(--tap); }
@@ -70,6 +71,9 @@ const TR_MODES = [
 .g { color: #ffe08a !important; position: relative; }
 .cap.above .g::after { content: attr(data-g); position: absolute; left: -4px; right: -4px; bottom: 100%; text-align: center; font-size: 10px; line-height: 1.3;
   color: #ffe08a; background: rgba(8, 8, 8, .75); border-radius: 3px 3px 0 0; }
+.cap.below { padding-bottom: 20px; }
+.cap.below .g::after { content: attr(data-g); position: absolute; left: -4px; right: -4px; top: 100%; text-align: center; font-size: 10px; line-height: 1.3;
+  color: #ffe08a; background: rgba(8, 8, 8, .75); border-radius: 0 0 3px 3px; }
 .cap.after .g::after { content: attr(data-g); font-size: .62em; margin-left: .2em; color: #ffe08a; }
 kbd { font-family: inherit; font-size: 12px; padding: 0 6px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--border); border-bottom-width: 2px; }
 .inline-link { border: 0; background: none; padding: 0 2px; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 2px; }

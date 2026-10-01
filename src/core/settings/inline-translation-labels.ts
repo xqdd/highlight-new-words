@@ -13,8 +13,14 @@ export const INLINE_MODE_LABELS: Record<InlineTranslationMode, string> = {
   off: '关闭',
   after: '词后',
   ruby: '词上方',
+  below: '词下方',
   hover: '仅悬停',
 };
 
-/** 按 off / after / ruby / hover 的顺序列出选项，界面可再补 desc 等字段 */
-export const INLINE_MODE_ORDER: readonly InlineTranslationMode[] = ['off', 'after', 'ruby', 'hover'];
+/** 按 off / after / ruby / below / hover 的顺序列出选项，界面可再补 desc 等字段 */
+export const INLINE_MODE_ORDER: readonly InlineTranslationMode[] = ['off', 'after', 'ruby', 'below', 'hover'];
+
+/** 小字注解模式（词上方/词下方）：共用 CSS ruby 排版、占位预留与受限容器退化规则 */
+export function isRubyMode(mode: InlineTranslationMode): boolean {
+  return mode === 'ruby' || mode === 'below';
+}
