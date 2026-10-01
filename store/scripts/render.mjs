@@ -107,7 +107,7 @@ function promoPage({ w, h, big }) {
   .demo { background: #fff; border-radius: 18px; padding: 34px 40px; font-family: Georgia, 'Noto Serif', serif; font-size: 34px; line-height: 1.9; color: #292524;
           width: 680px; box-shadow: 0 20px 50px rgba(0,0,0,.2); }
   </style>
-  <div class="brand"><div class="logo">${ICON_SVG()}</div><div class="name">生词高亮</div>${big ? '<div class="tag">让网页上的生词自己跳出来</div>' : ''}</div>
+  <div class="brand"><div class="logo">${ICON_SVG()}</div><div class="name">生词高亮</div>${big ? '<div class="tag">网页背单词</div>' : ''}</div>
   ${big ? `<div class="demo">The storm <span class="mark">surge</span><span class="tr">(汹涌)</span> arrived earlier than <span class="mark">anticipated</span><span class="tr">(预期)</span>, and the <span class="mark">barriers</span><span class="tr">(障碍物)</span> were no longer enough.</div>` : ''}`;
 }
 

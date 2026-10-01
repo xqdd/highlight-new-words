@@ -10,15 +10,15 @@ Name and summary come from `public/_locales/en/messages.json` (`appName`, `appDe
 
 | Field | Current value | Limit | Status |
 | --- | --- | --- | --- |
-| Name `appName` | Highlight New Words - Youdao/Eudic word book & graded vocabularies | Chrome: max 75 chars | 66 chars, OK |
+| Name `appName` | Highlight New Words – Vocabulary Builder for Youdao, Eudic, CET & IELTS | Chrome: max 75 chars | 71 chars, OK |
 | Summary `appDesc` | Highlight new words from Youdao/Eudic word books and graded lists (CET, IELTS, TOEFL, GRE) on web pages, with inline glosses | Chrome: max 132 chars | 124 chars, OK |
 
 ## 2. Detailed Description - Chrome Web Store
 
-Plain text only (no HTML/Markdown); keep under 16,000 characters; no keyword stuffing. The text below is about 3,670 characters and was checked against the current build on 2026-10-01. The interface is currently in Simplified Chinese, which the description states up front.
+Plain text only (no HTML/Markdown); keep under 16,000 characters; no keyword stuffing. The text below is about 3,780 characters and was checked against the current build on 2026-10-01. The interface is currently in Simplified Chinese, which the description states up front.
 
 ```text
-Learning English by reading and watching? Highlight New Words marks the words you are studying on any web page and in YouTube captions. Hover (or tap on mobile) to see phonetics, meaning and word forms, and mark a word as known in one click so it never shows up again.
+Highlight New Words is a vocabulary builder and word highlighter for English learning: it marks the words you are studying on any web page and in YouTube captions, taken from your Youdao or Eudic word book or from built-in CET, IELTS and TOEFL lists. Hover (or tap on mobile) to see phonetics, meaning and word forms, and mark a word as known in one click so it never shows up again.
 Note: the interface and the built-in glosses are in Simplified Chinese.
 
 CHOOSE WHAT TO LEARN
@@ -59,7 +59,7 @@ Feedback: https://github.com/xqdd/highlight_new_words/issues
 
 ## 3. Detailed Description - Microsoft Edge Add-ons
 
-Limit: 250 to 10,000 characters and it must describe the full functionality. Reuse section 2 (it covers every feature; about 3,710 characters with the line below) and add this line after the first paragraph:
+Limit: 250 to 10,000 characters and it must describe the full functionality. Reuse section 2 (it covers every feature; about 3,840 characters with the line below) and add this line after the first paragraph:
 
 ```text
 Works on Microsoft Edge for desktop and Edge for Android.
@@ -67,16 +67,16 @@ Works on Microsoft Edge for desktop and Edge for Android.
 
 ## 4. Edge Search Terms
 
-Limit: at most 7 terms, 21 words in total, 30 characters per term; not shown to users.
+Limit: at most 7 terms, 21 words in total, 30 characters per term; not shown to users. The 7 terms below have 18 words in total; the longest is 22 characters.
 
 ```text
-vocabulary
+vocabulary builder
 word highlighter
+English learning
+Youdao Eudic word book
+CET IELTS TOEFL
 English reading
-CET
-Youdao
-Eudic
-learn English
+learn English words
 ```
 
 ## 5. Category and Other Fields

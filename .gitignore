@@ -7,5 +7,5 @@ stats.html
 .vscode
 .cache/
 
-# 商店截图/宣传图由 store/scripts 重新生成，发版定稿时再提交
-store/images/
+# raw 为截图原始素材，可由 store/scripts 重新生成
+store/images/raw/
