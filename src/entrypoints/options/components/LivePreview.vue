@@ -1,0 +1,128 @@
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue';
+import { ATTR_BOOK, ATTR_BOOKS, ATTR_LEMMA, ATTR_ON_DARK, ATTR_TR_MODE } from '@/content/engine/dom';
+import { highlightTextNode, setMarkTranslation } from '@/content/engine/highlighter';
+import { buildPageCss } from '@/content/engine/style';
+import type { InlineTranslationMode, Settings } from '@/core/settings/schema';
+import { resolveMarkStyle } from '@/core/theme/resolve';
+import type { BookMeta } from '@/core/wordbook/types';
+import { markPrimaryColor } from '@/ui/components/palette';
+
+/**
+ * 实时预览：直接复用内容脚本的高亮实现（highlightTextNode + setMarkTranslation 生成 DOM，buildPageCss 生成样式），
+ * 所见即网页上的实际效果，engine 调整 DOM 结构或样式时预览自动一致。
+ * buildPageCss 用 `html[data-hnw-tr=…]` 控制行内释义，这里替换为容器属性选择器，
+ * 使同一页面中多个预览（外观页顶部、行内释义各选项、引导页）可以使用不同模式。
+ * 示例生词按启用顺序轮流分配给各词书，以展示“按词书分色”。
+ */
+const props = defineProps<{ settings: Settings; books: BookMeta[]; mode?: InlineTranslationMode; text?: 'full' | 'short' }>();
+
+const FULL_TEXT = 'Scientists remain skeptical about the ambitious proposal, citing insufficient evidence and a notoriously volatile market.';
+const SHORT_TEXT = 'A meticulous and resilient team.';
+const TRANSLATIONS: Record<string, string> = {
+  skeptical: '怀疑的',
+  ambitious: '雄心勃勃的',
+  insufficient: '不足的',
+  notoriously: '出了名地',
+  volatile: '易变的',
+  meticulous: '一丝不苟的',
+  resilient: '有韧性的',
+};
+
+/** 页面背景：预览高亮在浅色/深色网页上的可读性（深色时给 mark 打上 engine 的深色上下文标记） */
+const pageTone = ref<'light' | 'dark'>('light');
+const sample = ref<HTMLElement>();
+
+/** 用 engine 的切分逻辑重建示例段落 */
+function render() {
+  const el = sample.value;
+  if (!el) return;
+  el.textContent = props.text === 'short' ? SHORT_TEXT : FULL_TEXT;
+  const ids = props.settings.books.enabled.length ? props.settings.books.enabled : [''];
+  const marks = highlightTextNode(el.firstChild as Text, (word) => {
+    const lemma = word.toLowerCase();
+    return lemma in TRANSLATIONS ? { surface: word, lemma, bookIds: [''] } : null;
+  });
+  // highlightTextNode 从后往前切分，这里按返回的文档顺序从左到右依次分配启用的词书，并写入释义
+  marks.forEach((mark, i) => {
+    const lemma = mark.getAttribute(ATTR_LEMMA) ?? '';
+    const book = ids[i % ids.length]!;
+    mark.setAttribute(ATTR_BOOK, book);
+    mark.setAttribute(ATTR_BOOKS, book);
+    mark.toggleAttribute(ATTR_ON_DARK, pageTone.value === 'dark');
+    setMarkTranslation(mark, TRANSLATIONS[lemma]);
+  });
+}
+onMounted(render);
+watch([() => props.settings.books.enabled.join(' '), pageTone, () => props.text], render);
+
+/** 图例：启用多本词书时展示每本书对应的颜色 */
+const legend = computed(() =>
+  props.settings.books.enabled.slice(0, 6).map((id) => {
+    const meta = props.books.find((b) => b.id === id);
+    return { id, name: meta ? meta.name : id, color: markPrimaryColor(resolveMarkStyle(props.settings, id)) };
+  }),
+);
+
+acquirePreviewCss();
+watchEffect(() => setPreviewCss(buildPageCss(props.settings).replaceAll(`html[${ATTR_TR_MODE}=`, '[data-pv-tr=')));
+onUnmounted(releasePreviewCss);
+</script>
+
+<script lang="ts">
+// 全页只注入一份预览样式：多个预览实例共享，按引用计数移除
+const STYLE_ID = 'hnw-options-preview';
+let previewUsers = 0;
+function acquirePreviewCss() {
+  previewUsers++;
+}
+function setPreviewCss(css: string) {
+  let el = document.getElementById(STYLE_ID);
+  if (!el) {
+    el = document.createElement('style');
+    el.id = STYLE_ID;
+    document.head.appendChild(el);
+  }
+  if (el.textContent !== css) el.textContent = css;
+}
+function releasePreviewCss() {
+  previewUsers--;
+  if (previewUsers <= 0) document.getElementById(STYLE_ID)?.remove();
+}
+</script>
+
+<template>
+  <div class="preview" :class="pageTone" :data-pv-tr="mode ?? settings.inlineTranslation.mode">
+    <p ref="sample" class="sample" lang="en" />
+    <div v-if="text !== 'short'" class="caption">
+      <span v-if="!settings.enabled" class="off">高亮已关闭</span>
+      <span v-for="l in legend.length > 1 ? legend : []" :key="l.id" class="legend"><i :style="{ background: l.color }" />{{ l.name }}</span>
+      <span class="spacer" />
+      <button
+        type="button"
+        class="tone"
+        :aria-label="pageTone === 'light' ? '切换到深色网页预览' : '切换到浅色网页预览'"
+        @click="pageTone = pageTone === 'light' ? 'dark' : 'light'"
+      >
+        {{ pageTone === 'light' ? '浅色网页' : '深色网页' }}
+      </button>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.preview { margin: 0; border-radius: 12px; border: 1px solid var(--border); overflow: hidden; }
+.preview.light { background: #ffffff; color: #1f2328; }
+.preview.dark { background: #16181d; color: #e6e6e6; }
+.sample { margin: 0; padding: 14px 16px; font: 17px/1.9 Georgia, 'Times New Roman', serif; }
+/* 词上方释义需要更大行距，避免注解压到上一行（预览容器固定了行高） */
+.preview[data-pv-tr='ruby'] .sample { line-height: 2.4; }
+.caption { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; font-size: 12px;
+  border-top: 1px solid rgba(127, 127, 127, .2); color: inherit; opacity: .85; }
+.legend { display: inline-flex; align-items: center; gap: 5px; max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.spacer { flex: 1; }
+.tone { border: 1px solid rgba(127, 127, 127, .35); background: transparent; color: inherit; border-radius: 999px; padding: 2px 10px;
+  min-height: 28px; cursor: pointer; font-size: 12px; }
+.off { color: #dc2626; font-weight: 600; }
+</style>

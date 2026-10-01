@@ -1,0 +1,100 @@
+/*
+ * popup / options 共享设计令牌与基础样式（纯 CSS 变量，无 UI 框架）。
+ * 颜色随系统深浅色切换；组件只使用这里的变量，便于统一换肤。
+ */
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --border: #e3e6eb;
+  --text: #1f2328;
+  --text-2: #5b6370;
+  --accent: #d97706;
+  --accent-soft: rgba(217, 119, 6, 0.12);
+  --accent-text: #ffffff;
+  --danger: #dc2626;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+  --font: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --tap: 40px;
+  /* options 分片新增令牌 */
+  --success: #059669;
+  --warn: #b45309;
+  --danger-soft: rgba(220, 38, 38, 0.1);
+  --overlay: rgba(15, 23, 42, 0.45);
+  --radius-lg: 16px;
+}
+/* 深色：跟随系统（settings.ui.theme=auto，页面根元素无 data-theme 或为 auto），或强制 data-theme="dark" */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317;
+    --surface: #1a1d23;
+    --surface-2: #232730;
+    --border: #2e333d;
+    --text: #e8eaed;
+    --text-2: #9aa3b2;
+    --accent: #f59e0b;
+    --accent-soft: rgba(245, 158, 11, 0.16);
+    --accent-text: #1a1206;
+    --shadow: none;
+    --success: #34d399;
+    --warn: #fbbf24;
+    --danger-soft: rgba(248, 113, 113, 0.14);
+    --overlay: rgba(0, 0, 0, 0.55);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111317;
+  --surface: #1a1d23;
+  --surface-2: #232730;
+  --border: #2e333d;
+  --text: #e8eaed;
+  --text-2: #9aa3b2;
+  --accent: #f59e0b;
+  --accent-soft: rgba(245, 158, 11, 0.16);
+  --accent-text: #1a1206;
+  --shadow: none;
+  --success: #34d399;
+  --warn: #fbbf24;
+  --danger-soft: rgba(248, 113, 113, 0.14);
+  --overlay: rgba(0, 0, 0, 0.55);
+}
+:root[data-theme="light"] { color-scheme: light; }
+@media (pointer: coarse) {
+  :root { --tap: 44px; }
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { font: inherit; color: inherit; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: 36px; padding: 6px 14px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-weight: 550;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.danger { color: var(--danger); }
+@media (pointer: coarse) { .btn { min-height: var(--tap); } }
+.muted { color: var(--text-2); font-size: 13px; }
+input[type='text'], input[type='search'], input[type='password'], select, textarea {
+  font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 7px 10px; min-height: 36px; width: 100%;
+}
+textarea { resize: vertical; min-height: 120px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
