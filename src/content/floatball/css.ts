@@ -78,7 +78,9 @@ ${BASE_CSS}
   transition: transform .25s cubic-bezier(.2, .8, .2, 1), opacity .25s; will-change: transform;
 }
 .ball.dragging { transition: none; box-shadow: 0 12px 28px -6px rgba(15, 23, 42, .45), 0 0 0 1px var(--line); }
-.ball.idle { opacity: .55; }
+/* 空闲：缩成屏幕边缘的一条强调色小标签（图标在可见部分放不下，隐藏） */
+.ball.idle { opacity: .78; background: var(--accent); }
+.ball.idle svg { opacity: 0; }
 .ball .badge {
   position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
   background: var(--accent); color: var(--accent-fg); font: 600 11px/18px system-ui, sans-serif; text-align: center;
@@ -101,7 +103,8 @@ ${BASE_CSS}
 .tile small { display: block; font-size: 12px; color: var(--muted); line-height: 1.35; }
 .tile.on { background: var(--accent-soft); }
 .tile.on .ic { background: var(--accent); color: var(--accent-fg); }
-.tabs { position: sticky; top: 0; z-index: 1; display: flex; gap: 4px; padding: 4px; margin: 0 0 8px; border-radius: 12px; background: var(--soft); }
+.top { flex: none; padding: 0 12px; }
+.tabs { display: flex; gap: 4px; padding: 4px; margin: 0 0 8px; border-radius: 12px; background: var(--soft); }
 .tab { flex: 1; min-height: 40px; border-radius: 9px; font-weight: 500; color: var(--muted); font-size: 14px; }
 .tab[aria-selected=true] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
 .empty { padding: 28px 12px; text-align: center; color: var(--muted); font-size: 13px; }
@@ -160,8 +163,19 @@ ${BASE_CSS}
 @media (prefers-reduced-motion: reduce) { .ball, .sheet, .scrim, .toast { transition: none; } }
 `;
 
-/** 球在一侧贴边时的 x（展开）与半隐藏时露出一半 */
+/** 空闲时缩小到的比例（46px → 约 28px） */
+export const IDLE_SCALE = 0.62;
+/** 空闲时露出屏幕的宽度（px）：手机网页正文左右一般留 16px 边距，露出部分落在边距里，不压正文行尾的字母 */
+export const IDLE_VISIBLE = 13;
+
+/**
+ * 球在一侧贴边时的 x（transform 平移量，缩放以球心为原点）：展开时离边缘 EDGE_GAP；
+ * 空闲时缩小并大半移出屏幕，只露出 IDLE_VISIBLE 宽的一条（仍可点按，点按后展开并执行）。
+ */
 export function ballX(side: 'left' | 'right', viewportW: number, idle: boolean): number {
-  const hidden = idle ? BALL_SIZE * 0.42 : 0;
-  return side === 'left' ? EDGE_GAP - hidden : viewportW - BALL_SIZE - EDGE_GAP + hidden;
+  if (!idle) return side === 'left' ? EDGE_GAP : viewportW - BALL_SIZE - EDGE_GAP;
+  const d = BALL_SIZE * IDLE_SCALE;
+  // 缩放后可见圆的圆心：右侧为 viewportW - 露出宽度 + 半径，左侧对称
+  const center = side === 'left' ? IDLE_VISIBLE - d / 2 : viewportW - IDLE_VISIBLE + d / 2;
+  return center - BALL_SIZE / 2;
 }

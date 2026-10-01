@@ -7,6 +7,7 @@ import { HoverPause } from './hover';
 import { CaptionPanel } from './panel';
 import { PauseController } from './playback';
 import { CaptionHistory, TimedtextSource } from './track';
+import { registerCaptionCardZone } from './zone';
 
 /** 播放器/字幕容器检查间隔（ms）：YouTube 是 SPA，播放器与字幕容器可能在导航后重建 */
 const ATTACH_POLL_MS = 1000;
@@ -76,6 +77,23 @@ export const youtubeAdapter: SiteAdapter = {
     const timer = setInterval(attach, ATTACH_POLL_MS);
     doc.addEventListener('yt-navigate-finish', attach);
     attach();
+    // 全屏切换时播放器会重建字幕容器（m.youtube.com 尤其如此）：切换后立即与稍后各重绑一次并重新处理，不等 1 秒轮询
+    const fsTimers: Array<ReturnType<typeof setTimeout>> = [];
+    const onFullscreen = () => {
+      fsTimers.forEach(clearTimeout);
+      fsTimers.length = 0;
+      for (const ms of [0, 250, 800]) {
+        fsTimers.push(
+          setTimeout(() => {
+            attach();
+            decorator.refresh();
+          }, ms),
+        );
+      }
+    };
+    doc.addEventListener('fullscreenchange', onFullscreen);
+    // 字幕生词的卡片触发：几何命中（字幕被控件层盖住时也能悬停/点按出卡片；触屏只在暂停时响应）
+    stops.push(registerCaptionCardZone(doc, (anchor) => ctx.openCard(anchor)));
 
     const onKey = (e: KeyboardEvent) => {
       if (!isPanelShortcut(e) || !getPlayer(doc) || !ctx.isActive()) return;
@@ -102,6 +120,8 @@ export const youtubeAdapter: SiteAdapter = {
     return () => {
       stops.forEach((s) => s());
       clearInterval(timer);
+      fsTimers.forEach(clearTimeout);
+      doc.removeEventListener('fullscreenchange', onFullscreen);
       doc.removeEventListener('yt-navigate-finish', attach);
       doc.removeEventListener('yt-navigate-start', onNavigate);
       window.removeEventListener('keydown', onKey, true);

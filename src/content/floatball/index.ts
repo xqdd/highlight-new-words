@@ -4,7 +4,7 @@ import { isSiteDisabled } from '@/core/settings/store';
 import { STORAGE_KEYS } from '@/core/storage/keys';
 import { h } from '../card/h';
 import type { SiteContext } from '../sites/types';
-import { ballX, FLOAT_CSS } from './css';
+import { ballX, FLOAT_CSS, IDLE_SCALE } from './css';
 import { createOverlayHost, type OverlayHost } from './host';
 import { svgIcon } from './icons';
 import { FloatMenu, openOptionsPage } from './menu';
@@ -23,11 +23,13 @@ const IDLE_MS = 3000;
 const DRAG_THRESHOLD = 6;
 /** 角标刷新间隔（ms）：本页生词数随引擎增量处理变化 */
 const BADGE_MS = 4000;
+/** 隐藏悬浮球后保留宿主的时间（ms）：等带“撤销”的 toast（5 秒）播完 */
+const RETIRE_MS = 5600;
 
 /**
  * 通用悬浮球（v10）：只在触屏/手机端显示（(hover: none) and (pointer: coarse)，不看 UA），PC 端不显示。
  *
- * - 可拖动，松手吸附左右边缘；3 秒无操作或页面滚动时半隐藏（露出一半、变淡），点按仍直接生效
+ * - 可拖动，松手吸附左右边缘；3 秒无操作或页面滚动时缩小并移到屏幕边缘外，只露出约 13px 一条（落在正文边距里，不压正文），点按仍直接生效
  * - 位置按设备记在 storage.local `floatBallPos`（侧边 + 视口高度比例），上下避开系统状态栏与手势条
  * - 点按：取词模式中 → 退出取词；站点有 primary 功能项（YouTube 视频页“当前字幕”）→ 直接执行；否则展开菜单（底部抽屉）
  * - 显示条件随设置（floatBall.enabled / hiddenSites）与媒体特性变化实时切换
@@ -42,15 +44,24 @@ export function startFloatBall(ctx: SiteContext): () => void {
   const shouldShow = (s: Settings) =>
     isTouchPrimary((q) => matchMedia(q).matches) && s.floatBall.enabled && !hostMatches(s.floatBall.hiddenSites, location.hostname);
 
+  let retireTimer: ReturnType<typeof setTimeout> | undefined;
   const sync = () => {
     if (stopped || !doc.body) return;
     const s = ctx.getSettings();
     if (shouldShow(s)) {
+      clearTimeout(retireTimer);
+      retireTimer = undefined;
       ball ??= new FloatBallView(ctx);
+      ball.setBallHidden(false);
       ball.refresh(s);
-    } else if (ball) {
-      ball.destroy();
-      ball = null;
+    } else if (ball && retireTimer === undefined) {
+      // 刚在菜单里隐藏悬浮球时，带“撤销”的 toast 还在显示（同一个 Shadow DOM）：先只藏起球，toast 结束后再销毁；期间撤销则直接恢复
+      ball.setBallHidden(true);
+      retireTimer = setTimeout(() => {
+        retireTimer = undefined;
+        ball?.destroy();
+        ball = null;
+      }, RETIRE_MS);
     }
   };
 
@@ -63,6 +74,7 @@ export function startFloatBall(ctx: SiteContext): () => void {
 
   return () => {
     stopped = true;
+    clearTimeout(retireTimer);
     unsub();
     stopFs();
     mql?.removeEventListener?.('change', sync);
@@ -96,6 +108,8 @@ class FloatBallView {
       this.ball.setAttribute('aria-label', on ? '退出取词模式' : '生词高亮：打开菜单');
       this.wake();
     });
+    // 长按选词直接查词：与悬浮球同生命周期（只在触屏显示悬浮球时启用）
+    this.pick.enableLongPress();
     this.menu = new FloatMenu({
       ctx,
       overlay: this.overlay,
@@ -118,6 +132,12 @@ class FloatBallView {
     this.place();
     this.wake();
     this.badgeTimer = setInterval(() => this.updateBadge(), BADGE_MS);
+  }
+
+  /** 只藏起球本身（菜单、toast 仍可显示） */
+  setBallHidden(hidden: boolean): void {
+    this.ball.hidden = hidden;
+    if (hidden) this.pick.exit();
   }
 
   refresh(s: Settings): void {
@@ -153,7 +173,9 @@ class FloatBallView {
     const vh = innerHeight;
     const left = x ?? ballX(this.pos.side, vw, this.idle);
     const top = (y ?? clampCenterY(this.pos.y, vh)) - (y === undefined ? BALL_SIZE / 2 : 0);
-    this.ball.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+    // 空闲时缩小（以球心为原点）：拖动中与展开状态不缩放
+    const scale = this.idle && x === undefined ? ` scale(${IDLE_SCALE})` : '';
+    this.ball.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)${scale}`;
     this.ball.classList.toggle('left', this.pos.side === 'left');
     this.ball.classList.toggle('right', this.pos.side === 'right');
   }

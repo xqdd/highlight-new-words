@@ -15,6 +15,7 @@ import { DefaultWordBookRegistry, createExtensionLoaders } from '@/core/wordbook
 import type { BookMeta, WordBook } from '@/core/wordbook/types';
 import { UserBooksDictionary } from '@/core/wordbook/user-book';
 import { ShadowCardView } from './card/card-view';
+import { speakWord } from './card/speak';
 import { bindCardTrigger } from './card/trigger';
 import type { CardData, CardView } from './card/types';
 import { ATTR_BOOKS, ATTR_LEMMA } from './engine/dom';
@@ -92,7 +93,8 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
   function ensureCard(): CardView {
     if (card) return card;
     card = new ShadowCardView(doc, {
-      speak: (text) => void sendToBackground('tts', { text, force: true }),
+      // 后台返回 unavailable（无 chrome.tts）时在页面内兜底朗读，见 card/speak.ts
+      speak: (text) => void speakWord(text, true, settings.tts),
       // 熟词/删词写入由 background 完成（需协调来源删除）；页面先乐观移除高亮，storage 变化后再复核
       markKnown: async (lemma, surface) => {
         engine?.removeLemma(lemma);
@@ -113,6 +115,8 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
       getTrigger: () => settings.card.trigger,
       // v11：修饰键 + 悬停时按住的键（card 模块新增，只加这一行接线）
       getModifier: () => settings.card.modifier,
+      // 悬停弹卡延迟（card 修复轮新增 settings.card.hoverDelay）
+      getHoverDelay: () => settings.card.hoverDelay,
       onOpen: (mark) => void openCard(mark),
     });
     return card;
@@ -131,8 +135,8 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
       deletableBooks: books.filter((b) => b.kind === 'source' && !!getProviderInfo(b.providerId ?? '')?.capabilities.delete),
     };
     view.open(mark, data);
-    // 自动发音（background 根据 settings.tts.enabled 决定是否朗读）
-    void sendToBackground('tts', { text: lemma });
+    // 自动发音（background 根据 settings.tts.enabled 决定是否朗读；unavailable 时页面内兜底）
+    void speakWord(lemma, false, settings.tts);
     const entry = await dictionary.lookup(lemma);
     if (view.anchor === mark) view.update({ ...data, entry });
   }
@@ -257,6 +261,11 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     });
   }
 
+  // 右键菜单“加入生词本/标为熟词”的结果（后台发给被点击的 frame，顶层与子 frame 都注册）：用卡片 toast 显示，失败用错误样式
+  handleContentMessages({
+    actionNotice: ({ ok, message, lemma }) => ensureCard().showMessage?.(message, ok, lemma),
+  });
+
   // 便于调试：控制台可查看当前实例（隔离世界中，不会暴露给页面脚本）
   (globalThis as Record<string, unknown>).__hnw = { get engine() { return engine; }, get settings(): Settings { return settings; } };
 }
@@ -280,7 +289,9 @@ const NON_LAYOUT_TAGS = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'TEMPLATE', 
 function firstScreenParsed(doc: Document): Promise<void> {
   const startedAt = performance.now();
   const ready = () => {
-    if (doc.readyState === 'complete' || performance.now() - startedAt > FIRST_SCREEN_MAX_WAIT_MS) return true;
+    // 超时兜底也要等 body 出现：冷启动直接打开 YouTube 视频页时 1.5s 内 body 可能还没解析出来，
+    // 此时放行会让 startEngine 走“无 body”分支直接返回、整页不再标注（floatball r2 实测 1/3 复现）；frameset 页面最终 readyState=complete 放行
+    if (doc.readyState === 'complete' || (performance.now() - startedAt > FIRST_SCREEN_MAX_WAIT_MS && !!doc.body)) return true;
     if (hasPendingStylesheet(doc)) return false;
     if (doc.readyState !== 'loading') return true;
     let el: Element | null = doc.body?.lastElementChild ?? null;

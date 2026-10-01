@@ -3,6 +3,13 @@ import { ATTR_ACTIVE, ATTR_BOOKS, ATTR_LEMMA, TAG_CARD_HOST, TAG_MARK } from '..
 import type { SiteContext } from '../sites/types';
 import { wordAt } from './model';
 
+/** 选区稳定判定（ms） */
+const LONG_PRESS_SETTLE_MS = 280;
+/** 选区须出现在最近一次触摸后这段时间内才算长按选词（ms） */
+const LONG_PRESS_WINDOW_MS = 2500;
+/** 恰好一个英文单词（含内部撇号/连字符） */
+const SINGLE_WORD_RE = /^[A-Za-z]+(?:['’-][A-Za-z]+)*$/;
+
 /**
  * 取词模式：开启后点按页面上任意英文单词即查词弹卡片（手机上长按选词难、未高亮的词也想查）。
  *
@@ -66,6 +73,7 @@ export class PickMode {
 
   destroy(): void {
     this.exit();
+    this.disableLongPress();
     this.clearBox();
   }
 
@@ -103,20 +111,88 @@ export class PickMode {
     const range = this.ctx.doc.createRange();
     range.setStart(hit.node, found.start);
     range.setEnd(hit.node, found.end);
-    const rect = range.getBoundingClientRect();
+    const hitRect = range.getBoundingClientRect();
     // caretRangeFromPoint 在空白处也会返回最近的字符：点按位置必须真的落在单词框内（留 6px 容差）
     const tol = 6;
-    if (x < rect.left - tol || x > rect.right + tol || y < rect.top - tol || y > rect.bottom + tol) return false;
-    const { lemma, books } = await this.resolveLemma(found.word);
+    if (x < hitRect.left - tol || x > hitRect.right + tol || y < hitRect.top - tol || y > hitRect.bottom + tol) return false;
+    await this.openForRange(range, found.word);
+    return true;
+  }
+
+  /** 以页面上的一个单词范围为锚点打开卡片（取词框放在单词位置，不改页面 DOM） */
+  private async openForRange(range: Range, word: string): Promise<void> {
+    const rect = range.getBoundingClientRect();
+    const { lemma, books } = await this.resolveLemma(word);
     this.range = range;
     const box = this.ensureBox();
-    box.textContent = found.word;
+    box.textContent = word;
     box.setAttribute(ATTR_LEMMA, lemma);
     box.setAttribute(ATTR_BOOKS, books.join(' '));
     box.hidden = false;
     this.placeBox(rect);
     this.ctx.openCard(box);
-    return true;
+  }
+
+  // ---------------- 长按选词查词（触屏，常开） ----------------
+
+  private longPressOn = false;
+  private lastTouchAt = 0;
+  private selTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * 长按选词直接查词：手机上长按单词，浏览器会选中这个词并弹出系统的复制/分享菜单；选区恰好是一个英文单词时直接打开卡片，
+   * 不必先开取词模式（查一个非高亮词从“点球 → 取词模式 → 点词”三步变成一步）。
+   * - 只认触屏手势产生的选区（最近一次触摸后 2.5 秒内），桌面拖选、程序设置的选区不处理
+   * - 选中的是高亮词时用该 hnw-mark 作锚点（与点按高亮词相同）；可编辑区域内的选区不处理（用户在编辑文字）
+   * - 选区继续拖大成短语时，关闭由长按打开的卡片，不妨碍复制
+   * 不清除选区：系统菜单照常可用。
+   */
+  enableLongPress(): void {
+    if (this.longPressOn) return;
+    this.longPressOn = true;
+    this.ctx.doc.addEventListener('touchstart', this.onTouchStart, { capture: true, passive: true });
+    this.ctx.doc.addEventListener('selectionchange', this.onSelectionChange);
+  }
+
+  private disableLongPress(): void {
+    if (!this.longPressOn) return;
+    this.longPressOn = false;
+    clearTimeout(this.selTimer);
+    this.ctx.doc.removeEventListener('touchstart', this.onTouchStart, true);
+    this.ctx.doc.removeEventListener('selectionchange', this.onSelectionChange);
+  }
+
+  private readonly onTouchStart = () => {
+    this.lastTouchAt = performance.now();
+  };
+
+  private readonly onSelectionChange = () => {
+    clearTimeout(this.selTimer);
+    // 选区稳定后再判断（拖动选区手柄时 selectionchange 连续触发）
+    this.selTimer = setTimeout(() => this.checkSelection(), LONG_PRESS_SETTLE_MS);
+  };
+
+  private checkSelection(): void {
+    if (this.on || performance.now() - this.lastTouchAt > LONG_PRESS_WINDOW_MS) return;
+    const sel = this.ctx.doc.getSelection();
+    const card = this.ctx.getCard();
+    const text = sel && !sel.isCollapsed && sel.rangeCount === 1 ? sel.toString().trim() : '';
+    if (!SINGLE_WORD_RE.test(text)) {
+      // 选区拖大成短语 / 取消选择：收起长按打开的卡片
+      if (text && card?.isOpen && card.anchor === this.box) card.close();
+      return;
+    }
+    const range = sel!.getRangeAt(0);
+    const start = range.startContainer;
+    const el = start instanceof Element ? start : start.parentElement;
+    if (!el || isEditable(el)) return;
+    const mark = el.closest<HTMLElement>(TAG_MARK);
+    if (mark) {
+      if (card?.anchor !== mark || !card.isOpen) this.ctx.openCard(mark);
+      return;
+    }
+    if (card?.isOpen && card.anchor === this.box && this.box?.textContent === text) return;
+    void this.openForRange(range.cloneRange(), text);
   }
 
   /** 选卡片词条：是生词时用匹配到的词条与词书；否则取第一个查得到释义的词形还原候选 */

@@ -26,8 +26,11 @@ const GLOSS_COLOR = '#ffe08a';
  * - 字幕内一律不显示 engine 的行内译文（hnw-tr），mark 强制回到普通行内，保持 YouTube 的折行结果；
  *   字幕内译文由本模块按窗口模式（ATTR_YT_GM）用 mark::after 渲染，文本放在属性里，不进入 textContent
  * - 自动字幕提示窗口里若已有标注（engine 先于我们处理的极端时序），去掉高亮外观
- * - above：单词上方注解绝对定位，宽度限制在单词附近（过长省略），所在字幕段加 padding-top 留出注解高度。
- *   字幕窗贴底定位，只会向上长高：不改变宽度、不折行、不裁切，文字本身不移动
+ * - above：有注解的生词改为 inline-block 并加 padding-top（= 注解高度），注解绝对定位在这段留白里（宽度限制在单词附近，过长省略）。
+ *   留白跟着单词所在的那一行走：字幕段折成两行时，第二行的生词只撑高第二行，注解不会压到第一行文字上（逐行定位）；
+ *   单词本身是不可拆分的，inline-block 不改变折行位置。字幕窗贴底定位，只会向上长高：不改变宽度、不折行、不裁切。
+ *   注解字号随字幕字号（em）缩放，全屏时字幕变大注解也变大；下限桌面 10px、触屏 12px（手机字幕本身只有约 15px）。
+ *   注解加深色描边：留白区域在字幕段背景内，但用户把字幕背景调成透明时仍要看得清
  * - after：词后小字（0.62em）。字幕段改为不折行（white-space:pre），字幕行改为居中的 flex，超出 YouTube 测量的窗口宽度时
  *   向两侧对称溢出（仍居中，背景随字幕段延伸）；超出播放器宽度的窗口由脚本改回 above
  * - 自动生成字幕（roll-up）窗口高度固定、逐词追加，不设置模式（只高亮）
@@ -41,11 +44,13 @@ export function buildCaptionCss(): string {
     `${MARK_IN_CAP} ${TAG_TRANSLATION}{display:none!important}`,
     `${MARK_IN_CAP},${MARK_IN_CAP}>${TAG_WORD}{display:inline!important}`,
     `${CAP} [${ATTR_YT_HINT}] ${TAG_WORD}{background:none!important;color:inherit!important;text-decoration:none!important;border:0!important;box-shadow:none!important;font-weight:inherit!important}`,
-    // above
-    `${win('above')} .${CAPTION_SEGMENT_CLASS}:has(${G}){padding-top:calc(max(.56em,10px) * 1.25 + 2px)!important}`,
-    `${win('above')} ${G}{position:relative!important}`,
-    `${win('above')} ${G}::after{content:attr(${ATTR_YT_GLOSS});position:absolute;left:-.35em;right:-.35em;bottom:100%;margin-bottom:1px;` +
-      `display:block;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:max(.56em,10px);line-height:1.25;color:${GLOSS_COLOR};${glossFont}}`,
+    // above：注解字号与留白都由 --hnw-gf 推出（字号 × 1.25 行高 + 2px 间隙），触屏下限更高
+    `${win('above')} ${G}{--hnw-gf:max(.56em,10px);display:inline-block!important;position:relative!important;vertical-align:baseline!important;` +
+      `padding-top:calc(var(--hnw-gf) * 1.25 + 2px)!important}`,
+    `@media (hover:none) and (pointer:coarse){${win('above')} ${G}{--hnw-gf:max(.62em,12px)}}`,
+    `${win('above')} ${G}::after{content:attr(${ATTR_YT_GLOSS});position:absolute;left:-.45em;right:-.45em;top:0;` +
+      `display:block;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--hnw-gf);line-height:1.25;color:${GLOSS_COLOR};${glossFont};` +
+      `text-shadow:0 0 2px #000,0 0 3px rgba(0,0,0,.8)}`,
     // after
     `${win('after')} .caption-visual-line{display:flex!important;justify-content:center!important}`,
     `${win('after')} .${CAPTION_SEGMENT_CLASS}{white-space:pre!important;flex:none!important}`,

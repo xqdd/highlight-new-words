@@ -1,5 +1,5 @@
 import { h } from '../../card/h';
-import { ATTR_BOOKS, ATTR_LEMMA } from '../../engine/dom';
+import { ATTR_BOOKS, ATTR_LEMMA, TAG_WORD } from '../../engine/dom';
 import { shortenTranslation } from '../../engine/engine';
 import { BASE_CSS } from '../../floatball/css';
 import { bindSheetDrag, createOverlayHost, type OverlayHost } from '../../floatball/host';
@@ -298,7 +298,8 @@ export class CaptionPanel {
         doc,
         'button',
         { type: 'button', class: `tok${it?.isNew ? ' new' : ''}`, [ATTR_LEMMA]: it?.lemma ?? t.text.toLowerCase(), [ATTR_BOOKS]: (it?.books ?? []).join(' ') },
-        h(doc, 'span', { class: 'w' }, t.text),
+        // 单词放在 hnw-w 中：卡片用 markSurface 取页面原词（只取 hnw-w 的文本），不会把下方的短释义也当成原词
+        h(doc, TAG_WORD as 'span', { class: 'w' }, t.text),
         gloss && it?.isNew && it.gloss ? h(doc, 'span', { class: 'g' }, it.gloss) : null,
       );
       btn.addEventListener('click', () => this.ctx.openCard(btn));

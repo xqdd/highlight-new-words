@@ -64,7 +64,7 @@ flowchart LR
 | engine | `src/content/engine/**`、`src/content/app.ts` | `WordMatcher`、`Dictionary`、`dom.ts` 常量 |
 | card | `src/content/card/**`、`tests/unit/card*.test.ts` | `CardView`/`CardData`/`CardActions`、`CardStyle`；对外提供 `bindCardTrigger`/`registerCardTriggerZone`/trigger-config 纯函数（见 4.5“卡片触发方式”） |
 | options | `src/entrypoints/options/**`（含导入 UI `LocalBooksSection`、熟词管理 UI `KnownSection`、来源 `SourcesSection`、同步 `SyncSection`）、`src/ui/components/**`（与 popup 共享，新增组件为主）、`src/core/import/parse.ts`（解析实现） | `Settings`、`useSettings`、`useBooks`、`BUILTIN_THEMES`、`ImportFormat`/`parseWordList`、user-store、known store、`SyncStatus` |
-| popup | `src/entrypoints/popup/**` | 同上 + `getTabWords`/`getPageState`/`syncSourceBooks`/`getStatusSummary`/`syncAll` 消息（总状态不可用时用本地 `syncState`/`webdavSyncState`/来源索引兜底）、platform `hasAllSitesAccess`/`requestAllSitesAccess`、预设切换复用 options 的 `applyPreset`/`presetGroups`（`options/lib/appearance.ts`，改签名需同步 popup）；发音用 `tts` 消息，后台返回 `reason='unavailable'` 时 popup 再用 platform `speakText` 在扩展页朗读；收藏用 `getWordState`/`addWord`/`removeWord` |
+| popup | `src/entrypoints/popup/**` | 同上 + `getTabWords`/`getPageState`/`syncSourceBooks`/`getStatusSummary`/`syncAll` 消息（“全部同步”发 `syncAll({background:true})` 后按约 1.5 秒轮询 `getStatusSummary().syncAll`，见 `syncAllRunner.ts`；总状态不可用时用本地 `syncState`/`webdavSyncState`/来源索引兜底）、platform `hasAllSitesAccess`/`requestAllSitesAccess`、预设切换复用 options 的 `applyPreset`/`presetGroups`（`options/lib/appearance.ts`，改签名需同步 popup）；发音用 `tts` 消息，后台返回 `reason='unavailable'` 时 popup 再用 platform `speakText` 在扩展页朗读；收藏用 `getWordState`/`addWord`/`removeWord` |
 | background | `src/background/**`（含来源 provider `src/background/sources/**`、熟词流程 `known.ts`）、`src/entrypoints/background.ts`、`src/core/sync/**`（storage.sync 同步层） | `BackgroundProtocol`、`SourceProvider`、settings/known/user-store |
 | floatball | `src/content/floatball/**`（通用悬浮球、取词模式）、`src/content/sites/**`（站点适配层与 `SiteContext` 实现，含 YouTube）、`tests/fixtures/youtube*`、`tests/fixtures/floatball*` | `SiteContext`、`CardView`、`registerSiteSkipRule`、popup `model.ts` 与 options `lib/appearance.ts` 的纯函数、`getStatusSummary`/`syncAll`/`markKnown`/`unmarkKnown` 消息；见 4.12 |
 
@@ -86,7 +86,7 @@ flowchart LR
 | `style.themeId` / `style.custom` / `style.perBook` / `style.saved?` | 全局主题、自定义颜色（含旧版 4 个颜色）、按词书覆盖；`saved` 为用户另存的样式库（`SavedMarkStyle[]`，options 第二阶段新增，可选，渲染不读取） |
 | `inlineTranslation` | `mode`：`off` / `after`（词后）/ `ruby`（词上方，CSS `display:ruby`）/ `hover`（仅悬停浮现，不占位；engine 第二阶段新增）；译文样式（v5，可选）：`blur` 模糊自测、`color`、`opacity`（0.2–1）、`fontScale`（0.5–1），缺省值见 `TRANSLATION_STYLE_DEFAULTS`，解析用 `resolveTranslationStyle` |
 | `code` | 代码块中标注生词（v8，engine 新增）：`enabled`（默认 false）、`scope` `comments`（默认，只处理语法高亮标出的注释和字符串）/ `all`、`display` `hover`（默认，代码中不显示译文）/ `float`（单词上方浮动小标注，不占位） |
-| `card.trigger` / `card.modifier` | PC 端（鼠标）卡片触发方式（触屏/手机端始终点按，不受影响）：`auto`（旧默认值）/`hover` 悬停；`modifier` 按住修饰键 + 悬停（v11 card 新增，旧版本收到时按悬停处理）；`click` 点击（链接中的单词第一次点击弹卡，再点一次或带修饰键点击才跳转）。`modifier` 为 `alt`（默认）/`ctrl`/`shift`/`meta`（⌘，只在 macOS 提供，其他系统按 Ctrl 处理）。解析与文案用 [trigger-config.ts](../src/content/card/trigger-config.ts) 的纯函数，见 4.5“卡片触发方式” |
+| `card.trigger` / `card.modifier` / `card.hoverDelay` | PC 端（鼠标）卡片触发方式（触屏/手机端始终点按，不受影响）：`auto`（旧默认值）/`hover` 悬停；`modifier` 按住修饰键 + 悬停（v11 card 新增，旧版本收到时按悬停处理）；`click` 点击（链接中的单词第一次点击弹卡，再点一次或带修饰键点击才跳转）。`modifier` 为 `alt`（默认）/`ctrl`/`shift`/`meta`（⌘，只在 macOS 提供，其他系统按 Ctrl 处理）。`hoverDelay` 为悬停弹卡延迟（ms）：`100` 灵敏 / `250` 标准（默认）/ `400` 稳妥，档位见 `CARD_HOVER_DELAYS`；悬停与“修饰键 + 悬停”移入单词时生效，指针已在单词上再按修饰键的 180ms 不受影响（card 修复轮新增，旧设置由 `normalizeSettings` 补齐，非法值按 250）。解析与文案用 [trigger-config.ts](../src/content/card/trigger-config.ts) 的纯函数，见 4.5“卡片触发方式” |
 | `tts` | 自动发音开关、`voice`（`chrome.tts.speak` 选项）、语速 |
 | `sources[providerId]` | 按来源配置 `SourceSettings`：`enabled`、`autoSync`（每天）、`deleteOnKnown`（默认 false，`wordActions.knownRemoveFrom='auto'` 时生效）、可选 `apiToken`（本机字段；只有勾选 `credentialSync["token:<id>"]` 时才作为凭据随同步上传） |
 | `knownBooks` | 熟词本多来源：`enabled` 启用的来源熟词本 id（角色为 known 的来源词书，如欧路“已掌握单词”，首次同步成功自动加入）；`roles` 用户为来源词书指定的角色 `new`/`known`（覆盖 provider 声明）。本地熟词本始终生效，见 4.9 |
@@ -115,7 +115,7 @@ flowchart LR
 | `syncCredStamps` | 凭据修改时间戳 `id → { at, h 值摘要 }`（凭据合并用） | background |
 | `uiNotesSeen` | 选项页已读“更新说明”版本（字符串，见 options `lib/release-notes.ts`；全新安装记为已读不弹出） | options |
 | `floatBallPos` | `FloatBallPos { side: 'left'\|'right', y: 视口高度比例 }`：悬浮球位置，按设备记忆，不参与同步 | 内容脚本（floatball） |
-| `cardTriggerHint` | 已提示过的卡片触发方式签名（字符串，如 `hover`、`modifier:alt`、`click`）：PC 端卡片首次出现时提示一次当前触发方式，方式变化后再提示一次；按设备记忆、不参与同步（card v11 新增） | 内容脚本（card） |
+| `cardTriggerHint` | 已提示过的卡片触发方式签名（字符串，如 `hover`、`modifier:alt`、`click`）：PC 端卡片首次出现时提示一次当前触发方式，方式变化后再提示一次；提示可见满 1 秒或用户在卡片内按下后才写入；按设备记忆、不参与同步（card v11 新增） | 内容脚本（card） |
 | `updateNotice` | `UpdateNotice { from, to, at }`：扩展从旧版本升级（`onInstalled reason=update`，版本号不同）时写入，options/popup 展示简短“更新说明”后发 `dismissUpdateNotice` 清除（第二阶段新增） | background |
 
 `storage.session` 中 `tabWords` 用于徽章；`storage.sync` 键见 4.9。
@@ -165,7 +165,7 @@ v2.0.1 旧键 `toggle/ttsToggle/ttsVoices/highlight*/bubble*/dictionaryType/auto
 - **行内短释义的选取**（`build-data.mjs#shortOf`）：跨词性给每个候选义项打分——ECDICT、ECDICT-ultimate（有道简明释义，权重最高）与各 KyleBing 教材词表按“该义项在本词性内的位次”投票，票数按词性常用度（ultimate 词性占比 + CEFR-J 词性）缩放；带专业/语体标注（[医]、(商)、<计>、〔尤指〕、古/俚）的义项、单字义项、超过 6 字的义项降权；同一义项取最自然的写法（动词去“使”“对…/把…”，形容词带“的”，副词去“地”）。有道把计算机义排在首位的（browser：[计] 浏览器）不降权，其他领域标注仍降权。仍不合常用义的词在 [short-overrides.tsv](../scripts/data/short-overrides.tsv) 人工覆盖（约 800 词：高频多义词 project→项目；ECDICT 缺现代义的网页/科技词 server→服务器、cache→缓存；数量词 billion→十亿；领域误义 utility→公用事业、projection→预测）。`build-data.mjs --audit <tsv>` 输出可疑选义审计表（单字、四字、不在各来源前 3 义项、带领域标注、未取计算机义），复核后补进覆盖表。金标与格式约束见 `tests/unit/data.test.ts`「行内短释义质量」。
 - **搭配义 `collocationShort(word, prev?, next?)`**（[collocation.ts](../src/core/dict/collocation.ts)，data 第二阶段第 2 轮新增，engine 第二阶段第 2 轮已接入：取 mark 同一父元素内左右紧邻、中间只有空白的单词，按小写与去 -s/-es 两种形式查询）：固定搭配中的短释义（vicious cycle→恶性的、concrete structure→混凝土、storm surge→风暴潮、bulk of→大部分、shed light→揭示）。engine 显示行内译文时传入左右相邻词的小写原形，命中则替换 `short`。
 - **编程熟词** `isCodeKnownWord`（[code-words.ts](../src/core/dict/code-words.ts)）：关键字、内置类型、常见缩写与占位名；标识符子词的 -s/-es/-ed/-ing 屈折形式按原形判断（defaults、modules、callbacks）。
-- **`shortVerb`（短表 `v`，data 第二阶段新增，可选）**：`short` 取的是名词/形容词义项、而该词有动词变形且动词用法不罕见时提供动词释义（advocate：提倡者 / 提倡，约 870 词；超过 6 字或含“…”残缺框式的不提供）。页面词形是动词变形（advocating、advocated，以 -ing/-ed 结尾且没有自己的词条）时行内翻译改用它（engine 已接入）。`CompositeDictionary` 合并时，前面的来源（用户词书）给了 `short` 就不再混入打包词典的 `shortVerb`。
+- **`shortVerb`（短表 `v`，data 第二阶段新增，可选）**：`short` 取的是名词/形容词义项、而该词有动词变形且动词用法不罕见时提供动词释义（advocate：提倡者 / 提倡，约 690 词；超过 6 字或含“…”残缺框式的不提供，规则见 [verb-short.mjs](../scripts/data/verb-short.mjs)，产物中出现不合格的 v 构建直接失败）。ECDICT/有道常把冷僻动词义排在首位（match 使比赛、bolt 筛选、date 过时），在 [verb-overrides.tsv](../scripts/data/verb-overrides.tsv) 人工改为常用义或写 `-` 置空（冷僻义宁可留空，行内回退到 `short`）；short-overrides 覆盖的词默认不给 `v`，需要时同样在该表给出。页面词形是动词变形（advocating、advocated，以 -ing/-ed 结尾且没有自己的词条）时行内翻译改用它（engine 已接入）。`CompositeDictionary` 合并时，前面的来源（用户词书）给了 `short` 就不再混入打包词典的 `shortVerb`。
 - **误匹配防护**：词书只收纯字母单词，页面分词按连字符切开复合词，所以用户词书里的短语（give up）与连字符词（well-known）只会漏标、不会把组成部分误标（单测覆盖）。构建时排除：连字符前缀与伪单词（re/non/mid/micro/bio…、vs/etc/km、罗马数字，`NOT_WORDS`）；只有 BNC 排名、没有 COCA 排名的词（多为人名地名，chelsea/marx/hong/kong，英式拼写除外）不按词频进入级别/词频书。本身也是单词的构词前缀（auto-、vice-、self-）由 [hyphen.ts](../src/core/dict/hyphen.ts) `isHyphenPrefix` 提供给 engine，在 `词-词` 结构中跳过前半部分（engine 已接入）。
 - **编程熟词**（需求 v8）：[code-words.ts](../src/core/dict/code-words.ts) `CODE_KNOWN_WORDS` / `isCodeKnownWord`，收录主流语言关键字、内置类型与常见缩写（if/return/const/func/str/init/args/ctx/impl…），engine 在代码上下文中对标识符拆分后的子词调用，命中则视为熟词。
 
@@ -197,8 +197,9 @@ flowchart LR
 ```
 
 - 规则与数据：[rules.ts](../src/core/lemma/rules.ts)（无依赖纯函数，构建脚本与运行时共用）、[data-lemmatizer.ts](../src/core/lemma/data-lemmatizer.ts)（`candidates` / `analyze` / `lemma` / `root`）、`public/data/lemma/lemma.json`（`LemmaDataFile { v: 1, e: { 词: "屈折1,屈折2|派生1,派生2" } }`，约 360KB）。
-- 生成：`node scripts/lemma/build-lemma-data.mjs <ecdict.csv> <lemma.en.txt> [out] [--report]`（ECDICT exchange + BNC 词形表，MIT）。词汇表 = 考试词 + 词频前 3 万 + 其屈折变形；对每个词算出真值（屈折原形 + 经中英文释义语义校验的派生词根链），运行时规则输出与真值不一致的才写表，所以词汇表内的词结果精确（went→go、better→good、business/news/hardly/corner 不还原），词汇表外长尾词走规则。**改了 rules.ts 必须重新生成 lemma.json。**
-- 测试：金标集 [lemma-gold.tsv](../tests/fixtures/lemma-gold.tsv)（屈折/不规则/复数/比较级/所有格/派生/不应还原，含“禁止误还原”列）在 `tests/unit/lemma.test.ts` 中校验；与 wink-lemmatizer、compromise 的对标评测见 `tests/unit/lemma-bench.test.ts` 文件头（标杆库装在临时目录，不进依赖）。
+- 生成：`node scripts/lemma/build-lemma-data.mjs <ecdict.csv> <lemma.en.txt> [out] [--report]`（ECDICT exchange + BNC 词形表，MIT）。词汇表 = 考试词 + 词频前 3 万 + 其屈折变形；对每个词算出真值（屈折原形 + 经中英文释义语义校验的派生词根链），运行时规则输出与真值不一致的才写表，所以词汇表内的词结果精确（went→go、better→good、business/news/hardly/corner 不还原），词汇表外长尾词走规则。派生还原另有词频口径：高频词（COCA 排名 ≤ 5000）本身是独立词条，只允许透明后缀（方式副词 -ly、-ness/-ful/-less：quickly→quick、happiness→happy），其余不还原（normal ↛ norm、committee ↛ commit、teacher ↛ teach），规则生成的非词候选也写表清空；低频词的词根不能比它更罕见（spiral ↛ spire），carelessly→careless→care 等照常。**改了 rules.ts 必须重新生成 lemma.json。**
+- 测试：金标集 [lemma-gold.tsv](../tests/fixtures/lemma-gold.tsv)（屈折/不规则/复数/比较级/所有格/派生/高频独立词条/不应还原，含“禁止误还原”列）在 `tests/unit/lemma.test.ts` 中校验（ALL-无派生、keep > 90%，deriv > 95%，deriv-hf 全对）；与 wink-lemmatizer、compromise 的对标评测见 `tests/unit/lemma-bench.test.ts` 文件头（标杆库装在临时目录，不进依赖）。
+- 派生金标口径：高频派生限制属于产品口径变化而非实现退化。按原金标（84 个 deriv）计，deriv 从 83/84 降到 45/84，下降的 38 个全部是 COCA 排名 ≤ 5000 的非透明后缀词（development、teacher、national、realize 等），它们按新口径故意不还原；屈折与 keep 不降反升（ALL-无派生 327→329/329、keep 73→75/75，修好 apply ↛ app、comment ↛ com）。金标随口径把这 38 词从 deriv 移到 deriv-hf（金标为原词，第 5 列保留语言学词根仅作说明），其中 realize 另把 real 列为禁止误还原。调整后：ALL 412/413、deriv 45/46（唯一错例 unhappiness，口径调整前就错）、deriv-hf 38/38。
 
 ### 4.4 匹配服务（WordMatcher）
 
@@ -221,11 +222,13 @@ flowchart LR
     - `data-hnw-link`：位于链接内。所有样式在链接里都保留站点链接的颜色与下划线（去掉自身文字色、装饰线、边框），生词只用底色表示：自带背景的保留背景，其余改为主题色浅底；`after`/`ruby` 不显示括注（括注会切断链接下划线），悬停模式与卡片照常。
     - `data-hnw-nogloss`（engine 第二阶段第 2 轮）：行内括注密度控制省略的 mark（同一段落同一词条只给第一次出现加括注；窄屏 ≤600px 每段最多 max(1, 字数/70) 个，优先保留词频更低的词）。仍高亮，CSS 隐藏其占位译文。
     - 标题（h1–h6 内）：`after`/`ruby` 不显示括注，底色/马克笔/胶囊类样式降级为同色下划线（CSS 按祖先选择器实现，没有单独属性）。
-    - `data-hnw-tight`：受限容器（按钮类控件、`white-space:nowrap/pre`、`text-overflow:ellipsis`、line-clamp、`overflow:hidden` 且只有一行高）。`after`/`ruby` 的译文在这里退化为悬停浮层，不撑破容器、不改布局（不做导航/正文区域识别，所有可见文本统一处理）。浮层会被 `overflow:hidden` 容器裁掉，此时靠卡片查看。
+    - `data-hnw-tight`：受限容器（按钮类控件、`white-space:nowrap/pre`、`text-overflow:ellipsis`、line-clamp、`overflow:hidden` 且只有一行高）。`after`/`ruby` 的译文在这里退化为悬停浮层，不撑破容器、不改布局（不做导航/正文区域识别，所有可见文本统一处理）。浮层会被 `overflow:hidden` 容器裁掉，此时靠卡片查看。受限容器中的生词装饰线贴近基线（偏移 1px），波浪线/双下划线降为实线，避免被容器底边裁成零星的点。
     - `data-hnw-code="identifier|prose"`：代码中的生词（prose = 注释和字符串），永远不插入占位译文。
     - `data-hnw-lowconf`：低置信度。首字母大写却不在句首（如 “Upgrade to Premium”），或文本节点只有这一个大写词（导航、按钮等标签），多为专有名词或界面标签。照常高亮，但不显示 `after`/`ruby` 译文。
   - `hnw-tr[data-hnw-revealed]`：模糊自测中已点开的译文。engine 在 window 捕获阶段拦截对模糊译文的点按/悬停，不触发卡片和链接。
-  - 行内释义优先查页面词形自己的词条，没有再用原形。派生词在词典中一般有独立词条（committee=委员会），用原形会译错（commit）。
+  - 行内释义依次查页面词形、屈折原形（`WordMatcher#inflectionOf`）、匹配原形的词条。派生词在词典中一般有独立词条（committee=委员会），用原形会译错（commit）；派生词的屈折变化借词根命中时（projections 命中 project），取屈折原形 projection 的释义；动词释义（`shortVerb`）同样取屈折原形的。
+  - 不显示括注的 mark（链接、标题、低置信度、密度控制省略）：桌面端（`(hover:hover)`）悬停时复用受限容器的浮层显示短释义；触屏不变，点按打开卡片。
+  - 页面删除含 mark 的子树、或删除/改写原文本节点导致切分组被还原/丢弃时，engine 对移出文档的 mark 调 `unobserve`，懒插入观察者不长期持有已删除节点。
   - 复制不带译文：译文只存在于 `::before`、浮层与 ruby 注解中，也不进入 textContent（已在 Chromium 中用 Selection 验证正文和代码）。
 - 扫描：`createTextWalker` 用 TreeWalker，跳过 script/style/code/pre/textarea/input/select/svg/contenteditable、在线编辑器（`.monaco-editor`/`.CodeMirror`/`.cm-editor`/`.ace_editor`）及自身节点；engine 逐个 `nextNode()` 边取边处理，可在任意节点处让出主线程。
 - 代码块（v8，`settings.code`）：开启后 `ScanOptions.codeEnabled` 放行 pre/code。`scope=comments` 时只处理带注释/字符串类名的文本，类名清单见 `CODE_COMMENT_STRING_SELECTOR`（GitHub `pl-c/pl-s`、highlight.js、Prism、Pygments/Rouge）。Shiki 只输出内联颜色，识别不了，因此不处理；没有高亮类名的行内 `code` 也不处理。代码文本用 `tokenizeCode` 拆分 camelCase/PascalCase/snake_case/kebab-case/数字，高亮可以只落在子串上（`getElementById` 的 Element）。代码本体中的编程熟词（[code-words.ts](../src/core/dict/code-words.ts) 的 `isCodeKnownWord`：关键字、内置类型、常见缩写）不高亮，注释和字符串不受这条限制。
@@ -255,7 +258,7 @@ flowchart LR
     默认配置的首次绘制回到无扩展基线附近（内容脚本完全不执行的空扩展也在 120–190ms 之间，差异主要是 `document_start` 注入本身）；代价是桌面 after 首屏约 0.04 的 CLS（一次推移，低于“良好”线 0.1），ruby 因占位注解在创建 mark 的同一帧插入，推移很小。
 - 熟词即时生效：`removeLemma(lemma)` 先把词条加入抑制集合，再同步重做含该词条的切分组（所有词形一起消失，释义取缓存不闪烁），存储写入后 `refreshMatches` 复核。
 - 数据变化：启用词书变化 → `rebuild` 全量重扫；新增熟词/用户词书删词（只减少命中）→ `refreshMatches` 原地复核；用户词书新增词 → 全量重扫；样式/翻译模式 → 仅更新样式。只监听 `settings`、`knownWords`、`srcBook:*`、`localBook:*`，忽略 `syncState` 等后台元数据写入。
-- 卡片：`CardView` 接口（[card/types.ts](../src/content/card/types.ts)）；`CardData.deletableBooks` 为命中的、provider 支持删除的来源词书；`CardActions` 为 `markKnown(lemma, surface) → MarkKnownResult`、`unmarkKnown(lemma)`（撤销）、`deleteFromSources(lemma, bookIds)`，均转发 background 消息。当前实现 `ShadowCardView`（open 模式 Shadow DOM，便于测试穿透）：视口 ≤ 600px 或无悬停能力的触屏设备显示底部卡片（近全宽、可下滑关闭、触控目标 ≥ 44px，单词被遮挡时自动滚到卡片上方），否则为贴词浮层（滚动时跟随单词，单词离开视口关闭）；暗色页面自动换暗色卡片；“认识”后关闭卡片并弹出可撤销 toast；来源删除为两步确认。打开期间给锚点加 `data-hnw-active` 属性，并由卡片注入 `<style id="hnw-card-active-style">` 显示激活态（叠加渐变，不覆盖 engine 的高亮样式）。纯函数（词形关系说明、释义分行、音标规范化、外部词典链接）在 [word-info.ts](../src/content/card/word-info.ts)。触发逻辑 `bindCardTrigger`：鼠标悬停 100ms 打开、触屏点按打开并阻止链接跳转（再次点按放行）；鼠标在外部按下 / 触屏在外部点按（滑动滚动不关闭）/ Esc 关闭，页面滚动不再由 trigger 关闭。
+- 卡片：`CardView` 接口（[card/types.ts](../src/content/card/types.ts)）；`CardData.deletableBooks` 为命中的、provider 支持删除的来源词书；`CardActions` 为 `markKnown(lemma, surface) → MarkKnownResult`、`unmarkKnown(lemma)`（撤销）、`deleteFromSources(lemma, bookIds)`，均转发 background 消息。当前实现 `ShadowCardView`（open 模式 Shadow DOM，便于测试穿透）：视口 ≤ 600px 或无悬停能力的触屏设备显示底部卡片（近全宽、可下滑关闭、触控目标 ≥ 44px，单词被遮挡时自动滚到卡片上方），否则为贴词浮层（滚动时跟随单词，单词离开视口关闭）；暗色页面自动换暗色卡片；“认识”后关闭卡片并弹出可撤销 toast；来源删除为两步确认。打开期间给锚点加 `data-hnw-active` 属性，并由卡片注入 `<style id="hnw-card-active-style">` 显示激活态（叠加渐变，不覆盖 engine 的高亮样式）。纯函数（词形关系说明、释义分行、音标规范化、外部词典链接）在 [word-info.ts](../src/content/card/word-info.ts)。触发逻辑 `bindCardTrigger`：鼠标悬停 `card.hoverDelay`（默认 250ms）打开、触屏点按打开并阻止链接跳转（再次点按放行）；鼠标在外部按下 / 触屏在外部点按（滑动滚动不关闭）/ Esc 关闭，页面滚动不再由 trigger 关闭。
 - 卡片单词操作（card 第二阶段）：卡片自己持有 `CardBackend`（[word-actions.ts](../src/content/card/word-actions.ts)，`ShadowCardView` 构造的第三个参数，缺省为转发 background 消息的运行时实现），入口无需改动：
   - 打开卡片时并行取 `getWordState`、`previewWordAction`（add/known）、加入候选目标（读 storage 的设置与词书索引，`buildAddTargets`）、来源词书删除能力；都只读本地缓存。
   - 底栏：“认识”｜“加入生词本 ▾”（分段按钮，下拉为卡片内联面板，可临时改选目标，本页有效，按所选 `targets` 真实写入）｜来源删除（两步确认）。下方说明默认只有一行摘要（“加入 → 我的生词本 等 2 本 · 认识 → 本地熟词本”），逐项去向与跳过/只读原因折叠在右侧“i”（带跳过数）里；跳过说明用琥珀色，红色只用于错误。不支持的目标（有道非默认分组、欧路“已掌握”只读、来源不可删）置灰，点按置灰按钮或面板中的置灰选项给出原因 toast。
@@ -267,20 +270,22 @@ flowchart LR
   - toast 始终在视口底部；手机底部卡片打开时紧贴卡片上沿，不遮挡卡片。桌面悬停卡片在卡片内点按过后不再因鼠标移出而关闭（`bindCardTrigger`）。
   - 锚点跟踪：卡片打开期间用 MutationObserver 检测锚点被移出文档（加入生词本触发 engine 全量重扫、SPA 局部刷新），换到同一原形、离原位置最近的新 mark，卡片不跳位、不丢暗色配色；找不到时保持原位。
   - 释义：卡片通过 `CardBackend.lookupDict`（卡片自用的 `PackagedDictionary`）始终展示打包词典的完整义项。入口的组合词典在单词进入用户生词本后会用生词本里的一行释义覆盖完整释义，因此生词本释义与词典不同时作为“生词本释义”附加一行显示。
-  - 朗读兜底：`sendToBackground('tts')` 已在后台无引擎时于页面内用 Web Speech 朗读（见 4.6），卡片发音按钮无需额外处理。
+  - 朗读兜底：`sendToBackground('tts')` 已在后台无引擎时于页面内用 Web Speech 朗读（见 4.6）；卡片发音按钮与自动发音另经 [speak.ts](../src/content/card/speak.ts) `speakWord`，结果仍为 `reason='unavailable'`（后台未带 `fallback`）时再调 platform `speakText` 兜底，避免完全无声。
+  - 后台操作结果：右键菜单的 `actionNotice` 由 app 在每个 frame 注册，调用可选的 `CardView.showMessage(message, ok, lemma)` 显示与卡片操作同款的 toast（message 按“；”分段，首段为主行、其余进“详情”；`ok=false` 用失败样式），不需要卡片打开。
+  - 加入生词本部分失败：只有一处失败时 toast 主行直接写出本名（如“部分失败：「run」已加入“我的生词本”，“欧路 · 测试”加入失败”），多处失败写“N 处失败”，逐项见详情（`addNotice`）。
 
 - 卡片触发方式（card v11，[trigger.ts](../src/content/card/trigger.ts) `bindCardTrigger` + 纯函数 [trigger-config.ts](../src/content/card/trigger-config.ts)）：触屏（`pointerType` 不是 mouse）始终点按，下列规则只作用于 PC 端鼠标，按 `settings.card.trigger`/`card.modifier`：
 
   | 方式 | 打开 | 链接中的单词 | 关闭 |
   | --- | --- | --- | --- |
-  | 悬停（`auto`/`hover`） | 悬停 100ms | 点击照常跳转 | 离开单词与卡片 250ms；卡片内点过后钉住 |
-  | 修饰键 + 悬停（`modifier`） | 只按着设定的修饰键时移入单词 100ms；指针已在单词上再按下修饰键 180ms | 点击照常跳转（Ctrl/⌘+点击开新标签不受影响） | 同悬停（松开修饰键不关闭） |
+  | 悬停（`auto`/`hover`） | 悬停 `card.hoverDelay`（默认 250ms，可选 100/400） | 点击照常跳转 | 离开单词与卡片 250ms；卡片内点过后钉住 |
+  | 修饰键 + 悬停（`modifier`） | 只按着设定的修饰键时移入单词 `card.hoverDelay`；指针已在单词上再按下修饰键 180ms | 点击照常跳转（Ctrl/⌘+点击开新标签不受影响） | 同悬停（松开修饰键不关闭） |
   | 点击（`click`） | 无修饰键的单击；拖选文字结束的点击不算 | 第一次点击弹卡并阻止跳转，再点一次放行；带任一修饰键的点击完全交给浏览器 | 点卡片外 / Esc / 关闭按钮（移出不关闭） |
 
-  - 快捷键不冲突：修饰键按住期间按了其他键、鼠标按下或滚轮（Ctrl+C、Ctrl+点击、Ctrl+滚轮缩放、Alt+Tab 失焦），本次按住作废直到松开；同时按着别的修饰键（Ctrl+Alt）不算；焦点在输入框/可编辑区时按键不触发。用修饰键查过词的那次按住，松开时 `preventDefault` 掉 keyup，避免 Windows 上单按 Alt 激活浏览器菜单。
+  - 快捷键不冲突：修饰键按住期间按了其他键、鼠标按下或滚轮（Ctrl+C、Ctrl+点击、Ctrl+滚轮缩放、Alt+Tab 失焦），本次按住作废直到松开；同时按着别的修饰键（Ctrl+Alt）不算；焦点在输入框/可编辑区时按键不触发。任何方式下带 Ctrl/⌘/Shift 在链接内按下鼠标（新标签/新窗口打开），都会关闭当前卡片、取消待打开的计时，Ctrl/⌘/Shift 全部松开前不再弹卡片，点击不拦截（#113）。用修饰键查过词的那次按住，松开时 `preventDefault` 掉 keyup，避免 Windows 上单按 Alt 激活浏览器菜单。
   - 平台：`modifierChoices(mac)` 给出可选键（macOS ⌘⌥⇧⌃，其他系统 Alt/Ctrl/Shift），`modifierLabel`/`modifierShort` 为显示名；非 macOS 收到 `meta` 按 Ctrl（`effectiveModifier`）。`isMacPlatform` 按 `userAgentData.platform`/`navigator.platform` 判断。
-  - 首次提示：PC 端卡片首次出现时，卡片标题下方显示一行当前方式说明（`cardTriggerHintText`，带“知道了”），签名（`triggerSignature`）写入 storage.local `cardTriggerHint`；方式或修饰键变化后再提示一次，触屏不提示。由可选的 `CardView.showHint(text)` 渲染，`bindCardTrigger` 的 `hintStore: false` 可关闭。options 的设置行说明可复用 `cardTriggerDescription`。
-  - 复用接口（供 floatball/站点适配层）：`registerCardTriggerZone({ anchorOf(e), contains?(e), hitTestOnMove? }) → 注销函数`。注册后 app 那一处 `bindCardTrigger` 在 hnw-mark 之外再问区域：`anchorOf` 返回带 `data-lemma`/`data-books` 的锚点元素（可用 `composedPath()` 穿透 open Shadow DOM，或按指针坐标几何命中），之后悬停/修饰键/点击/触屏点按的规则、首次提示与关闭逻辑与页面单词完全一致，打开走 app 的 `openCard`（与 `SiteContext.openCard` 相同）；`contains` 为真的区域（如字幕面板空白处）视同卡片内，不因移出或按下而关闭卡片；单词被透明层盖住、`pointerover` 拿不到时设 `hitTestOnMove: true`，指针移动时每帧最多调用一次 `anchorOf`。需要在别的 document 上独立绑定时可直接调 `bindCardTrigger({ doc, view, getTrigger, getModifier, onOpen })`。
+  - 首次提示：PC 端卡片首次出现时，卡片标题下方显示一行当前方式说明（`cardTriggerHintText`，带“知道了”），提示可见满 1 秒（卡片仍为同一单词打开）或用户在卡片内按下（点按钮、“知道了”）后，签名（`triggerSignature`）才写入 storage.local `cardTriggerHint`，一闪而过的卡片下次仍提示（#114）；方式或修饰键变化后再提示一次，触屏不提示。由可选的 `CardView.showHint(text)` 渲染，`bindCardTrigger` 的 `hintStore: false` 可关闭。options 的设置行说明可复用 `cardTriggerDescription`。
+  - 复用接口（供 floatball/站点适配层）：`registerCardTriggerZone({ anchorOf(e), contains?(e), hitTestOnMove? }) → 注销函数`。注册后 app 那一处 `bindCardTrigger` 在 hnw-mark 之外再问区域：`anchorOf` 返回带 `data-lemma`/`data-books` 的锚点元素（可用 `composedPath()` 穿透 open Shadow DOM，或按指针坐标几何命中），之后悬停/修饰键/点击/触屏点按的规则、首次提示与关闭逻辑与页面单词完全一致，打开走 app 的 `openCard`（与 `SiteContext.openCard` 相同）；`contains` 为真的区域（如字幕面板空白处）视同卡片内，不因移出或按下而关闭卡片；单词被透明层盖住、`pointerover` 拿不到时设 `hitTestOnMove: true`，指针移动时每帧最多调用一次 `anchorOf`。需要在别的 document 上独立绑定时可直接调 `bindCardTrigger({ doc, view, getTrigger, getModifier, getHoverDelay, onOpen })`。
   - 入口接线：app.ts 只多传 `getModifier: () => settings.card.modifier`（card v11 加的一行）；`onOpen(anchor, via)` 的 `via` 扩展为 `hover`/`modifier`/`click`/`tap`。
 
 ### 4.6 消息契约
@@ -310,10 +315,11 @@ flowchart LR
 | → background | `getStatusSummary` | `{}` → `StatusSummary`（总状态，只读不发网络请求，见下文“总状态”；第二阶段新增） |
 | → background | `syncAll` | `{background?}` → `SyncAllResult { summary, sources, ok, complete?, accepted?, message }`（并行同步已启用的 storage.sync、WebDAV 与全部启用来源，任一失败不影响其他项；`message` 分“已同步 / 等待同步（约 N 秒后自动完成）/ 仍在同步 / 失败 / 未完成”，有启用项时不为空；`ok`=无失败与未完成，`complete`=`ok` 且无等待/进行中项。`background=true`（第 2 轮新增）立即返回 `accepted=true`，同步在后台继续，popup 关闭不影响，调用方轮询 `getStatusSummary().syncAll`；同一 SW 内重复调用复用进行中的那一次） |
 | → background | `dismissUpdateNotice` | `{}` → void（清除 `updateNotice`） |
+| → background | `openOptions` | `{hash?}` → void（打开选项页，供内容脚本使用（悬浮球“完整设置”“去处理”）：`hash` 为空时 `runtime.openOptionsPage()`，否则新标签页打开 `options.html#hash`，前导 `#` 可有可无；打开失败时响应 `ok=false`） |
 | → background | `reportPageWords` | `{lemmas}`（本 frame 全量）→ void，用于徽章 |
 | → background | `getTabWords` | `{tabId}` → `{lemmas}` |
 | → content（顶层 frame） | `getPageState` | `{}` → `PageState` |
-| → content（被点击的 frame） | `actionNotice` | `{action:'add'\|'known', word, lemma, ok, message}` → void：右键菜单执行结果，内容脚本**可选**实现（用卡片 toast 展示 message）；未实现时后台只在徽章上闪 ✓/!（第二阶段新增） |
+| → content（被点击的 frame） | `actionNotice` | `{action:'add'\|'known', word, lemma, ok, message}` → void：右键菜单执行结果，内容脚本用卡片 toast 展示 message（card 修复轮实现，所有 frame 注册，见 4.5）；同时后台在徽章上闪 ✓/!（第二阶段新增） |
 
 **总状态 `StatusSummary`**（[background/status.ts](../src/background/status.ts)）：popup 状态条与 options 概览共用，避免各页面自己拼 `syncState`/`webdavSyncState`/`sourceBooks`。
 
@@ -349,12 +355,14 @@ flowchart LR
 
 **选项页外观约定（options 分片）**：
 
+- 旧预设 `wavy`（琥珀色波浪线）显示名为“琥珀波浪线 / Amber wavy”，与 v5 的 `wavy-line`（波浪线）区分，id 不变。内置预设的中英文名都唯一（单测校验）。
 - 内置预设新增 `orange-text`/`teal-text`/`dashed-orange`/`wavy-red`/`underline-tint`/`marker-lime`（只追加，不改旧 id）。预设画廊按 `presetGroups()` 分为组合预设（带 `desc`）、我的样式（`style.saved`）、单色样式与折叠的旧版配色；选预设走 engine 的 `applyThemePreset`（带建议译文的预设同时设置译文模式）。
 - 样式编辑器（`StyleEditor`）按装饰线 / 文字 / 背景 / 边框四个维度编辑完整 `MarkStyle`；改全局样式即切到 `custom`。按词书三种方式（`lib/appearance.ts#bookStyleMode`）：跟随全局（无覆盖）、只换颜色（`perBook[id] = { mark }`，全局形态变化时 `retintPerBook` 按各自主色重新着色）、独立样式（`perBook[id] = { themeId: 'custom', mark: 完整样式 }`，不随全局变化）。`tintMark` 保持形态只换色，背景 + 文字色组合保留文字色。
 - 实时预览（`LivePreview`）直接调用 engine 的 `highlightTextNode`/`setMarkTranslation`/`buildPageCss` 生成 DOM 与样式（把 `html[data-hnw-tr=…]` 替换为容器属性选择器），engine 调整 DOM 结构或样式时预览自动一致，请保持这三个导出的签名（engine 第二阶段只给 `highlightTextNode` 追加了可选的第 4 个参数，并新增 `hover` 模式选择器，同样是 `html[data-hnw-tr="hover"]` 写法；预览要展示链接内效果时可以给 mark 加 `data-hnw-link`）。
 - [tokens.css](../src/ui/tokens.css) 支持 `:root[data-theme="light|dark"]` 强制主题，新增 `--success/--warn/--danger-soft/--overlay/--radius-lg` 令牌。
-- 释义卡片（`#appearance/card`，标题与卡片首次提示中的“设置 › 释义卡片”一致）：`CardTriggerSection` 编辑 `card.trigger`/`card.modifier`（v11），修饰键选项、显示名与平台换算直接复用 card 的 [trigger-config.ts](../src/content/card/trigger-config.ts)（`modifierChoices`/`effectiveModifier`/`modifierLabel`/`modifierShort`/`isMacPlatform`），界面上 `auto` 显示为“鼠标悬停”；带“仅电脑端”标识与就地“试一试”演示，触屏设备上额外说明本机始终点按。悬浮球（`#more/floatball`：`floatBall.enabled` 与 `hiddenSites` 逐个恢复）与 YouTube 字幕（`#more/youtube`：`youtube.captions`/`captionTranslation`/`hoverPause`）在“更多”页。
-- 选项页路由为 hash：`#books`/`#appearance`/`#sources`/`#known`/`#sync`/`#more`，可带页内锚点（如 `#appearance/per-book`、`#sources/word-actions`、`#sync/webdav`）；旧链接 `#more/sync`（及 `webdav`/`backup`/`credentials` 锚点）自动转到 `#sync`；`#welcome` 为首次使用引导，background 可在 `onInstalled(reason=install)` 时打开 `options.html#welcome`。
+- 释义卡片（`#appearance/card`，标题与卡片首次提示中的“设置 › 释义卡片”一致）：`CardTriggerSection` 编辑 `card.trigger`/`card.modifier`（v11），修饰键选项、显示名与平台换算直接复用 card 的 [trigger-config.ts](../src/content/card/trigger-config.ts)（`modifierChoices`/`effectiveModifier`/`modifierLabel`/`modifierShort`/`isMacPlatform`），界面上 `auto` 显示为“鼠标悬停”；带“仅电脑端”标识与就地“试一试”演示，触屏设备上额外说明本机始终点按。方式选项的副标题是与具体键无关的固定文案，修饰键冲突说明与悬停延迟三档（`card.hoverDelay`，悬停/修饰键方式显示，演示用同一延迟）的文案在 [lib/card-trigger.ts](../src/entrypoints/options/lib/card-trigger.ts)。
+- 首屏预隐藏开关（`performance.prehide`）在外观页“行内译文”的“高级”折叠区，切换时同时改本页设置并 `patchSettings` 立即落盘；生效条件说明复用 engine 的 `layoutAffectingSettings`（[lib/performance.ts](../src/entrypoints/options/lib/performance.ts)）。悬浮球（`#more/floatball`：`floatBall.enabled` 与 `hiddenSites` 逐个恢复）与 YouTube 字幕（`#more/youtube`：`youtube.captions`/`captionTranslation`/`hoverPause`）在“更多”页。
+- 选项页路由为 hash：`#books`/`#appearance`/`#sources`/`#known`/`#sync`/`#more`，可带页内锚点（如 `#appearance/per-book`、`#sources/word-actions`、`#sync/webdav`）；旧链接 `#more/sync`（及 `webdav`/`backup`/`credentials` 锚点）自动转到 `#sync`；`#welcome` 为首次使用引导，background 可在 `onInstalled(reason=install)` 时打开 `options.html#welcome`。首次打开带锚点的地址同样定位（route watch `immediate`，等设置加载、分组页渲染后瞬时滚动）；外观页把吸顶预览区高度写入 `--anchor-offset`，作为本页小节的 `scroll-margin-top`，锚点标题不被预览遮住。
 
 ### 4.8 生词本来源（Source Provider）
 
@@ -416,7 +424,7 @@ sequenceDiagram
 
 ### 4.10 手动导入
 
-契约见 [import/types.ts](../src/core/import/types.ts)：`ImportFormat = txt | csv | tsv | youdao-xml | eudic | anki`，`parseWordList({text, fileName?, format?='auto'}) → ImportResult { format, words: UserWord[], skipped, warnings }`。解析实现 [parse.ts](../src/core/import/parse.ts)（`detectImportFormat` 按扩展名与内容嗅探；CSV 支持引号与表头列名识别；Anki 支持 `#separator`/`#guid column` 等指令；XML 依赖 DOMParser，只能在页面上下文调用）。导入结果经 `saveLocalBook` 存为本地词书（传 `id` 即覆盖导入）。熟词本导入复用同一解析。
+契约见 [import/types.ts](../src/core/import/types.ts)：`ImportFormat = txt | csv | tsv | youdao-xml | eudic | anki`，`parseWordList({text, fileName?, format?='auto'}) → ImportResult { format, words: UserWord[], skipped, warnings }`。解析实现 [parse.ts](../src/core/import/parse.ts)（`detectImportFormat` 按扩展名与内容嗅探；CSV 支持引号与表头列名识别；Anki 支持 `#separator`/`#guid column` 等指令；XML 依赖 DOMParser，只能在页面上下文调用）。导入结果经 `saveLocalBook` 存为本地词书（传 `id` 即覆盖导入）。engine 只按单个单词匹配，含空格或连字符的条目（give up、well-known）不会高亮，导入词书时预览与结果提示用 `countPhraseEntries`/`phraseNotice` 写明“N 个短语不会在页面上高亮”。熟词本导入复用同一解析。
 
 **新增格式**：`ImportFormat` 加一项 → `IMPORT_FORMATS` 加 UI 选项 → `parse.ts` 的 `PARSERS` 与 `detectImportFormat` 补齐。
 
@@ -494,16 +502,20 @@ flowchart LR
 
 - **`SiteContext`**（[sites/types.ts](../src/content/sites/types.ts)）：适配层与悬浮球访问 app 状态的唯一接口——设置、是否生效、卡片、`openCard(anchor)`（锚点可以是带 `data-lemma`/`data-books` 的任意元素，包括 Shadow DOM 内的元素）、`lookupMany`、`createMatcher`（与 engine 同口径的生词判断）、`lemmaCandidates`、`pageLemmas`、`markKnown`/`unmarkKnown`（与卡片“认识”同一流程）、`onSettingsChange`。
 - **浮层宿主**（[floatball/host.ts](../src/content/floatball/host.ts)）：自定义标签 + open Shadow DOM，z-index 2147483646（比卡片低 1，卡片总在面板之上）；宿主内事件不冒泡到页面；全屏时 `followFullscreen` 把悬浮球、站点面板和 `hnw-card-host` 一起迁入全屏元素（桌面 YouTube 全屏元素是 `<html>` 不用迁，m.youtube.com 是 `#movie_player`）。
-- **悬浮球**：只在 `(hover: none) and (pointer: coarse)` 时显示（不看 UA，PC 不显示），可拖动、吸附左右边缘，3 秒无操作或滚动时半隐藏，上下避开状态栏与手势条。点按：取词模式中 → 退出；站点有 primary 功能项（YouTube 视频页“当前字幕”）→ 直接执行；否则打开底部抽屉菜单：取词模式、本站高亮开关、本页生词（点开卡片 / 认识）、快捷设置（行内释义、高亮样式预设、词书多选、YouTube 字幕译文、隐藏悬浮球）、同步状态（点按立即同步全部；有未登录等问题时去选项页对应位置）、完整设置。设置直接写 storage 中的 settings（与 popup 同一份数据），预设切换复用 options 的 `applyPreset`，站点/词书切换复用 popup `model.ts`。
+- **悬浮球**：只在 `(hover: none) and (pointer: coarse)` 时显示（不看 UA，PC 不显示），可拖动、吸附左右边缘，3 秒无操作或滚动时缩成边缘外只露出约 13px 的强调色小标签（落在正文边距里，不压正文行尾），上下避开状态栏与手势条。菜单里“在本站隐藏 / 全部关闭”后 toast 带“撤销”，宿主保留到 toast 结束；恢复入口在选项页“更多 › 悬浮球”。点按：取词模式中 → 退出；站点有 primary 功能项（YouTube 视频页“当前字幕”）→ 直接执行；否则打开底部抽屉菜单：取词模式、本站高亮开关、本页生词（点开卡片 / 认识）、快捷设置（行内释义、高亮样式预设、词书多选、YouTube 字幕译文、隐藏悬浮球）、同步状态（点按立即同步全部；有未登录等问题时去选项页对应位置；文案中性，只写“有道待设置”之类，不常驻原始报错，见 `model.ts#syncFootText`）、完整设置。功能块与标签栏固定，只有标签页内容滚动。设置直接写 storage 中的 settings（与 popup 同一份数据），预设切换复用 options 的 `applyPreset`，站点/词书切换复用 popup `model.ts`。
+- **长按选词查词**（悬浮球显示时常开）：手机长按单词时浏览器选中该词，选区恰好是一个英文单词且来自最近的触摸时直接打开卡片（`PickMode#enableLongPress`），不清除选区、不影响系统复制菜单；选区拖大成短语时收起卡片。
 - **取词模式**：document 捕获阶段的 click + `caretPositionFromPoint`/`caretRangeFromPoint` 取点按位置的单词（必须真的落在单词框内），在悬浮球 Shadow DOM 中放一个与单词同位置的取词框作为卡片锚点，不改页面 DOM；高亮词交给通用卡片触发；取词模式中点按一律不跳链接，可编辑区除外。
-- **打开完整设置**：内容脚本不能调用 `runtime.openOptionsPage`，直接打开扩展页面会被拦截，需要 background 实现 `openOptions {hash}` 消息（已登记到 release/issues.md）；未实现前提示用户从扩展菜单进入。
+- **打开完整设置**：内容脚本不能调用 `runtime.openOptionsPage`，直接打开扩展页面会被拦截，由 background 的 `openOptions {hash}` 消息打开（见 4.6 消息表）；响应 `ok=false`（打开失败）时提示用户从扩展菜单进入。
 - **YouTube**（[sites/youtube](../src/content/sites/youtube/)，选择器集中在 `dom.ts`）：
-  - 范围：engine 跳过规则只放行 `#movie_player` 的字幕容器，控件、章节标题、侧栏预览播放器、自动字幕提示窗口都不标注。
-  - 字幕内译文（`CaptionDecorator`）：按窗口写 `data-hnw-yt-gm`。`above` 为 `mark::after` 绝对定位的上方注解，字幕段 `padding-top` 留位，窗口贴底只会向上长高；`after` 为词后小字，字幕段不折行、字幕行居中 flex，超出播放器宽度的窗口自动改用 `above`；自动生成字幕（roll-up，窗口高度固定）只高亮。engine 的 `hnw-tr` 在字幕内一律隐藏。
+  - 范围：engine 跳过规则只放行 `#movie_player` 的字幕容器，控件、章节标题、侧栏预览播放器、自动字幕提示窗口都不标注；页面界面（导航、推荐列表、广告、按钮、频道/订阅信息、简介附加区块、评论区标题与作者行）按自定义元素标签名片段整棵跳过（`dom.ts#isYouTubeUiElement`，按标签缓存），视频页只标注字幕、标题、简介正文与评论正文。
+  - 字幕内译文（`CaptionDecorator`）：按窗口写 `data-hnw-yt-gm`。`above` 为 `mark::after` 绝对定位的上方注解：有注解的生词改为 inline-block 并加 `padding-top`（= 注解高度），留白跟着单词所在的那一行走（字幕段折成两行时第二行的注解不会压到第一行），注解字号随字幕 em 缩放（全屏自动变大），下限桌面 10px、触屏 12px，带深色描边；生词矩形含注解，卡片按矩形避让不会盖住注解；窗口贴底只会向上长高；`after` 为词后小字，字幕段不折行、字幕行居中 flex，超出播放器宽度的窗口自动改用 `above`；自动生成字幕（roll-up，窗口高度固定）只高亮。engine 的 `hnw-tr` 在字幕内一律隐藏。
   - 当前字幕面板（`CaptionPanel`）：触屏点悬浮球、桌面 `Alt+L` 打开；暂停视频，显示当前一两句，每个词可点开卡片，生词带短释义；有字幕轨时可上一句/下一句（跳到该句开头）、从此句播放。字幕轨来自 PerformanceObserver 观察到的播放器 timedtext 请求（带 pot），在内容脚本重新请求 json3；拿不到时退回 DOM 字幕历史，再退回屏幕当前字幕。
   - 暂停：`PauseController` 只恢复由扩展发起、且期间用户没有自己操作过的暂停；广告中不暂停。
+  - 字幕生词直接查词（`zone.ts`）：用 `registerCardTriggerZone` 按坐标命中字幕中的 `hnw-mark`（字幕上压着控件层时 pointerover 拿不到单词）；鼠标按 `settings.card.trigger` 照常触发，暂停与否都可以；触屏只在暂停时响应，m.youtube.com 播放器在 touchend 上 preventDefault 不产生 click，因此在 window 捕获阶段的 touchstart/touchend 自行判断短按并吞掉这次触摸。
+  - 全屏切换：`fullscreenchange` 后立即与 250ms、800ms 各重绑一次字幕容器并重新处理，不等 1 秒轮询。
   - 桌面悬停暂停（`HoverPause`，默认关）：控件自动隐藏时字幕上压着不可见的控件层，用几何判断指针是否在字幕段包围盒内；热区 = 暂停时字幕位置（向下补 80px，覆盖控件出现后字幕上移前的位置）∪ 当前字幕 ∪ 卡片 ∪ 字幕面板，离开 300ms 后恢复；暂停后 800ms 内点在原字幕位置上的控件栏被吞掉，避免误点进度条。
 - 卡片触发方式（card v11 注）：字幕中的高亮词是页面 `hnw-mark`，自动遵守 `settings.card.trigger`（悬停 / 修饰键 + 悬停 / 点击，触屏点按）；字幕面板等 Shadow DOM 内的单词按钮、被控件层盖住的字幕可通过 `registerCardTriggerZone` 接入同一套触发逻辑（见 4.5“卡片触发方式”），“悬停字幕自动暂停”仍由 `youtube.hoverPause` 单独控制。
+- 跨模块最小改动（floatball 第二阶段第 2 轮）：[app.ts](../src/content/app.ts) `firstScreenParsed` 的 1.5 秒超时兜底改为“超时且 body 已出现”才放行。冷启动直接打开 YouTube 视频页时 1.5 秒内 body 可能还没解析出来，原逻辑会让 `startEngine` 走“无 body”分支直接返回、整页不再标注；frameset 页面仍在 readyState=complete 时放行。
 - 离线 fixture：[youtube-watch.html](../tests/fixtures/youtube-watch.html)（按真实 DOM 结构模拟 pop-on / roll-up 字幕、控件显隐与字幕上移、timedtext 请求，`#asr` 切换自动字幕）+ [youtube-cues.json](../tests/fixtures/youtube-cues.json)，QA 时把 `https://www.youtube.com/watch?v=fixture1` 路由到它。
 
 ## 五、命令与 OUT_DIR 约定
@@ -516,7 +528,7 @@ flowchart LR
 | `npm run typecheck` | `vue-tsc --noEmit` |
 | `npm test` | Vitest 单测 |
 | `npm run qa:shot -- --ext <dir> ...` | 视觉 QA 截图 |
-| `scripts/data/fetch-raw.sh .cache/data-raw [--with-ultimate]` 后 `node scripts/data/build-data.mjs --raw .cache/data-raw` | 生成内置词书/词典数据（约 6 秒，输出确定性；`--with-ultimate` 用 ECDICT-ultimate 改善短释义排序，**仓库中的 `public/data` 带该参数生成**，不带时短释义会退化；短释义人工覆盖表为 `scripts/data/short-overrides.tsv`） |
+| `scripts/data/fetch-raw.sh .cache/data-raw [--with-ultimate]` 后 `node scripts/data/build-data.mjs --raw .cache/data-raw` | 生成内置词书/词典数据（约 6 秒，输出确定性；`--with-ultimate` 用 ECDICT-ultimate 改善短释义排序，**仓库中的 `public/data` 带该参数生成**，不带时短释义会退化；短释义人工覆盖表为 `scripts/data/short-overrides.tsv`，动词短释义覆盖表为 `scripts/data/verb-overrides.tsv`） |
 
 **OUT_DIR**：多个 agent 并行构建时，各自设置不同输出根目录，避免互相覆盖：
 

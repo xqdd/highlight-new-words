@@ -62,14 +62,53 @@ export function captionWindows(doc: Document): HTMLElement[] {
 }
 
 /**
+ * 视频站页面界面（非正文）：导航、推荐列表、广告、按钮、频道/订阅信息、简介附加区块（转写稿、信息卡、商品）、评论区的标题与作者行等。
+ * 视频页只应标注字幕、简介正文与评论正文（以及标题），这些界面文字整棵跳过。
+ * YouTube 桌面版（ytd-*）与 m.youtube.com（ytm-*）都用自定义元素，按标签名片段识别（2026-10 实测结构），结果按标签名缓存，单次判断 O(1)。
+ */
+const UI_TAG_PARTS = [
+  // 导航与弹出层
+  'MASTHEAD', 'GUIDE', 'TOPBAR', 'PIVOT-BAR', 'APP-DRAWER', 'CHIP', 'MENU', 'TOOLTIP', 'DROPDOWN', 'POPUP-CONTAINER', 'MEALBAR', 'BOTTOM-SHEET',
+  // 按钮与徽标
+  'BUTTON', 'BADGE',
+  // 推荐列表 / 信息流（侧栏、首页、片尾推荐、Shorts 货架）
+  'LOCKUP', 'VIDEO-WITH-CONTEXT', 'COMPACT-', 'RICH-GRID', 'RICH-ITEM', 'RICH-SHELF', 'REEL-SHELF', 'SHORTS', 'YTD-VIDEO-RENDERER', 'MEDIA-ITEM',
+  'WATCH-NEXT-SECONDARY', 'MERCH-SHELF', 'CAROUSEL',
+  // 广告
+  'AD-SLOT', 'AD-LAYOUT', 'ADS-RENDERER', 'AD-BADGE', 'AD-AVATAR', 'AD-DETAILS', 'PROMOTED', 'COMPANION',
+  // 频道 / 订阅 / 操作栏 / 简介附加区块 / 评论区界面
+  'OWNER', 'CHANNEL-NAME', 'BYLINE', 'ACTION-BAR', 'ENGAGEMENT-BAR', 'PANEL-TITLE-HEADER', 'PANEL-HEADER', 'DESCRIPTION-TRANSCRIPT', 'DESCRIPTION-INFOCARDS', 'DESCRIPTION-MUSIC',
+  'DESCRIPTION-HEADER', 'DESCRIPTION-COURSE', 'DESCRIPTION-GAMING', 'WATCH-INFO-TEXT',
+  'COMMENTS-HEADER', 'COMMENT-SIMPLEBOX', 'PINNED-COMMENT-BADGE',
+];
+/** 评论作者行、发布时间等没有专属自定义元素的界面块 */
+const UI_IDS = new Set(['header-author', 'published-time-text', 'owner-sub-count', 'masthead-container', 'secondary', 'related', 'guide']);
+const uiTagCache = new Map<string, boolean>();
+
+export function isYouTubeUiElement(el: Element): boolean {
+  if (el.id && UI_IDS.has(el.id)) return true;
+  const tag = el.tagName;
+  if (tag === 'BUTTON') return true;
+  if (!tag.includes('-')) return false;
+  let hit = uiTagCache.get(tag);
+  if (hit === undefined) {
+    hit = (tag.startsWith('AD-') || UI_TAG_PARTS.some((p) => tag.includes(p))) && !tag.includes('CAPTION');
+    uiTagCache.set(tag, hit);
+  }
+  return hit;
+}
+
+/**
  * engine 扫描跳过规则（O(1)，只看元素自身与父元素）：
  * - 主播放器的直接子元素中，只放行字幕容器（字幕标注关闭时也跳过）；控件栏、章节标题、片尾推荐、设置菜单等整棵跳过
  * - 其他播放器（侧栏悬停预览等）整个跳过
  * - 自动字幕提示窗口跳过
+ * - 页面界面（导航、推荐、广告、按钮等，见 isYouTubeUiElement）跳过
  * engine 处理增量时会逐个祖先调用，因此字幕内的文本也会经过“主播放器的直接子元素”这一层判断。
  */
 export function createSkipRule(captionsEnabled: () => boolean): (el: Element) => boolean {
   return (el) => {
+    if (isYouTubeUiElement(el)) return true;
     if (el.parentElement?.id === PLAYER_ID) {
       return !el.classList.contains(CAPTION_CONTAINER_CLASS) || !captionsEnabled();
     }

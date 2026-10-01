@@ -1,3 +1,5 @@
+import type { StatusSummary } from '@/core/messaging/protocol';
+
 /**
  * 悬浮球的纯逻辑（无 DOM 依赖，便于单测）：显示条件、位置吸附与夹取、点按位置取词、隐藏站点规则。
  */
@@ -100,4 +102,20 @@ export function tokenize(text: string): Array<{ text: string; word: boolean }> {
   }
   if (last < text.length) out.push({ text: text.slice(last), word: false });
   return out;
+}
+
+/**
+ * 底栏同步状态的中性文案：底栏在每次打开菜单时都会出现，不能把某个来源“未登录/授权失效”的原话常驻成像报错一样的提示。
+ * - 有需要处理的项：只说“N 项同步待处理”（点按去选项页对应位置），从未配置过（never）的项用中性灰点，真正出错（error）才用红点
+ * - 其他情况沿用 background 的总述（“已全部同步”“正在同步…”“未开启任何同步”）
+ */
+export function syncFootText(st: Pick<StatusSummary, 'level' | 'text' | 'items'>): { level: string; text: string } {
+  const problems = st.items.filter((i) => i.level === 'error' || i.level === 'never');
+  if (problems.length === 0) return { level: st.level, text: st.text };
+  const synced = st.items.filter((i) => i.level === 'ok').length;
+  const pending = problems.length === 1 ? `${problems[0]!.name}待设置` : `${problems.length} 项同步待设置`;
+  return {
+    level: problems.some((i) => i.level === 'error') ? 'warn' : 'off',
+    text: synced > 0 ? `已同步 ${synced} 项 · ${pending}` : pending,
+  };
 }

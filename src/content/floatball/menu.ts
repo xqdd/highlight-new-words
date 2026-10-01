@@ -16,7 +16,7 @@ import { isYouTubeHost } from '../sites/youtube/dom';
 import type { SiteContext } from '../sites/types';
 import { bindSheetDrag, type OverlayHost } from './host';
 import { svgIcon, type FloatIcon } from './icons';
-import { toggleHostRule } from './model';
+import { syncFootText, toggleHostRule } from './model';
 import { availableFloatActions } from './registry';
 
 type Tab = 'words' | 'settings';
@@ -121,8 +121,10 @@ export class FloatMenu {
       h(doc, 'div', { class: 'title' }, '生词高亮', h(doc, 'span', { class: 'sub' }, location.hostname)),
       this.iconButton('close', '关闭', () => this.close()),
     );
-    const body = h(doc, 'div', { class: 'body' }, this.renderTiles(), this.renderTabs(), this.tab === 'words' ? this.renderWords() : this.renderSettings());
-    sheet.replaceChildren(grab, head, body, this.renderFoot());
+    // 功能块与标签栏固定在上方，只有标签页内容滚动（滚动区域从标签栏下方开始，内容不会滚到标签栏下面被截一半）
+    const top = h(doc, 'div', { class: 'top' }, this.renderTiles(), this.renderTabs());
+    const body = h(doc, 'div', { class: 'body' }, this.tab === 'words' ? this.renderWords() : this.renderSettings());
+    sheet.replaceChildren(grab, head, top, body, this.renderFoot());
     body.scrollTop = scrollTop;
     bindSheetDrag(sheet, grab, () => this.close());
     bindSheetDrag(sheet, head.querySelector('.title') as HTMLElement, () => this.close());
@@ -155,7 +157,7 @@ export class FloatMenu {
       'div',
       { class: 'tiles' },
       ...siteTiles,
-      tile('pick', '取词模式', picking ? '已开启 · 点按单词查词' : '点按任意单词查词', picking, () => {
+      tile('pick', '取词模式', picking ? '已开启 · 点按单词查词' : '点按任意单词查词；也可直接长按单词', picking, () => {
         this.close();
         this.deps.togglePick();
       }),
@@ -322,7 +324,16 @@ export class FloatMenu {
       else n.floatBall.hiddenSites = toggleHostRule(n.floatBall.hiddenSites, location.hostname, true);
     });
     this.close();
-    this.deps.overlay.toast(scope === 'all' ? '已关闭悬浮球，可在扩展设置中重新开启' : '已在本站隐藏悬浮球，可在扩展设置中恢复');
+    // 悬浮球隐藏后手机上就没有入口了：toast 带“撤销”立即恢复，并写明设置中的恢复位置（选项页“更多 › 悬浮球”）
+    const undo = () =>
+      this.update((n) => {
+        if (scope === 'all') n.floatBall.enabled = true;
+        else n.floatBall.hiddenSites = toggleHostRule(n.floatBall.hiddenSites, location.hostname, false);
+      });
+    this.deps.overlay.toast(
+      scope === 'all' ? '已关闭悬浮球（可在设置 › 更多 › 悬浮球 中重新开启）' : '已在本站隐藏悬浮球（可在设置 › 更多 › 悬浮球 中恢复）',
+      { label: '撤销', run: undo },
+    );
     this.deps.onHidden();
   }
 
@@ -347,8 +358,8 @@ export class FloatMenu {
   private renderFoot(): HTMLElement {
     const doc = this.deps.ctx.doc;
     const st = this.status;
-    const level = this.syncing || st?.syncAll?.running ? 'busy' : (st?.level ?? 'off');
-    const text = this.syncing || st?.syncAll?.running ? '正在同步…' : st ? st.text : '读取同步状态…';
+    const busy = this.syncing || !!st?.syncAll?.running;
+    const { level, text } = busy ? { level: 'busy', text: '正在同步…' } : st ? syncFootText(st) : { level: 'off', text: '读取同步状态…' };
     return h(
       doc,
       'div',

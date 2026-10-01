@@ -14,10 +14,12 @@ import {
   isTouchPrimary,
   parsePos,
   snapPosition,
+  syncFootText,
   tokenize,
   toggleHostRule,
   wordAt,
 } from '@/content/floatball/model';
+import { ballX, IDLE_SCALE, IDLE_VISIBLE } from '@/content/floatball/css';
 import { availableFloatActions, overlayRoot, registerFloatAction, registerOverlayHost, relocateOverlayHosts } from '@/content/floatball/registry';
 import { CaptionDecorator, buildCaptionCss } from '@/content/sites/youtube/captions';
 import { ATTR_YT_GLOSS, ATTR_YT_GM, ATTR_YT_HINT, createSkipRule } from '@/content/sites/youtube/dom';
@@ -82,6 +84,25 @@ describe('floatball 纯逻辑', () => {
     expect(wordAt(t, 5)?.word).toBe('a');
     expect(wordAt('  ...  ', 3)).toBeNull();
   });
+  it('空闲时缩小贴边，只露出一条，不压正文边距以内的文字', () => {
+    const vw = 390;
+    const d = BALL_SIZE * IDLE_SCALE;
+    // 缩放以球心为原点：可见圆左边缘 = 平移量 + 半径 - 缩放后半径
+    const rightLeftEdge = ballX('right', vw, true) + BALL_SIZE / 2 - d / 2;
+    expect(vw - rightLeftEdge).toBeCloseTo(IDLE_VISIBLE, 5);
+    expect(IDLE_VISIBLE).toBeLessThan(16);
+    const leftRightEdge = ballX('left', vw, true) + BALL_SIZE / 2 + d / 2;
+    expect(leftRightEdge).toBeCloseTo(IDLE_VISIBLE, 5);
+    expect(ballX('right', vw, false)).toBe(vw - BALL_SIZE - 8);
+  });
+
+  it('底栏同步文案：未登录/失效只提示“待设置”，不常驻原始报错', () => {
+    const item = (name: string, level: 'ok' | 'never' | 'error') => ({ id: name, kind: 'source' as const, name, level, text: `${name}：未登录或登录已失效`, lastSyncAt: 0, href: '#sources' });
+    expect(syncFootText({ level: 'error', text: '有道：未登录有道或登录已失效', items: [item('有道', 'never')] })).toEqual({ level: 'off', text: '有道待设置' });
+    expect(syncFootText({ level: 'error', text: 'x', items: [item('浏览器账号同步', 'ok'), item('有道', 'error')] })).toEqual({ level: 'warn', text: '已同步 1 项 · 有道待设置' });
+    expect(syncFootText({ level: 'ok', text: '已全部同步', items: [item('浏览器账号同步', 'ok')] })).toEqual({ level: 'ok', text: '已全部同步' });
+  });
+
   it('tokenize 保留全部原文字符', () => {
     const text = 'So in college, I was a government major,';
     const toks = tokenize(text);
@@ -184,6 +205,25 @@ describe('YouTube 跳过规则', () => {
     w.setAttribute(ATTR_YT_HINT, '');
     expect(rule(w)).toBe(true);
   });
+
+  it('视频页界面（导航、推荐、广告、按钮、频道信息、评论区标题）跳过，简介与评论正文放行', () => {
+    const rule = createSkipRule(() => true);
+    const el = (tag: string, id = '') => {
+      const e = document.createElement(tag);
+      if (id) e.id = id;
+      return e;
+    };
+    for (const tag of ['ytd-masthead', 'ytd-guide-renderer', 'yt-lockup-view-model', 'ytd-compact-video-renderer', 'ytm-video-with-context-renderer',
+      'ytd-ad-slot-renderer', 'ad-slot-renderer', 'ytm-promoted-sparkles-web-renderer', 'yt-button-shape', 'button', 'ytd-video-owner-renderer',
+      'ytd-merch-shelf-renderer', 'ytd-comments-header-renderer', 'ytd-video-description-transcript-section-renderer', 'ytd-rich-grid-renderer']) {
+      expect(rule(el(tag)), tag).toBe(true);
+    }
+    expect(rule(el('div', 'secondary'))).toBe(true);
+    expect(rule(el('div', 'header-author'))).toBe(true);
+    for (const tag of ['ytd-text-inline-expander', 'yt-attributed-string', 'ytd-comment-view-model', 'ytd-expander', 'ytm-expandable-video-description-body-renderer', 'ytd-watch-metadata', 'p']) {
+      expect(rule(el(tag)), tag).toBe(false);
+    }
+  });
 });
 
 describe('YouTube 字幕译文模式', () => {
@@ -239,10 +279,13 @@ describe('YouTube 字幕译文模式', () => {
     dec3.destroy();
   });
 
-  it('样式：above 用 padding-top 向上留位，after 不折行并居中', () => {
+  it('样式：above 逐词 inline-block 向上留位（逐行生效）、触屏注解下限 12px，after 不折行并居中', () => {
     const css = buildCaptionCss();
     expect(css).toContain(`[${ATTR_YT_GM}="above"]`);
-    expect(css).toContain('padding-top');
+    expect(css).toMatch(/hnw-mark\[data-hnw-yt-gloss\][^{]*\{[^}]*display:inline-block!important[^}]*padding-top/);
+    // 不再给整个字幕段加 padding-top（两行字幕时第二行的注解会压到第一行上）
+    expect(css).not.toContain('ytp-caption-segment:has(');
+    expect(css).toContain('max(.62em,12px)');
     expect(css).toContain('white-space:pre!important');
     expect(css).toContain('justify-content:center');
     // engine 的行内译文在字幕里一律隐藏
