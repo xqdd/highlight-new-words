@@ -1,8 +1,8 @@
-# 生词高亮：有道/欧路生词本与分级词书
+# 生词高亮：网页背单词
 
 [TOC]
 
-浏览器扩展，适用于 Chrome、Edge（含 Edge for Android）。读英文网页或看 YouTube 视频时，它会把你要学的单词标出来。单词可以来自有道、欧路的云端生词本，也可以来自内置的四六级、考研、雅思、托福、GRE 等分级词书。悬停在单词上（手机上点按）就能看到音标、释义和词形；认识的单词标为熟词后，以后不再高亮。
+“生词高亮：网页背单词 · 有道/欧路生词本 · 四六级考研词书”（英文名 Highlight New Words – Vocabulary Builder for Youdao, Eudic, CET & IELTS）是一个浏览器扩展，适用于 Chrome、Edge（含 Edge for Android）。读英文网页或看 YouTube 视频时，它会把你要学的单词标出来。单词可以来自有道、欧路的云端生词本，也可以来自内置的四六级、考研、雅思、托福、GRE 等分级词书。悬停在单词上（手机上点按）就能看到音标、释义和词形；认识的单词标为熟词后，以后不再高亮。
 
 ![分级词书与多种高亮样式](./store/images/promo-marquee-1400x560.png)
 
@@ -82,16 +82,41 @@ Firefox 只用于开发调试，暂不上架，加载方法见 [docs/release.md]
 
 ## 三、使用
 
-1. **选择词书**：打开扩展设置页的“词书”，启用要学习的分级词书，可以多选。
+安装后会自动打开首次引导页，三步选好词书、高亮样式和生词本；之后都可以在扩展设置页修改（点工具栏图标，再点弹窗中的设置入口）。
+
+![首次引导：选择词书](./docs/images/options-0-welcome.png)
+
+首次引导的第一步，勾选要学习的词书，可以多选组合。
+
+1. **选择词书**：打开设置页的“词书”，启用要学习的分级词书，可以多选。
+
+   ![词书页：多选分级词书](./docs/images/options-1-books.png)
+
+   “已启用”列出当前生效的词书，排在前面的词书决定重叠单词的颜色，可以调整顺序或移除。
+
 2. **连接生词本（可选）**：在“生词本”中设置来源。
    - **有道**：在浏览器中登录有道词典网页版后，扩展会自动读取生词本。云端来源默认都不开启；在设置中打开后会立即连接并同步一次，之后最多每天自动同步一次，也可以手动同步。
    - **欧路**：推荐填写 OpenAPI token。登录 my.eudic.net 后打开 [OpenAPI 授权页](https://my.eudic.net/OpenAPI/Authorization)，复制以 `NIS` 开头的整串授权信息，粘贴到设置页并刷新分组列表即可。使用 token 时可以按分类同步和写入；不填 token 时，仍按旧版方式通过网页登录状态拉取“全部生词”。
    - 也可以在这里导入本地单词表。
+
+   ![生词本页：有道/欧路开关与欧路 token](./docs/images/options-2-sources.png)
+
+   打开欧路词典的开关后，在“OpenAPI 授权 token”一栏粘贴 token；有道只需要打开开关并保持网页版登录。
+
 3. **阅读**：刷新网页后，生词会被高亮。悬停或点按单词查看卡片，认识的单词点“认识”标为熟词。
 4. **调整外观**：在“外观”中选择预设、开关行内译文、设置卡片打开方式；在“更多”中设置发音、按网站开关、悬浮球、YouTube 和代码块标注。
+
+   ![外观页：样式预设与实时预览](./docs/images/options-3-appearance.png)
+
+   顶部的预览会随选中的预设实时变化，点任一预设即可生效，也可以在下方继续微调。
+
 5. **同步（可选）**：在“同步”中启用浏览器账号同步、WebDAV 或手动备份。
 
-旧版（v2）的设置和生词本会在升级后自动迁移。
+   ![同步页：浏览器账号同步与 WebDAV](./docs/images/options-4-sync.png)
+
+   浏览器账号同步可以分项开关并显示空间占用；WebDAV 提供坚果云、Nextcloud、群晖的预设地址。
+
+从旧版（v2）升级时，设置和生词本会自动迁移。
 
 ## 四、隐私
 
@@ -130,16 +155,15 @@ Firefox 只用于开发调试，暂不上架，加载方法见 [docs/release.md]
 | [scripts/](./scripts) | 数据生成、视觉 QA、兼容性测试脚本 |
 | [tests/](./tests) | 单测与测试页面 |
 
-## 七、鸣谢
+## 七、数据来源与许可
 
-- https://github.com/mechatroner/aided_reading
-- http://iconfont.cn/
-- 内置词书与词典数据：[ECDICT](https://github.com/skywind3000/ECDICT)（MIT）、[CEFR-J Wordlist 1.5](http://www.cefr-j.org/download.html)、[KyleBing/english-vocabulary](https://github.com/KyleBing/english-vocabulary)（BSD-3-Clause，仅使用单词列表），详见 [public/data/NOTICE.txt](./public/data/NOTICE.txt)
+内置词书与词典数据来自以下项目，按各自许可使用：
 
-> 待研究
->
-> - https://github.com/waynecz/dadda-translate-crx
-> - https://github.com/cclient/chrome-extensions-youdaowithwordnode
+- [ECDICT](https://github.com/skywind3000/ECDICT)（MIT）
+- [CEFR-J Wordlist 1.5](http://www.cefr-j.org/download.html)
+- [KyleBing/english-vocabulary](https://github.com/KyleBing/english-vocabulary)（BSD-3-Clause，仅使用单词列表）
+
+完整的署名与许可声明见 [public/data/NOTICE.txt](./public/data/NOTICE.txt)。
 
 ## 八、许可证
 

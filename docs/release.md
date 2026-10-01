@@ -18,7 +18,7 @@
 | [permissions.md](../store/permissions.md) | 单一用途、逐项权限说明、远程代码、数据使用披露（隐私表单填写稿） |
 | [privacy-policy.md](../store/privacy-policy.md) / [privacy-policy.en.md](../store/privacy-policy.en.md) | 隐私政策（需公开托管） |
 | [review-notes.md](../store/review-notes.md) | 审核备注（Edge “Notes for certification”），含 YouTube 字幕、手机悬浮球的测试步骤与云端来源默认不连接的说明 |
-| [images/](../store/images) | 截图（中英各 6 张：Chrome 传 1–5，Edge 全传）、宣传图、商店图标、Edge 徽标；`raw/` 为真实运行原图 |
+| [images/](../store/images) | 截图（中英各 6 张：Chrome 传 1–5，Edge 全传）、宣传图、商店图标、Edge 徽标；`raw/` 为截图原始素材，已被 .gitignore 忽略，可由 store/scripts 重新生成；其余图片纳入版本控制 |
 | [scripts/](../store/scripts) | `capture.mjs` 采集原图，`render.mjs` 套模板出图 |
 
 ## 二、构建与打包
