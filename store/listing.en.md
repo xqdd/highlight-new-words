@@ -35,7 +35,7 @@ READ WITHOUT INTERRUPTION
 - Code block highlighting (off by default): mark new words in code comments and strings on technical pages; online editors and input fields are left alone.
 
 YOUTUBE CAPTIONS
-- New words in captions are highlighted, with short glosses above the word or after it; auto-generated captions are highlighted only.
+- New words in captions are highlighted, with short glosses above, below or after the word.
 - Press Alt+L to pause the video and open the current-caption panel: the sentence is shown large, every word can be looked up, and you can step to the previous or next sentence or resume playback from there.
 - Optional: pause automatically while the mouse is over the captions and resume when it leaves.
 

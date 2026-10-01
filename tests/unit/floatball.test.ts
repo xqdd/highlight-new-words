@@ -199,36 +199,20 @@ function markWord(seg: Element, word: string, lemma: string): HTMLElement {
 }
 
 describe('YouTube 跳过规则', () => {
-  it('只放行主播放器的字幕容器；控件、其他播放器、提示窗口跳过', () => {
+  it('不做特殊跳过：控件、其他播放器、提示窗口、界面元素都放行；只在关闭字幕标注时跳过字幕容器', () => {
     const player = buildPlayer(['hello']);
     const rule = createSkipRule(() => true);
     expect(rule(player.querySelector('.ytp-caption-window-container')!)).toBe(false);
-    expect(rule(player.querySelector('.ytp-chrome-bottom')!)).toBe(true);
-    expect(rule(document.getElementById('preview')!)).toBe(true);
-    const off = createSkipRule(() => false);
-    expect(off(player.querySelector('.ytp-caption-window-container')!)).toBe(true);
+    expect(rule(player.querySelector('.ytp-chrome-bottom')!)).toBe(false);
+    expect(rule(document.getElementById('preview')!)).toBe(false);
     const w = player.querySelector('.caption-window')!;
     w.setAttribute(ATTR_YT_HINT, '');
-    expect(rule(w)).toBe(true);
-  });
-
-  it('视频页界面（导航、推荐、广告、按钮、频道信息、评论区标题）跳过，简介与评论正文放行', () => {
-    const rule = createSkipRule(() => true);
-    const el = (tag: string, id = '') => {
-      const e = document.createElement(tag);
-      if (id) e.id = id;
-      return e;
-    };
-    for (const tag of ['ytd-masthead', 'ytd-guide-renderer', 'yt-lockup-view-model', 'ytd-compact-video-renderer', 'ytm-video-with-context-renderer',
-      'ytd-ad-slot-renderer', 'ad-slot-renderer', 'ytm-promoted-sparkles-web-renderer', 'yt-button-shape', 'button', 'ytd-video-owner-renderer',
-      'ytd-merch-shelf-renderer', 'ytd-comments-header-renderer', 'ytd-video-description-transcript-section-renderer', 'ytd-rich-grid-renderer']) {
-      expect(rule(el(tag)), tag).toBe(true);
+    expect(rule(w)).toBe(false);
+    for (const tag of ['ytd-masthead', 'yt-lockup-view-model', 'ytd-ad-slot-renderer', 'button', 'ytd-comments-header-renderer']) {
+      expect(rule(document.createElement(tag)), tag).toBe(false);
     }
-    expect(rule(el('div', 'secondary'))).toBe(true);
-    expect(rule(el('div', 'header-author'))).toBe(true);
-    for (const tag of ['ytd-text-inline-expander', 'yt-attributed-string', 'ytd-comment-view-model', 'ytd-expander', 'ytm-expandable-video-description-body-renderer', 'ytd-watch-metadata', 'p']) {
-      expect(rule(el(tag)), tag).toBe(false);
-    }
+    const off = createSkipRule(() => false);
+    expect(off(player.querySelector('.ytp-caption-window-container')!)).toBe(true);
   });
 });
 
@@ -252,7 +236,7 @@ describe('YouTube 字幕译文模式', () => {
     expect(player.querySelector('.caption-window')!.hasAttribute(ATTR_YT_GM)).toBe(false);
   });
 
-  it('after / off 模式；自动生成字幕窗口与提示窗口不设模式（只高亮）', async () => {
+  it('after / off 模式；自动生成字幕窗口与提示窗口同样按设置显示译文，提示文字不计入当前字幕', async () => {
     const settings = createDefaultSettings();
     settings.youtube.captionTranslation = 'after';
     let player = buildPlayer(['looming here']);
@@ -270,7 +254,7 @@ describe('YouTube 字幕译文模式', () => {
     const dec2 = new CaptionDecorator(ctxWith(settings));
     dec2.attach(player.querySelector('.ytp-caption-window-container'));
     dec2.process();
-    expect(player.querySelector('.caption-window')!.hasAttribute(ATTR_YT_GM)).toBe(false);
+    expect(player.querySelector('.caption-window')!.getAttribute(ATTR_YT_GM)).toBe('above');
     dec2.destroy();
 
     player = buildPlayer(['English (auto-generated)', 'Click ⚙ for settings']);
@@ -280,7 +264,7 @@ describe('YouTube 字幕译文模式', () => {
     dec3.process();
     const w = player.querySelector('.caption-window')!;
     expect(w.hasAttribute(ATTR_YT_HINT)).toBe(true);
-    expect(w.hasAttribute(ATTR_YT_GM)).toBe(false);
+    expect(w.getAttribute(ATTR_YT_GM)).toBe('above');
     expect(texts.at(-1)).toBe('');
     dec3.destroy();
   });
@@ -314,7 +298,7 @@ describe('YouTube 字幕译文模式', () => {
     dec.destroy();
   });
 
-  it('自动生成字幕换行重建字幕行：留下的那一行沿用旧标注节点（不闪烁），roll-up 窗口不设译文模式', async () => {
+  it('自动生成字幕换行重建字幕行：留下的那一行沿用旧标注节点（不闪烁），窗口译文模式保持', async () => {
     const settings = createDefaultSettings();
     const player = buildPlayer(['to play test, see sneak peeks', 'help with voice acting'], true);
     const container = player.querySelector('.ytp-caption-window-container')!;
@@ -342,7 +326,7 @@ describe('YouTube 字幕译文模式', () => {
     seg.append(' and');
     expect(seg.textContent).toBe('help with voice acting and');
     await Promise.resolve();
-    expect(win.hasAttribute(ATTR_YT_GM)).toBe(false);
+    expect(win.getAttribute(ATTR_YT_GM)).toBe('above');
     dec.destroy();
   });
 

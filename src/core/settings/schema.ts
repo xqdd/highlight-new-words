@@ -141,7 +141,7 @@ export interface YouTubeSettings {
   hoverPause: boolean;
   /**
    * 字幕内生词译文：above=单词上方小注解（默认，字幕窗向上长高，不改变宽度）；below=单词下方小注解（同 above 对称）；after=词后小字（字幕行不折行、居中，
-   * 放不下时该条字幕自动改用上方注解）；off=只高亮。自动生成字幕（逐词滚动、窗口高度固定）始终只高亮
+   * 放不下时该条字幕自动改用上方注解）；off=只高亮。自动生成字幕同样按此设置（窗口高度固定，注解可能被裁切）
    */
   captionTranslation: 'off' | 'above' | 'below' | 'after';
 }

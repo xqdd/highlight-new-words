@@ -21,7 +21,7 @@ const TR_MODES = [
 </script>
 
 <template>
-  <SettingsSection id="youtube" title="YouTube 字幕" description="在视频字幕中标注生词；自动生成的字幕逐词滚动，始终只高亮">
+  <SettingsSection id="youtube" title="YouTube 字幕" description="在视频字幕中标注生词，并按下面的方式显示译文">
     <ToggleSwitch v-model="settings.youtube.captions" label="YouTube 字幕中标注生词" description="关闭后字幕保持原样，页面其他文字照常标注" />
     <template v-if="settings.youtube.captions">
       <span class="lbl">字幕中的生词译文</span>

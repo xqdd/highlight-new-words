@@ -513,13 +513,13 @@ flowchart LR
 - **取词模式**：document 捕获阶段的 click + `caretPositionFromPoint`/`caretRangeFromPoint` 取点按位置的单词（必须真的落在单词框内），在悬浮球 Shadow DOM 中放一个与单词同位置的取词框作为卡片锚点，不改页面 DOM；高亮词交给通用卡片触发；取词模式中点按一律不跳链接，可编辑区除外。
 - **打开完整设置**：内容脚本不能调用 `runtime.openOptionsPage`，直接打开扩展页面会被拦截，由 background 的 `openOptions {hash}` 消息打开（见 4.6 消息表）；响应 `ok=false`（打开失败）时提示用户从扩展菜单进入。
 - **YouTube**（[sites/youtube](../src/content/sites/youtube/)，选择器集中在 `dom.ts`）：
-  - 范围：engine 跳过规则只放行 `#movie_player` 的字幕容器，控件、章节标题、侧栏预览播放器、自动字幕提示窗口都不标注；页面界面（导航、推荐列表、广告、按钮、频道/订阅信息、简介附加区块、评论区标题与作者行）按自定义元素标签名片段整棵跳过（`dom.ts#isYouTubeUiElement`，按标签缓存），视频页只标注字幕、标题、简介正文与评论正文。
-  - 字幕内译文（`CaptionDecorator`）：按窗口写 `data-hnw-yt-gm`。`above` 为 `mark::after` 绝对定位的上方注解：有注解的生词改为 inline-block 并加 `padding-top`（= 注解高度），留白跟着单词所在的那一行走（字幕段折成两行时第二行的注解不会压到第一行），注解字号随字幕 em 缩放（桌面 0.64em、触屏 0.7em，不低于字幕字号的 55%，下限 12px，全屏自动变大），注解自带近黑底色 + 黑色描边（视频画面再亮也清楚）；窗口贴底只会向上长高；`after` 为词后小字，字幕段不折行、字幕行居中 flex，超出播放器宽度的窗口自动改用 `above`；自动生成字幕（roll-up，窗口高度固定）只高亮。engine 的 `hnw-tr` 在字幕内一律隐藏。
+  - 范围：YouTube 页面不做特殊跳过（用户决定）：导航、推荐列表、按钮、播放器控件、自动字幕提示窗口等与其他网站一样照常标注、显示译文；只有关闭“YouTube 字幕中标注生词”时跳过字幕容器（`dom.ts#createSkipRule`）。
+  - 字幕内译文（`CaptionDecorator`）：按窗口写 `data-hnw-yt-gm`。`above` 为 `mark::after` 绝对定位的上方注解：有注解的生词改为 inline-block 并加 `padding-top`（= 注解高度），留白跟着单词所在的那一行走（字幕段折成两行时第二行的注解不会压到第一行），注解字号随字幕 em 缩放（桌面 0.64em、触屏 0.7em，不低于字幕字号的 55%，下限 12px，全屏自动变大），注解自带近黑底色 + 黑色描边（视频画面再亮也清楚）；窗口贴底只会向上长高；`after` 为词后小字，字幕段不折行、字幕行居中 flex，超出播放器宽度的窗口自动改用 `above`；`below` 与 `above` 对称；自动生成字幕（roll-up，窗口高度固定、overflow:hidden）与自动字幕提示窗口同样按设置显示（注解可能被裁切，用户决定不特殊处理）。engine 的 `hnw-tr` 在字幕内一律隐藏。
   - 当前字幕面板（`CaptionPanel`）：触屏点悬浮球、桌面 `Alt+L` 打开；暂停视频，显示当前一两句，每个词可点开卡片，生词带短释义；有字幕轨时可上一句/下一句（跳到该句开头）、从此句播放。字幕轨来自 PerformanceObserver 观察到的播放器 timedtext 请求（带 pot），在内容脚本重新请求 json3；拿不到时退回 DOM 字幕历史，再退回屏幕当前字幕。
   - 暂停：`PauseController` 只恢复由扩展发起、且期间用户没有自己操作过的暂停；广告中不暂停。
   - 字幕生词直接查词（`zone.ts`）：用 `registerCardTriggerZone` 按坐标命中字幕中的 `hnw-mark`（字幕上压着控件层时 pointerover 拿不到单词）；鼠标按 `settings.card.trigger` 照常触发，暂停与否都可以；触屏只在暂停时响应，m.youtube.com 播放器在 touchend 上 preventDefault 不产生 click，因此在 window 捕获阶段的 touchstart/touchend 自行判断短按并吞掉这次触摸。
   - 全屏切换：`fullscreenchange` 后立即与 250ms、800ms 各重绑一次字幕容器并重新处理，不等 1 秒轮询。
-  - 同文重建沿用标注：YouTube 会把同一行字幕连同节点一起重建，新节点要等 engine 空闲处理才重新标注，中间几帧没有高亮和注解（看起来在闪）。人工字幕在尺寸变化、进出全屏等时机整窗重建；自动生成字幕（roll-up）每次换行上滚时移除窗口内全部字幕行再逐词重新插入（2026-10 m.youtube.com 实测）。`CaptionDecorator` 在 MutationObserver 回调（早于绘制）里把刚移除的旧窗口/旧行中 engine 生成的节点整体移到文本相同的新字幕段，整窗重建时并带上窗口译文模式（roll-up 窗口不设模式，只高亮）；移动的是 engine 自己的节点，切分记录随节点保留，标熟词还原照常工作。
+  - 同文重建沿用标注：YouTube 会把同一行字幕连同节点一起重建，新节点要等 engine 空闲处理才重新标注，中间几帧没有高亮和注解（看起来在闪）。人工字幕在尺寸变化、进出全屏等时机整窗重建；自动生成字幕（roll-up）每次换行上滚时移除窗口内全部字幕行再逐词重新插入（2026-10 m.youtube.com 实测）。`CaptionDecorator` 在 MutationObserver 回调（早于绘制）里把刚移除的旧窗口/旧行中 engine 生成的节点整体移到文本相同的新字幕段，整窗重建时并带上窗口译文模式（roll-up 换行时窗口未重建，模式保留）；移动的是 engine 自己的节点，切分记录随节点保留，标熟词还原照常工作。
   - 卡片避让字幕（PC 浮层）：`zone.ts` 通过 card 的 `registerCardPlacer` 接管字幕生词的卡片位置，卡片与整块字幕（含注解）不相交：优先放在字幕块上方并留 8px，放不下时放播放器侧边，再不行放字幕块侧边（全屏）。
   - 桌面悬停暂停（`HoverPause`，默认关）：控件自动隐藏时字幕上压着不可见的控件层，用几何判断指针是否在字幕段包围盒内；热区 = 暂停时字幕位置（向下补 80px，覆盖控件出现后字幕上移前的位置）∪ 当前字幕 ∪ 卡片 ∪ 字幕面板，离开 300ms 后恢复；暂停后 800ms 内点在原字幕位置上的控件栏被吞掉，避免误点进度条。
 - 卡片触发方式（card v11 注）：字幕中的高亮词是页面 `hnw-mark`，自动遵守 `settings.card.trigger`（悬停 / 修饰键 + 悬停 / 点击，触屏点按）；字幕面板等 Shadow DOM 内的单词按钮、被控件层盖住的字幕可通过 `registerCardTriggerZone` 接入同一套触发逻辑（见 4.5“卡片触发方式”），“悬停字幕自动暂停”仍由 `youtube.hoverPause` 单独控制。

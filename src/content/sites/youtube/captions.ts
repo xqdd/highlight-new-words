@@ -9,7 +9,6 @@ import {
   CAPTION_CONTAINER_CLASS,
   CAPTION_SEGMENT_CLASS,
   PLAYER_ID,
-  ROLLUP_CLASS,
   YT_STYLE_ID,
   isAutoCaptionHint,
 } from './dom';
@@ -31,7 +30,6 @@ const GLOSS_EM = '.64em';
  * 字幕专用样式（注入一次，与 engine 的页面样式相互独立）：
  * - 字幕内一律不显示 engine 的行内译文（hnw-tr），mark 强制回到普通行内，保持 YouTube 的折行结果；
  *   字幕内译文由本模块按窗口模式（ATTR_YT_GM）用 mark::after 渲染，文本放在属性里，不进入 textContent
- * - 自动字幕提示窗口里若已有标注（engine 先于我们处理的极端时序），去掉高亮外观
  * - above：有注解的生词改为 inline-block 并加 padding-top（= 注解高度），注解绝对定位在这段留白里（宽度限制在单词附近，过长省略）。
  *   留白跟着单词所在的那一行走：字幕段折成两行时，第二行的生词只撑高第二行，注解不会压到第一行文字上（逐行定位）；
  *   单词本身是不可拆分的，inline-block 不改变折行位置。字幕窗贴底定位，只会向上长高：不改变宽度、不折行、不裁切。
@@ -42,7 +40,7 @@ const GLOSS_EM = '.64em';
  * - below：与 above 对称，留白加在生词下方（padding-bottom），注解贴底；字幕窗贴底定位，同样只向上长高。
  * - after：词后小字（GLOSS_EM，同样带深色底）。字幕段改为不折行（white-space:pre），字幕行改为居中的 flex，超出 YouTube 测量的窗口宽度时
  *   向两侧对称溢出（仍居中，背景随字幕段延伸）；超出播放器宽度的窗口由脚本改回 above
- * - 自动生成字幕（roll-up）窗口高度固定、逐词追加，不设置模式（只高亮）
+ * - 自动生成字幕（roll-up）窗口与自动字幕提示窗口同样按设置显示译文（窗口高度固定、overflow:hidden，注解可能被裁切；用户决定不特殊处理）
  */
 export function buildCaptionCss(): string {
   const win = (mode: string) => `${CAP} .caption-window[${ATTR_YT_GM}="${mode}"]`;
@@ -52,7 +50,6 @@ export function buildCaptionCss(): string {
   return [
     `${MARK_IN_CAP} ${TAG_TRANSLATION}{display:none!important}`,
     `${MARK_IN_CAP},${MARK_IN_CAP}>${TAG_WORD}{display:inline!important}`,
-    `${CAP} [${ATTR_YT_HINT}] ${TAG_WORD}{background:none!important;color:inherit!important;text-decoration:none!important;border:0!important;box-shadow:none!important;font-weight:inherit!important}`,
     // above：注解字号与留白都由 --hnw-gf 推出（字号 × 1.25 行高 + 2px 间隙），触屏下限更高
     `${win('above')} ${G}{--hnw-gf:max(${GLOSS_EM},12px);display:inline-block!important;position:relative!important;vertical-align:baseline!important;` +
       `padding-top:calc(var(--hnw-gf) * 1.25 + 3px)!important}`,
@@ -95,8 +92,8 @@ function glossKeys(m: Element): string[] {
 
 /**
  * 字幕装饰：观察主播放器字幕容器的变化，
- * 1. 识别自动字幕提示窗口并打上 ATTR_YT_HINT（engine 的跳过规则据此不标注；MutationObserver 回调早于 engine 的空闲处理）
- * 2. above 模式下为字幕中的生词写入上方注解文本（自动生成字幕除外）
+ * 1. 识别自动字幕提示窗口并打上 ATTR_YT_HINT（照常标注，只用于“当前字幕”取词时排除提示文字）
+ * 2. 按字幕译文模式为字幕中的生词写入注解文本（所有字幕窗口一视同仁）
  * 字幕每 1–4 秒整窗重建一次，处理量只有几个词，开销可以忽略。
  */
 export class CaptionDecorator {
@@ -164,9 +161,9 @@ export class CaptionDecorator {
         const from = [...old.el.querySelectorAll<HTMLElement>(`.${CAPTION_SEGMENT_CLASS}`)].find((o) => o.textContent === text && o.querySelector(TAG_MARK));
         if (!from) continue;
         seg.replaceChildren(...from.childNodes);
-        // 整窗重建（pop-on）时沿用窗口译文模式；roll-up 窗口不设模式（只高亮），换行时窗口本身也没有重建
+        // 整窗重建（pop-on）时沿用窗口译文模式；roll-up 换行时窗口本身没有重建，模式还在
         const win = seg.closest<HTMLElement>('.caption-window');
-        if (win && !win.classList.contains(ROLLUP_CLASS) && old.el.classList.contains('caption-window')) {
+        if (win && old.el.classList.contains('caption-window')) {
           for (const a of [ATTR_YT_GM, ATTR_FIT_FALLBACK]) {
             const v = old.el.getAttribute(a);
             if (v !== null && !win.hasAttribute(a)) win.setAttribute(a, v);
@@ -208,8 +205,9 @@ export class CaptionDecorator {
       const hint = isAutoCaptionHint(text);
       if (hint !== w.hasAttribute(ATTR_YT_HINT)) w.toggleAttribute(ATTR_YT_HINT, hint);
       if (!hint) texts.push(text);
-      // 窗口模式：自动生成字幕、提示窗口只高亮；after 已因放不下改成 above 的窗口保持 above（窗口每条字幕重建，不会一直沿用）
-      const want = mode === 'off' || hint || w.classList.contains(ROLLUP_CLASS) ? null : mode;
+      // 所有字幕窗口（含自动生成字幕、提示窗口）一视同仁，按设置显示字幕内译文；
+      // after 已因放不下改成 above 的窗口保持 above（窗口每条字幕重建，不会一直沿用）
+      const want = mode === 'off' ? null : mode;
       const cur = w.getAttribute(ATTR_YT_GM);
       if (want === null) {
         if (cur !== null) w.removeAttribute(ATTR_YT_GM);
