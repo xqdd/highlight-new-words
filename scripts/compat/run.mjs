@@ -11,20 +11,23 @@
  *   --sites <ids>        逗号分隔的站点 id（见 sites.json），默认全部 live 站点
  *   --group <names>      按 group 选择，如 github,news；offline 表示 tests/fixtures/sites 快照
  *   --offline            等价于 --group offline，且默认 --configs baseline,ours，并按阈值给出退出码
- *   --configs <list>     baseline,ours,relingo（默认三者；offline 默认不跑 relingo）
- *   --viewports <list>   mobile,desktop（默认两者，两种尺寸并行跑）
+ *   --configs <list>     baseline,ours,ours-after,relingo（默认四组；offline 默认 baseline,ours,ours-after）
+ *                        ours = 默认设置（cet6、行内译文关闭）；ours-after = 默认设置 + “词后”行内译文
+ *   --viewports <list>   mobile,desktop（默认两者，两种尺寸串行跑，避免互相争用 CPU）
+ *   --repeat <n>         每组正式测量次数，默认 3，结论取中位数（各组轮流交替执行，抵消网络/站点随时间的波动）
+ *   --skip-done          已有同 repeat 次数结果文件的 站点×尺寸 跳过（长时间批量跑中断后续跑）
  *   --ext <dir>          本扩展解包目录，默认 /tmp/gauntlet/out/compat/chrome-mv3
  *   --build              先执行 OUT_DIR=/tmp/gauntlet/out/compat npm run build（失败时每 60s 重试，最多 3 次）
  *   --out <dir>          输出根目录，默认 /tmp/gauntlet/compat（results/ 与 shots/ 子目录）
  *   --scroll-seconds <n> 无限滚动页持续滚动秒数，默认 30
- *   --settings <json>    覆盖 ours 的设置补丁，默认 {"books":{"enabled":["cet6"]},"inlineTranslation":{"mode":"after"}}
+ *   --settings <json>    覆盖 ours 组的设置补丁（默认 {}，即扩展默认设置）；ours-after 固定在默认之上加 {"inlineTranslation":{"mode":"after"}}
  *   --no-xvfb            不自动套 xvfb-run（已有 DISPLAY 且想看窗口时）
  *
  * 输出：
- *   <out>/results/<site>-<viewport>.json  三组原始指标 + 对比结论（阈值判定）
- *   <out>/results/all.json                全部汇总
- *   <out>/shots/<site>-<viewport>-<config>-{top,scroll3}.png，以及 -diff-<config>-{top,scroll3}.png 热力图
- *   Markdown 汇总报告（report.mjs）与 tests/fixtures/sites 离线快照待正式测试阶段补充，当前为预研骨架。
+ *   <out>/results/<site>-<viewport>.json  各组每次运行的原始指标 + 中位数摘要（summary）+ 对比结论（阈值判定）
+ *   <out>/results/all.json                全部汇总（offline 模式为 all-offline.json）
+ *   <out>/shots/<site>-<viewport>-<config>-{top,scroll3}.png（第 1 轮），以及 -diff-<config>-{top,scroll3}.png 热力图
+ *   Markdown 汇总报告见 report.mjs；离线快照由 snapshot.mjs 生成到 tests/fixtures/sites。
  *
  * 依赖：Patchright（Playwright 的反检测分支）。仓库不引入该依赖，按以下顺序解析：
  *   1. import('patchright')；2. 全局安装的 patchright@1.63.0（`npm root -g`）；3. /tmp/gauntlet/node_modules 的 playwright（无反检测，兜底）。
@@ -60,7 +63,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (!a.startsWith('--')) continue;
     const key = a.slice(2);
-    if (['offline', 'build', 'no-xvfb'].includes(key)) args[key] = true;
+    if (['offline', 'build', 'no-xvfb', 'skip-done'].includes(key)) args[key] = true;
     else args[key] = argv[++i];
   }
   return args;
@@ -84,10 +87,15 @@ const RELINGO_EXT = '/tmp/gauntlet/bench/login/relingo-ext';
 const RELINGO_PROFILE = '/tmp/gauntlet/bench/login/profile';
 const X_COOKIE_FILE = '/home/cuishuqiang/me/personal/deep-research/x-cookie';
 const SCROLL_SECONDS = Number(args['scroll-seconds'] ?? 30);
-const OURS_SETTINGS = JSON.parse(args.settings ?? '{"books":{"enabled":["cet6"]},"inlineTranslation":{"mode":"after"}}');
+const OURS_SETTINGS = JSON.parse(args.settings ?? '{}');
+/** 各组写入扩展的设置补丁：ours 为默认设置（可用 --settings 覆盖），ours-after 在其上开启“词后”行内译文 */
+const CONFIG_SETTINGS = { ours: OURS_SETTINGS, 'ours-after': { ...OURS_SETTINGS, inlineTranslation: { ...(OURS_SETTINGS.inlineTranslation ?? {}), mode: 'after' } } };
 const offlineMode = !!args.offline || args.group === 'offline';
-const CONFIG_NAMES = (args.configs ?? (offlineMode ? 'baseline,ours' : 'baseline,ours,relingo')).split(',');
+const CONFIG_NAMES = (args.configs ?? (offlineMode ? 'baseline,ours,ours-after' : 'baseline,ours,ours-after,relingo')).split(',');
 const VIEWPORT_NAMES = (args.viewports ?? 'mobile,desktop').split(',');
+const REPEAT = Math.max(1, Number(args.repeat ?? 3));
+/** 组 → 扩展角色（CPU/控制台/长任务归因用）：ours 与 ours-after 是同一个扩展 */
+const roleOf = (cfg) => (cfg.startsWith('ours') ? 'ours' : cfg);
 
 /** 阈值（与 README 一致）：LCP 增量 < max(5%, 100ms)；扩展归因长任务最长 ≤ 80ms（“50ms 级”）；CLS 增量 ≤ 0.01（≈0） */
 export const THRESHOLDS = { lcpRatio: 0.05, lcpMs: 100, extLongTaskMs: 80, clsDelta: 0.01 };
@@ -371,7 +379,7 @@ function analyzeProfile(profile, extIds) {
 // ---------------- 扩展/浏览器上下文 ----------------
 async function launchConfig(chromium, cfg, vpName, needXCookies) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `compat-${cfg}-${vpName}-`));
-  const exts = cfg === 'ours' ? [EXT] : cfg === 'relingo' ? [RELINGO_EXT] : [];
+  const exts = roleOf(cfg) === 'ours' ? [EXT] : cfg === 'relingo' ? [RELINGO_EXT] : [];
   if (cfg === 'relingo') {
     // 复制登录态 profile，避免改动原始采集环境；去掉单例锁
     fs.cpSync(RELINGO_PROFILE, dir, { recursive: true });
@@ -390,8 +398,8 @@ async function launchConfig(chromium, cfg, vpName, needXCookies) {
   if (exts.length) {
     const sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker', { timeout: 20000 }));
     const id = new URL(sw.url()).host;
-    extIds[id] = cfg;
-    if (cfg === 'ours') {
+    extIds[id] = roleOf(cfg);
+    if (roleOf(cfg) === 'ours') {
       // 等后台初始化写出默认 settings，再深合并测试设置
       await sw.evaluate(async (patch) => {
         for (let i = 0; i < 50 && !(await chrome.storage.local.get('settings')).settings; i++) await new Promise((r) => setTimeout(r, 100));
@@ -403,7 +411,7 @@ async function launchConfig(chromium, cfg, vpName, needXCookies) {
           return o;
         };
         await chrome.storage.local.set({ settings: merge(cur, patch) });
-      }, OURS_SETTINGS);
+      }, CONFIG_SETTINGS[cfg] ?? {});
     }
     await sleep(1500);
     // 关掉扩展安装时自动打开的引导页
@@ -459,7 +467,7 @@ async function smoothScroll(page, totalPx, stepPx, intervalMs) {
  * 跑一个站点 × 一个配置。light=true 仅用于预热（缓存、验证 cookie），只做导航与等待。
  * 返回指标对象；截图写入 SHOTS。
  */
-async function runOnce(conf, site, url, { light = false, tag = 'measure' } = {}) {
+async function runOnce(conf, site, url, { light = false, tag = 'measure', shots = true } = {}) {
   const { ctx, extIds, cfg, vpName } = conf;
   const page = await ctx.newPage();
   const res = { cfg, vp: vpName, site: site.id, tag, url };
@@ -497,7 +505,7 @@ async function runOnce(conf, site, url, { light = false, tag = 'measure' } = {})
       const C = window.__compat ?? { lt: [], lcp: [], cls: [], firstMark: {} };
       const nav = performance.getEntriesByType('navigation')[0];
       const fcp = performance.getEntriesByName('first-contentful-paint')[0];
-      return { lt: C.lt, lcp: C.lcp, cls: C.cls, firstMark: C.firstMark, dcl: nav ? Math.round(nav.domContentLoadedEventEnd) : null, load: nav ? Math.round(nav.loadEventEnd) : null, fcp: fcp ? Math.round(fcp.startTime) : null };
+      return { lt: C.lt, lcp: C.lcp, cls: C.cls, firstMark: C.firstMark, dcl: nav ? Math.round(nav.domContentLoadedEventEnd) : null, load: nav ? Math.round(nav.loadEventEnd) : null, fcp: fcp ? Math.round(fcp.startTime) : null, ttfb: nav ? Math.round(nav.responseStart) : null };
     }).catch(() => null);
     await cdp.send('HeapProfiler.collectGarbage').catch(() => {});
     const heapSettle = (await metrics(cdp)).heapMB;
@@ -505,6 +513,7 @@ async function runOnce(conf, site, url, { light = false, tag = 'measure' } = {})
       lcp: perf?.lcp.at(-1)?.[0] ?? null,
       lcpElement: perf?.lcp.at(-1)?.[2] ?? null,
       fcp: perf?.fcp ?? null,
+      ttfb: perf?.ttfb ?? null,
       dcl: perf?.dcl ?? null,
       load: perf?.load ?? null,
       cls: +(perf?.cls ?? []).reduce((a, e) => a + e[1], 0).toFixed(4),
@@ -517,8 +526,11 @@ async function runOnce(conf, site, url, { light = false, tag = 'measure' } = {})
     res.marks = await page.evaluate(markStats, { forbid: site.forbid }).catch((e) => ({ error: String(e.message).slice(0, 200) }));
     res.layoutTop = await page.evaluate(layoutSample).catch(() => []);
     res.rectsTop = await page.evaluate(markRects).catch(() => []);
-    res.shotTop = path.join(SHOTS, `${shotBase}-top.png`);
-    await page.screenshot({ path: res.shotTop, timeout: 20000 }).catch((e) => (res.shotError = String(e.message).slice(0, 120)));
+    // 只有第 1 轮（及 baseline 的噪声轮）截图，其余轮次只取数值指标，控制产物体积
+    if (shots) {
+      res.shotTop = path.join(SHOTS, `${shotBase}-top.png`);
+      await page.screenshot({ path: res.shotTop, timeout: 20000 }).catch((e) => (res.shotError = String(e.message).slice(0, 120)));
+    }
     if (site.editable) res.editable = await page.evaluate(editableSnapshot, site.editable).catch(() => null);
 
     // ---- 滚动 3 屏：懒处理是否补上 ----
@@ -538,8 +550,10 @@ async function runOnce(conf, site, url, { light = false, tag = 'measure' } = {})
       taskMs: mScroll.taskMs - mSettle.taskMs,
     };
     res.rectsScroll3 = await page.evaluate(markRects).catch(() => []);
-    res.shotScroll3 = path.join(SHOTS, `${shotBase}-scroll3.png`);
-    await page.screenshot({ path: res.shotScroll3, timeout: 20000 }).catch(() => {});
+    if (shots) {
+      res.shotScroll3 = path.join(SHOTS, `${shotBase}-scroll3.png`);
+      await page.screenshot({ path: res.shotScroll3, timeout: 20000 }).catch(() => {});
+    }
     const ltAfterScroll = await mainEval(page, () => window.__compat?.lt ?? []).catch(() => []);
     res.scroll3.longTasks = ltAfterScroll.slice(ltBefore);
     const phases = [['load', tStart, mSettle.ts], ['scroll3', tScroll0, mScroll.ts]];
@@ -792,27 +806,99 @@ function layoutDiff(base, base2, ext) {
   };
 }
 
+/** 单次运行中归因到本组扩展的长任务（加载 + 滚 3 屏 + 无限滚动） */
+function extLongTasksOf(run) {
+  const role = roleOf(run.cfg);
+  return [...(run.settle?.longTasksAttr ?? []), ...(run.scroll3?.longTasksAttr ?? []), ...(run.infinite?.longTasksAttr ?? [])].filter((t) => t.ext === role);
+}
+
+/**
+ * 多次运行取中位数的摘要。数值指标逐项取中位数（3 次即中间值），错误/违规类取最坏值，
+ * 这样单次网络抖动不会左右结论，而偶发的扩展报错或禁标违规不会被中位数掩盖。
+ */
+function summarize(runs) {
+  const ok = runs.filter((r) => r?.settle);
+  if (!ok.length) return null;
+  const role = roleOf(ok[0].cfg);
+  const med = (f) => {
+    const v = ok.map((r) => { try { return f(r); } catch { return null; } }).filter((x) => typeof x === 'number' && Number.isFinite(x));
+    return v.length ? median(v) : null;
+  };
+  const max = (f) => Math.max(0, ...ok.map((r) => { try { return f(r) ?? 0; } catch { return 0; } }));
+  const cpuOf = (r, phase) => (role === 'baseline' ? null : r.cpu?.[phase]?.[role] ?? 0);
+  const errs = new Map();
+  for (const r of ok) for (const it of r.console?.items ?? []) if (it.src === role && it.level === 'error') errs.set(it.text.slice(0, 160), it);
+  const s = {
+    runs: ok.length,
+    blocked: runs.filter((r) => r?.gate?.blocked).length,
+    httpStatus: ok[0].httpStatus ?? null,
+    lcp: med((r) => r.settle.lcp), fcp: med((r) => r.settle.fcp), cls: med((r) => r.settle.cls), tbt: med((r) => r.settle.tbt),
+    clsMin: Math.min(...ok.map((r) => r.settle.cls ?? 0)), clsMax: Math.max(...ok.map((r) => r.settle.cls ?? 0)),
+    scriptMs: med((r) => r.settle.scriptMs), layoutMs: med((r) => r.settle.layoutMs), styleMs: med((r) => r.settle.styleMs),
+    heapMB: med((r) => r.settle.heapMB), nodes: med((r) => r.settle.nodes),
+    pageErrors: med((r) => r.console?.counts?.pageErrors ?? 0),
+  };
+  if (role !== 'baseline') {
+    Object.assign(s, {
+      firstMark: med((r) => r.settle.firstMark?.[role]),
+      marks: med((r) => r.marks?.[role]?.count), marksInView: med((r) => r.marks?.[role]?.inView),
+      translations: role === 'ours' ? med((r) => r.marks?.ours?.translations) : null,
+      scroll3InView: med((r) => r.scroll3?.marksInView?.[role]),
+      cpuLoad: med((r) => cpuOf(r, 'load')), cpuScroll3: med((r) => cpuOf(r, 'scroll3')), cpuInfinite: med((r) => cpuOf(r, 'infinite')),
+      maxExtLongTask: med((r) => Math.max(0, ...extLongTasksOf(r).map((t) => t.dur))),
+      worstExtLongTask: max((r) => Math.max(0, ...extLongTasksOf(r).map((t) => t.dur))),
+      extLongTasks: med((r) => extLongTasksOf(r).length),
+      extErrors: max((r) => r.console?.counts?.[`${role}Errors`]),
+      extErrorSamples: [...errs.values()].slice(0, 5).map((e) => ({ kind: e.kind, text: e.text, url: e.url })),
+      violations: max((r) => (r.marks?.[role]?.violations ?? []).reduce((a, v) => a + v.count, 0)),
+      violationSamples: (ok.find((r) => r.marks?.[role]?.violations?.length)?.marks?.[role]?.violations ?? []).slice(0, 4),
+      inflated: max((r) => r.marks?.[role]?.lineCheck?.inflated),
+      inflatedSamples: (ok.find((r) => r.marks?.[role]?.lineCheck?.inflated)?.marks?.[role]?.lineCheck?.samples ?? []).slice(0, 3),
+      overflow: max((r) => r.marks?.[role]?.overflow?.length),
+      overflowSamples: (ok.find((r) => r.marks?.[role]?.overflow?.length)?.marks?.[role]?.overflow ?? []).slice(0, 3),
+      interactive: ok[0].marks?.[role]?.interactive ?? null,
+    });
+    const tt = ok.map((r) => r.typeTest).filter(Boolean);
+    if (tt.length) s.typeTest = { runs: tt.length, marksInside: Math.max(0, ...tt.map((t) => t.marksInside ?? 0)), textKept: tt.every((t) => t.textKept), errors: tt.filter((t) => t.error).map((t) => t.error).slice(0, 2) };
+    const ed = ok.map((r) => r.editable).filter(Boolean);
+    if (ed.length) s.editableMarks = Math.max(0, ...ed.map((list) => list.reduce((a, e) => a + e.marks, 0)));
+    const spa = ok.map((r) => r.spa).filter(Boolean);
+    if (spa.length) s.spa = { label: spa[0].label, okRuns: spa.filter((x) => !x.error && x.to !== x.from).length, marks: med((r) => r.spa?.marks?.[role]), inView: med((r) => r.spa?.marks?.[`${role}InView`]), error: spa.find((x) => x.error)?.error ?? null };
+  }
+  if (ok.some((r) => r.infinite)) {
+    s.infinite = {
+      fps: med((r) => r.infinite.fps?.avg), jank: med((r) => r.infinite.fps?.jank), maxGap: med((r) => r.infinite.fps?.maxGap),
+      tbt: med((r) => r.infinite.tbt), scriptMs: med((r) => r.infinite.scriptMs), layoutMs: med((r) => r.infinite.layoutMs),
+      heapGrowthMB: med((r) => r.infinite.heapGrowthMB), nodesGrowth: med((r) => r.infinite.nodesEnd - r.infinite.nodesStart),
+      marksAdded: med((r) => r.infinite.marksAdded), scrollY: med((r) => r.infinite.scrollY),
+    };
+  }
+  return s;
+}
+
+/** 以 baseline 的中位数为基准，判定扩展组的中位数是否满足阈值 */
 function judge(base, ext) {
-  if (!base?.settle || !ext?.settle) return null;
-  const lcpB = base.settle.lcp, lcpE = ext.settle.lcp;
-  const lcpDelta = lcpB != null && lcpE != null ? lcpE - lcpB : null;
-  const lcpLimit = lcpB != null ? Math.max(lcpB * THRESHOLDS.lcpRatio, THRESHOLDS.lcpMs) : null;
-  const extLts = [...(ext.settle.longTasksAttr ?? []), ...(ext.scroll3?.longTasksAttr ?? []), ...(ext.infinite?.longTasksAttr ?? [])].filter((t) => t.ext === ext.cfg);
-  const maxExtLt = Math.max(0, ...extLts.map((t) => t.dur));
-  const clsDelta = +(ext.settle.cls - base.settle.cls).toFixed(4);
+  if (!base || !ext) return null;
+  const lcpDelta = base.lcp != null && ext.lcp != null ? ext.lcp - base.lcp : null;
+  const lcpLimit = base.lcp != null ? Math.max(base.lcp * THRESHOLDS.lcpRatio, THRESHOLDS.lcpMs) : null;
+  // 页面自身 CLS 呈双峰（如维基手机版偶发整页下移 0.5+）时，中位数会被噪声左右：
+  // baseline 多次之间的极差 > 阈值则改用“最小值对最小值”，扩展稳定造成的位移在最小值上同样体现
+  const clsNoisy = base.clsMax != null && base.clsMax - base.clsMin > THRESHOLDS.clsDelta;
+  const clsDelta = base.cls != null && ext.cls != null ? +((clsNoisy ? ext.clsMin - base.clsMin : ext.cls - base.cls)).toFixed(4) : null;
   return {
     lcpDelta, lcpLimit: lcpLimit && Math.round(lcpLimit), lcpPass: lcpDelta == null ? null : lcpDelta < lcpLimit,
-    extLongTasks: extLts.length, maxExtLongTask: maxExtLt, longTaskPass: maxExtLt <= THRESHOLDS.extLongTaskMs,
-    tbtDelta: ext.settle.tbt - base.settle.tbt,
-    clsDelta, clsPass: clsDelta <= THRESHOLDS.clsDelta,
-    scriptDelta: ext.settle.scriptMs - base.settle.scriptMs,
-    heapDeltaMB: +(ext.settle.heapMB - base.settle.heapMB).toFixed(2),
+    extLongTasks: ext.extLongTasks, maxExtLongTask: ext.maxExtLongTask, worstExtLongTask: ext.worstExtLongTask, longTaskPass: (ext.maxExtLongTask ?? 0) <= THRESHOLDS.extLongTaskMs,
+    tbtDelta: ext.tbt != null && base.tbt != null ? ext.tbt - base.tbt : null,
+    clsDelta, clsNoisy, clsPass: clsDelta == null ? null : clsDelta <= THRESHOLDS.clsDelta,
+    scriptDelta: ext.scriptMs != null && base.scriptMs != null ? ext.scriptMs - base.scriptMs : null,
+    heapDeltaMB: ext.heapMB != null && base.heapMB != null ? +(ext.heapMB - base.heapMB).toFixed(2) : null,
+    errorsPass: !ext.extErrors, violationsPass: !ext.violations,
   };
 }
 
 // ---------------- 主流程 ----------------
 if (args.build) buildExtension();
-if (CONFIG_NAMES.includes('ours') && !fs.existsSync(path.join(EXT, 'manifest.json'))) throw new Error(`扩展未构建：${EXT}（加 --build）`);
+if (CONFIG_NAMES.some((c) => roleOf(c) === 'ours') && !fs.existsSync(path.join(EXT, 'manifest.json'))) throw new Error(`扩展未构建：${EXT}（加 --build）`);
 const chromium = await loadChromium();
 const server = sites.some((s) => s.fixture) ? await startFixtureServer() : null;
 const urlOf = (s) => (s.fixture ? `http://127.0.0.1:${server.address().port}/${s.fixture}` : s.url);
@@ -824,51 +910,84 @@ const all = [];
 async function runViewport(vpName) {
   const confs = {};
   const ensure = async (cfg) => {
-    if (!confs[cfg] || !confs[cfg].ctx.pages) confs[cfg] = await launchConfig(chromium, cfg, vpName, needX);
+    if (!confs[cfg]) confs[cfg] = await launchConfig(chromium, cfg, vpName, needX);
     return confs[cfg];
   };
+  // 一次失败后关闭并重建该组浏览器（扩展崩溃/浏览器断开）
+  const runSafe = async (cfg, site, url, opts) => {
+    let conf;
+    try {
+      conf = await ensure(cfg);
+      return await runOnce(conf, site, url, opts);
+    } catch (e) {
+      if (conf) { await closeConfig(conf); delete confs[cfg]; }
+      return { cfg, vp: vpName, site: site.id, tag: opts.tag, error: String(e.stack ?? e).slice(0, 600) };
+    }
+  };
   for (const site of sites) {
+    const resultFile = path.join(RESULTS, `${site.id}-${vpName}.json`);
+    if (args['skip-done'] && fs.existsSync(resultFile)) {
+      const prev = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
+      if (prev.repeat === REPEAT && CONFIG_NAMES.every((c) => prev.runs?.[c])) { all.push(prev); console.log(`[compat] ${vpName} ${site.id} 已有结果，跳过`); continue; }
+    }
     const url = urlOf(site);
-    const entry = { site: site.id, name: site.name, url, vp: vpName, runs: {}, at: new Date().toISOString() };
+    const entry = { site: site.id, name: site.name, url, vp: vpName, repeat: REPEAT, configs: CONFIG_NAMES, runs: {}, at: new Date().toISOString() };
+    for (const cfg of CONFIG_NAMES) entry.runs[cfg] = [];
     console.log(`[compat] ${vpName} ${site.id} 开始`);
-    for (const cfg of CONFIG_NAMES) {
-      let conf;
-      try {
-        conf = await ensure(cfg);
-        // 预热：缓存、验证页 cookie；baseline 额外完整跑一遍作为“页面自身波动”噪声参照
-        const warm = await runOnce(conf, site, url, cfg === 'baseline' ? { tag: 'noise' } : { light: true, tag: 'warm' });
-        const run = await runOnce(conf, site, url);
-        run.warmGate = warm.gate;
-        entry.runs[cfg] = run;
-        if (cfg === 'baseline') entry.noise = warm;
-      } catch (e) {
-        entry.runs[cfg] = { cfg, error: String(e.stack ?? e).slice(0, 600) };
-        if (conf) { await closeConfig(conf); delete confs[cfg]; }
+    const t0 = Date.now();
+    // 预热：缓存、验证页 cookie（各组各一次，保证缓存条件公平）
+    entry.warmGate = {};
+    for (const cfg of CONFIG_NAMES) entry.warmGate[cfg] = (await runSafe(cfg, site, url, { light: true, tag: 'warm' })).gate ?? null;
+    // 正式测量：各组轮流交替，第 1 轮截图；baseline 第 2 轮也截图，作为“页面自身波动”的噪声参照
+    for (let round = 0; round < REPEAT; round++) {
+      for (const cfg of CONFIG_NAMES) {
+        const tag = round === 0 ? 'measure' : cfg === 'baseline' && round === 1 ? 'noise' : `r${round + 1}`;
+        const run = await runSafe(cfg, site, url, { tag, shots: round === 0 || tag === 'noise' });
+        run.round = round + 1;
+        entry.runs[cfg].push(run);
       }
     }
-    // 对比
-    const base = entry.runs.baseline;
+    // 中位数摘要 + 阈值判定
+    entry.summary = Object.fromEntries(CONFIG_NAMES.map((c) => [c, summarize(entry.runs[c])]));
+    const base = entry.runs.baseline?.[0];
+    const noise = entry.runs.baseline?.[1];
     const dpr = VIEWPORTS[vpName].deviceScaleFactor;
     entry.compare = {};
     for (const cfg of CONFIG_NAMES.filter((c) => c !== 'baseline')) {
-      const ext = entry.runs[cfg];
-      if (!base?.settle || !ext?.settle) continue;
-      const c = (entry.compare[cfg] = { judge: judge(base, ext) });
-      c.layout = layoutDiff(base.layoutTop ?? [], entry.noise?.layoutTop, ext.layoutTop ?? []);
-      c.pixelTop = await pixelDiff(toolPage, base.shotTop, ext.shotTop, entry.noise?.shotTop, ext.rectsTop ?? [], dpr, path.join(SHOTS, `${site.id}-${vpName}-diff-${cfg}-top.png`)).catch((e) => ({ error: String(e.message).slice(0, 200) }));
-      c.pixelScroll3 = await pixelDiff(toolPage, base.shotScroll3, ext.shotScroll3, entry.noise?.shotScroll3, ext.rectsScroll3 ?? [], dpr, path.join(SHOTS, `${site.id}-${vpName}-diff-${cfg}-scroll3.png`)).catch((e) => ({ error: String(e.message).slice(0, 200) }));
+      const c = (entry.compare[cfg] = { judge: judge(entry.summary.baseline, entry.summary[cfg]) });
+      // 布局：每轮 ext 对比同轮 baseline（噪声取 baseline 第 1/2 轮差异），取各项中位数；像素差只用第 1 轮截图
+      const layouts = entry.runs[cfg].map((ext, i) => {
+        const b = entry.runs.baseline?.[i] ?? base;
+        const n = entry.runs.baseline?.[i === 1 ? 0 : 1];
+        return b?.layoutTop && ext.layoutTop ? layoutDiff(b.layoutTop, n?.layoutTop, ext.layoutTop) : null;
+      }).filter(Boolean);
+      if (layouts.length) {
+        const pickMed = (k) => median(layouts.map((l) => l[k]));
+        c.layout = { ...layouts[0], pushed: pickMed('pushed'), markSelf: pickMed('markSelf'), unexplained: pickMed('unexplained'), maxPushPx: pickMed('maxPushPx'), horizontal: pickMed('horizontal'), perRun: layouts.map((l) => ({ pushed: l.pushed, unexplained: l.unexplained, maxPushPx: l.maxPushPx, horizontal: l.horizontal })) };
+      }
+      const ext0 = entry.runs[cfg][0];
+      if (base?.shotTop && ext0?.shotTop) {
+        c.pixelTop = await pixelDiff(toolPage, base.shotTop, ext0.shotTop, noise?.shotTop, ext0.rectsTop ?? [], dpr, path.join(SHOTS, `${site.id}-${vpName}-diff-${cfg}-top.png`)).catch((e) => ({ error: String(e.message).slice(0, 200) }));
+        c.pixelScroll3 = await pixelDiff(toolPage, base.shotScroll3, ext0.shotScroll3, noise?.shotScroll3, ext0.rectsScroll3 ?? [], dpr, path.join(SHOTS, `${site.id}-${vpName}-diff-${cfg}-scroll3.png`)).catch((e) => ({ error: String(e.message).slice(0, 200) }));
+      }
     }
     // 结果文件不保留大数组（布局样本/矩形），只留摘要
-    for (const r of [...Object.values(entry.runs), entry.noise].filter(Boolean)) { delete r.layoutTop; delete r.rectsTop; delete r.rectsScroll3; }
-    fs.writeFileSync(path.join(RESULTS, `${site.id}-${vpName}.json`), JSON.stringify(entry, null, 2));
+    for (const r of Object.values(entry.runs).flat()) { delete r.layoutTop; delete r.rectsTop; delete r.rectsScroll3; }
+    entry.elapsedSec = Math.round((Date.now() - t0) / 1000);
+    fs.writeFileSync(resultFile, JSON.stringify(entry, null, 2));
     all.push(entry);
-    const j = entry.compare.ours?.judge;
-    console.log(`[compat] ${vpName} ${site.id} 完成 ours: marks=${entry.runs.ours?.marks?.ours?.count ?? '-'} lcpΔ=${j?.lcpDelta ?? '-'} clsΔ=${j?.clsDelta ?? '-'} maxExtLT=${j?.maxExtLongTask ?? '-'} oursErr=${entry.runs.ours?.console?.counts?.oursErrors ?? '-'}`);
+    const brief = CONFIG_NAMES.filter((c) => c !== 'baseline').map((c) => {
+      const j = entry.compare[c]?.judge;
+      const s = entry.summary[c];
+      return `${c}: marks=${s?.marks ?? '-'} lcpΔ=${j?.lcpDelta ?? '-'} clsΔ=${j?.clsDelta ?? '-'} maxLT=${j?.maxExtLongTask ?? '-'} cpu=${s?.cpuLoad ?? '-'} err=${s?.extErrors ?? '-'}`;
+    }).join(' | ');
+    console.log(`[compat] ${vpName} ${site.id} 完成（${entry.elapsedSec}s） ${brief}`);
   }
   for (const c of Object.values(confs)) await closeConfig(c);
 }
 
-await Promise.all(VIEWPORT_NAMES.map((vp) => runViewport(vp)));
+// 两种尺寸串行：并行会互相争用 CPU，使 LCP/长任务失真
+for (const vp of VIEWPORT_NAMES) await runViewport(vp);
 await toolBrowser.close();
 server?.close();
 const allFile = path.join(RESULTS, offlineMode ? 'all-offline.json' : 'all.json');
@@ -885,15 +1004,18 @@ fs.writeFileSync(allFile, JSON.stringify(merged, null, 2));
 if (offlineMode) {
   const fails = [];
   for (const e of all) {
-    const j = e.compare.ours?.judge;
-    const m = e.runs.ours?.marks?.ours;
-    if (!j) { fails.push(`${e.site}/${e.vp}: 无结果`); continue; }
-    if (j.lcpPass === false) fails.push(`${e.site}/${e.vp}: LCP 增量 ${j.lcpDelta}ms > ${j.lcpLimit}ms`);
-    if (!j.longTaskPass) fails.push(`${e.site}/${e.vp}: 扩展长任务 ${j.maxExtLongTask}ms`);
-    if (!j.clsPass) fails.push(`${e.site}/${e.vp}: CLS 增量 ${j.clsDelta}`);
-    if (m?.violations?.length) fails.push(`${e.site}/${e.vp}: 禁标区域出现高亮 ${m.violations.map((v) => `${v.selector}×${v.count}`).join(', ')}`);
-    if (e.runs.ours?.console?.counts?.oursErrors) fails.push(`${e.site}/${e.vp}: 扩展报错 ${e.runs.ours.console.counts.oursErrors} 条`);
-    if (e.runs.ours?.typeTest && (e.runs.ours.typeTest.marksInside || !e.runs.ours.typeTest.textKept)) fails.push(`${e.site}/${e.vp}: 可编辑区被改动`);
+    for (const cfg of CONFIG_NAMES.filter((c) => roleOf(c) === 'ours')) {
+      const j = e.compare[cfg]?.judge;
+      const s = e.summary[cfg];
+      const tag = `${e.site}/${e.vp}/${cfg}`;
+      if (!j) { fails.push(`${tag}: 无结果`); continue; }
+      if (j.lcpPass === false) fails.push(`${tag}: LCP 增量 ${j.lcpDelta}ms > ${j.lcpLimit}ms`);
+      if (!j.longTaskPass) fails.push(`${tag}: 扩展长任务 ${j.maxExtLongTask}ms`);
+      if (j.clsPass === false) fails.push(`${tag}: CLS 增量 ${j.clsDelta}`);
+      if (s.violations) fails.push(`${tag}: 禁标区域出现高亮 ${s.violationSamples.map((v) => `${v.selector}×${v.count}`).join(', ')}`);
+      if (s.extErrors) fails.push(`${tag}: 扩展报错 ${s.extErrors} 条`);
+      if (s.typeTest && (s.typeTest.marksInside || !s.typeTest.textKept)) fails.push(`${tag}: 可编辑区被改动`);
+    }
   }
   console.log(fails.length ? `[compat] 阈值未通过：\n  ${fails.join('\n  ')}` : '[compat] offline 阈值全部通过');
   process.exitCode = fails.length ? 1 : 0;

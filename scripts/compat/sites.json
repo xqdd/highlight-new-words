@@ -36,15 +36,15 @@
       "editable": [".ProseMirror"], "typeTest": ".ProseMirror",
       "note": "在本地编辑器里输入一句含考试词的英文（不提交到任何服务器），检查输入区不被标注、文本不被改写" },
 
-    { "id": "off-wikipedia", "group": "offline", "name": "[快照] 维基百科 Photosynthesis", "fixture": "wikipedia-photosynthesis.html", "settleMs": 5000 },
-    { "id": "off-spring-boot", "group": "offline", "name": "[快照] Spring Boot reference", "fixture": "spring-boot-application.html", "settleMs": 5000 },
-    { "id": "off-github-readme", "group": "offline", "name": "[快照] GitHub README", "fixture": "github-readme.html", "settleMs": 5000 },
-    { "id": "off-github-code", "group": "offline", "name": "[快照] GitHub 代码页", "fixture": "github-code.html", "settleMs": 5000,
+    { "id": "off-wikipedia", "snapshotOf": "wikipedia", "group": "offline", "name": "[快照] 维基百科 Photosynthesis", "fixture": "wikipedia-photosynthesis.html", "settleMs": 5000 },
+    { "id": "off-spring-boot", "snapshotOf": "spring-boot", "group": "offline", "name": "[快照] Spring Boot reference", "fixture": "spring-boot-application.html", "settleMs": 5000 },
+    { "id": "off-github-readme", "snapshotOf": "github-readme", "group": "offline", "name": "[快照] GitHub README", "fixture": "github-readme.html", "settleMs": 5000 },
+    { "id": "off-github-code", "snapshotOf": "github-code", "group": "offline", "name": "[快照] GitHub 代码页", "fixture": "github-code.html", "settleMs": 5000,
       "forbid": [".react-code-lines", ".react-code-text", ".react-file-line", "[data-testid=code-cell]", ".blob-code", "#read-only-cursor-text-area"] },
-    { "id": "off-mdn", "group": "offline", "name": "[快照] MDN Closures", "fixture": "mdn-closures.html", "settleMs": 5000 },
-    { "id": "off-hn-item", "group": "offline", "name": "[快照] Hacker News 评论页", "fixture": "hn-item.html", "settleMs": 5000 },
-    { "id": "off-guardian", "group": "offline", "name": "[快照] Guardian 文章", "fixture": "guardian-article.html", "settleMs": 5000 },
-    { "id": "off-medium", "group": "offline", "name": "[快照] Medium 文章", "fixture": "medium-article.html", "settleMs": 5000 },
+    { "id": "off-mdn", "snapshotOf": "mdn", "group": "offline", "name": "[快照] MDN Closures", "fixture": "mdn-closures.html", "settleMs": 5000 },
+    { "id": "off-hn-item", "snapshotOf": "hn-item", "group": "offline", "name": "[快照] Hacker News 评论页", "fixture": "hn-item.html", "settleMs": 5000 },
+    { "id": "off-guardian", "snapshotOf": "guardian", "group": "offline", "name": "[快照] Guardian 文章", "fixture": "guardian-article.html", "settleMs": 5000 },
+    { "id": "off-medium", "snapshotOf": "medium", "group": "offline", "name": "[快照] Medium 文章", "fixture": "medium-article.html", "settleMs": 5000 },
     { "id": "off-editable", "group": "offline", "name": "[手工] 可编辑区（textarea / contenteditable / 类 Gmail 撰写框）", "fixture": "editable.html", "settleMs": 4000,
       "editable": ["textarea", "[contenteditable=true]", "[role=textbox]"], "typeTest": "#compose-body" }
   ]

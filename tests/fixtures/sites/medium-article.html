@@ -1,0 +1,645 @@
+<!doctype html>
+<!-- 离线快照：https://karpathy.medium.com/software-2-0-a64152b37c35 ，抓取于 2026-10-01，由 scripts/compat/snapshot.mjs 精简（去脚本/iframe/图片，仅保留命中样式），仅用于本扩展兼容性回归测试；内容版权归原站点所有 -->
+<html lang="en" data-rh-managed="lang"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Software 2.0. I sometimes see people refer to neural… | by Andrej Karpathy | Medium</title><title>Medium</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,minimum-scale=1,initial-scale=1,maximum-scale=1"><style>:root{color-scheme:light;--color-bg-neutral-primary:#ffffff;--color-bg-neutral-secondary:#f2f2f2;--color-bg-neutral-quaternary:#242424;--color-bg-neutral-elevated:#ffffff;--color-fg-neutral-primary:#242424;--color-fg-neutral-primary-hover:#000000;--color-fg-neutral-secondary:#6b6b6b;--color-fg-neutral-secondary-hover:#3f3f3f;--color-fg-neutral-tertiary:#ffffff;--color-border-neutral-primary:#f2f2f2;--color-shadow-elevated:#242424;--color-bg-scrim:#484848}
+html{box-sizing:border-box;text-size-adjust:100%}
+*, ::before, ::after{box-sizing:inherit}
+body{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;text-rendering:optimizelegibility;-webkit-font-smoothing:antialiased;color:var(--color-fg-neutral-primary);background-color:var(--color-bg-neutral-primary);position:relative;min-height:100vh}
+h1, h2, h3, h4, h5, h6, dl, dd, ol, ul, menu, figure, blockquote, p, pre, form{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+a{color:inherit;text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+a, button, input{-webkit-tap-highlight-color:transparent}
+img, svg{vertical-align:middle}
+button{background-image:initial;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:transparent;overflow-x:visible;overflow-y:visible}
+button, input, optgroup, select, textarea{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.a{font-family:medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif}
+.b{font-weight:400}
+.c{background-color:var(--color-bg-neutral-primary)}
+.e{display:block}
+.f{position:sticky}
+.g{top:0px}
+.h{z-index:500}
+.i{padding-top:0px;padding-right:24px;padding-bottom:0px;padding-left:24px}
+.j{align-items:center}
+.k{border-bottom-width:;border-bottom-style:;border-bottom-color:}
+.u{line-height:20px}
+.v{margin-left:8px}
+.w{color:var(--color-fg-neutral-secondary)}
+.x{fill:inherit}
+.y{font-size:13px}
+.z{font-family:sohne, "Helvetica Neue", Helvetica, Arial, sans-serif}
+.ab{letter-spacing:inherit}
+.ac{padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.ae{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.af{cursor:pointer}
+.ag:disabled{cursor:not-allowed}
+.ah:disabled{color:var(--color-fg-neutral-secondary)}
+.ai:disabled{fill:var(--color-fg-neutral-secondary)}
+.al{height:100%}
+.am{display:flex}
+.be{color:rgb(255, 255, 255)}
+.bf{fill:rgb(255, 255, 255)}
+.bg{background-image:initial;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:rgb(26, 137, 23)}
+.bh{border-top-color:;border-right-color:;border-bottom-color:;border-left-color:}
+.bl:disabled{cursor:inherit!important}
+.bm:disabled{opacity:0.3}
+.bn:disabled:hover{background-image:initial;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:rgb(26, 137, 23)}
+.bo:disabled:hover{border-top-color:;border-right-color:;border-bottom-color:;border-left-color:}
+.bp{border-top-left-radius:99em;border-top-right-radius:99em;border-bottom-right-radius:99em;border-bottom-left-radius:99em}
+.bq{border-top-width:1px;border-right-width:1px;border-bottom-width:1px;border-left-width:1px}
+.br{border-top-style:solid;border-right-style:solid;border-bottom-style:solid;border-left-style:solid}
+.bs{box-sizing:border-box}
+.bt{display:inline-block}
+.bu{text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+.bv{text-align:center}
+.bw{margin-left:16px}
+.bx{color:inherit}
+.by{font-size:inherit}
+.bz{border-top-color:inherit;border-top-style:inherit;border-top-width:inherit;border-right-color:inherit;border-right-style:inherit;border-right-width:inherit;border-bottom-color:inherit;border-bottom-style:inherit;border-bottom-width:inherit;border-left-color:inherit;border-left-style:inherit;border-left-width:inherit;border-image-source:inherit;border-image-slice:inherit;border-image-width:inherit;border-image-outset:inherit;border-image-repeat:inherit}
+.ca{font-family:inherit}
+.cb{font-weight:inherit}
+.cc{row-gap:24px;column-gap:24px}
+.cd{height:57px}
+.ce{flex-grow:1;flex-shrink:0;flex-basis:auto}
+.cf{border-top-width:medium;border-right-width:medium;border-bottom-width:medium;border-left-width:medium;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch}
+.cj{margin-left:24px}
+.cl{border-top-left-radius:20px;border-top-right-radius:20px;border-bottom-right-radius:20px;border-bottom-left-radius:20px}
+.cm{width:240px}
+.cn{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:}
+.cq{outline-color:initial;outline-style:none;outline-width:initial}
+.cr{font-size:14px}
+.cs{width:100%}
+.ct{padding-top:10px;padding-right:20px;padding-bottom:10px;padding-left:0px}
+.cu{background-color:transparent}
+.cv{color:var(--color-fg-neutral-primary)}
+.cw::placeholder{color:var(--color-fg-neutral-secondary)}
+.cx{margin-left:12px}
+.cy{margin-right:12px}
+.db{row-gap:4px;column-gap:4px}
+.dc{padding-top:6px;padding-right:12px;padding-bottom:6px;padding-left:12px}
+.dd{white-space-collapse:collapse;text-wrap-mode:nowrap}
+.de{background-color:var(--color-bg-neutral-quaternary)}
+.df{width:24px}
+.dg{height:24px}
+.dj{color:var(--color-fg-neutral-tertiary)}
+.dm{position:relative}
+.dn{fill:var(--color-fg-neutral-secondary)}
+.do{row-gap:8px;column-gap:8px}
+.dr{position:absolute}
+.ds{width:1px}
+.dt{height:1px}
+.du{margin-top:-1px;margin-right:-1px;margin-bottom:-1px;margin-left:-1px}
+.dv{overflow-x:hidden;overflow-y:hidden}
+.dw{clip:rect(0px, 0px, 0px, 0px)}
+.dx{border-top-width:0px;border-right-width:0px;border-bottom-width:0px;border-left-width:0px}
+.dy{margin-right:32px}
+.dz{background-image:initial;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:transparent}
+.ed{box-shadow:rgba(0, 0, 0, 0.05) 0px 0px 0px 1px inset}
+.ee{border-top-left-radius:50%;border-top-right-radius:50%;border-bottom-right-radius:50%;border-bottom-left-radius:50%}
+.ef{height:32px}
+.eg{width:32px}
+.ei{background-color:var(--color-bg-neutral-secondary)}
+.ej{flex-grow:0;flex-shrink:0;flex-basis:auto}
+.el{flex-grow:1;flex-shrink:1;flex-basis:auto}
+.es{position:fixed}
+.et{top:50%}
+.eu{right:16px}
+.ev{transform:translateY(-50%)}
+.ew{z-index:499}
+.ey{flex-direction:column}
+.ez{align-items:flex-end}
+.fa{padding-top:12px;padding-right:4px;padding-bottom:12px;padding-left:4px}
+.fb{border-top-left-radius:999px;border-top-right-radius:999px;border-bottom-right-radius:999px;border-bottom-left-radius:999px}
+.fc{background-color:color-mix(in srgb, var(--color-bg-neutral-primary) 38%, transparent)}
+.fd{backdrop-filter:blur(10px)}
+.ff{opacity:1}
+.fg{pointer-events:auto}
+.fh{transition-behavior:normal, normal;transition-duration:0.18s, 0.18s;transition-timing-function:ease, ease;transition-delay:0s, 0s;transition-property:opacity, visibility}
+.fj{width:16px}
+.fk{height:2px}
+.fl{border-top-left-radius:1px;border-top-right-radius:1px;border-bottom-right-radius:1px;border-bottom-left-radius:1px}
+.fm{background-color:var(--color-fg-neutral-primary)}
+.fn{transition-behavior:normal, normal;transition-duration:0.15s, 0.15s;transition-timing-function:ease, ease;transition-delay:0s, 0s;transition-property:opacity, background-color}
+.fo{opacity:0.15}
+.fs{background-color:var(--color-bg-neutral-elevated)}
+.ft{box-shadow:0px 0px 4px 0px color-mix(in srgb, var(--color-shadow-elevated) 5%, transparent), 0px 2px 8px 0px color-mix(in srgb, var(--color-shadow-elevated) 15%, transparent)}
+.fu{opacity:0}
+.fw{pointer-events:none}
+.fx{overflow-y:auto}
+.gg{flex-grow:1;flex-shrink:1;flex-basis:0%}
+.gh{min-width:0px}
+.gq{will-change:opacity, transform}
+.gr{width:calc(100% + 0px)}
+.gu{transform:translateY(89px)}
+.gv::before{content:""}
+.gw::before{position:absolute}
+.gx::before{top:-12px;right:-12px;bottom:-12px;left:-12px}
+.gy::before{z-index:-1}
+.gz::before{border-top-left-radius:12px;border-top-right-radius:12px;border-bottom-right-radius:12px;border-bottom-left-radius:12px}
+.ha::before{pointer-events:none}
+.hb::before{background-color:color-mix(in srgb, var(--color-bg-neutral-primary) 90%, transparent)}
+.hc::before{backdrop-filter:blur(10px)}
+.he{justify-content:center}
+.hk{max-width:1192px}
+.hl{width:160px}
+.hm{align-items:flex-start}
+.hn{row-gap:16px;column-gap:16px}
+.ho{height:40px}
+.hp{width:40px}
+.hr{font-weight:500}
+.hs{font-size:16px}
+.ht{letter-spacing:0px}
+.hu{word-break:break-word}
+.ia{margin-top:0px;margin-right:24px;margin-bottom:0px;margin-left:24px}
+.ig{border-top-left-radius:4px;border-top-right-radius:4px;border-bottom-right-radius:4px;border-bottom-left-radius:4px}
+.ij{left:0px}
+.il{bottom:calc(100px + 100vh)}
+.im{width:10px}
+.in{margin-bottom:12px}
+.io{margin-top:32px}
+.ip{flex-wrap:wrap}
+.iq{display:inline-flex}
+.ir{align-items:stretch}
+.is{box-shadow:inset 0 0 0 1px var(--color-border-neutral-primary)}
+.it{display:contents}
+.iu{padding-top:4px;padding-right:8px;padding-bottom:4px;padding-left:12px}
+.iv{border-top-left-radius:99em;border-top-right-radius:0px;border-bottom-right-radius:0px;border-bottom-left-radius:99em}
+.ix{padding-top:4px;padding-right:8px;padding-bottom:4px;padding-left:8px}
+.iy{border-top-left-radius:0px;border-top-right-radius:99em;border-bottom-right-radius:99em;border-bottom-left-radius:0px}
+.iz{border-left-width:;border-left-style:;border-left-color:}
+.jb{overflow-wrap:break-word}
+.jc::after{display:block}
+.jd::after{content:""}
+.je::after{clear:both}
+.jf{line-height:1.23}
+.jg{font-style:normal}
+.jh{font-weight:700}
+.kc{margin-top:0px}
+.kd{justify-content:space-between}
+.ko{row-gap:12px;column-gap:12px}
+.kp{align-items:baseline}
+.kq{width:36px}
+.kr{height:36px}
+.ks{border-top-color:;border-top-style:;border-top-width:;border-right-color:;border-right-style:;border-right-width:;border-bottom-color:;border-bottom-style:;border-bottom-width:;border-left-color:;border-left-style:;border-left-width:;border-image-source:;border-image-slice:;border-image-width:;border-image-outset:;border-image-repeat:}
+.kt{z-index:0}
+.ku{box-shadow:none}
+.kv{border-top-width:1px;border-right-width:1px;border-bottom-width:1px;border-left-width:1px;border-top-style:solid;border-right-style:solid;border-bottom-style:solid;border-left-style:solid;border-top-color:rgba(0, 0, 0, 0.05);border-right-color:rgba(0, 0, 0, 0.05);border-bottom-color:rgba(0, 0, 0, 0.05);border-left-color:rgba(0, 0, 0, 0.05);border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch}
+.kw{margin-bottom:2px}
+.kx{flex-wrap:nowrap}
+.kz{width:12px}
+.la{padding-left:8px}
+.lb{padding-right:8px}
+.mc > *{flex-shrink:0}
+.md{overflow-x:scroll}
+.me::-webkit-scrollbar{display:none}
+.mf{scrollbar-width:none}
+.mh{max-width:74px}
+.mi{flex-direction:row}
+.mj{z-index:2}
+.mk{margin-right:4px}
+.mn{user-select:none}
+.mo{border-top-width:0px;border-right-width:0px;border-bottom-width:0px;border-left-width:0px;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch}
+.mr{outline-color:initial;outline-style:initial;outline-width:0px}
+.ms{user-select:none}
+.nc{cursor:progress}
+.nd{margin-left:32px}
+.ne{margin-left:4px}
+.nf{padding-top:4px;padding-right:0px;padding-bottom:4px;padding-left:0px}
+.np{max-width:100%}
+.nq{padding-top:8px;padding-right:2px;padding-bottom:8px;padding-left:2px}
+.oj{line-height:1.58}
+.ok{letter-spacing:-0.004em}
+.ol{font-family:source-serif-pro, Georgia, Cambria, "Times New Roman", Times, serif}
+.pg{margin-bottom:-0.46em}
+.ph{margin-left:auto}
+.pi{margin-right:auto}
+.pj{max-width:1017px}
+.pp{clear:both}
+.pr{cursor:zoom-in}
+.ps{z-index:auto}
+.pv{max-width:850px}
+.pw{max-width:1219px}
+.px{line-height:1.12}
+.py{letter-spacing:-0.022em}
+.pz{font-weight:600}
+.qu{margin-bottom:-0.28em}
+.ra{text-decoration-line:underline;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+.rb{max-width:596px}
+.rc{margin-bottom:26px}
+.rd{margin-top:6px}
+.re{padding-top:8px;padding-right:12px;padding-bottom:8px;padding-left:16px}
+.rf{padding-top:8px;padding-right:12px;padding-bottom:8px;padding-left:12px}
+.rg{border-top-width:medium;border-top-style:none;border-top-color:currentcolor}
+.rh{margin-bottom:50px}
+.ri{height:52px}
+.rj{max-height:52px}
+.rk{box-sizing:content-box}
+.rl{position:static}
+.rm{z-index:1}
+.rn{max-width:155px}
+.rv{margin-top:0px;margin-right:32px;margin-bottom:0px;margin-left:32px}
+.rw{margin-right:20px}
+.rx{margin-bottom:64px}
+.ry{row-gap:48px;column-gap:48px}
+.rz{white-space-collapse:preserve;text-wrap-mode:wrap}
+.sr{height:48px}
+.ss{width:48px}
+.sv{align-self:flex-end}
+.tn{margin-top:8px}
+.to{margin-top:0px;margin-right:8px;margin-bottom:0px;margin-left:8px}
+.tp{margin-top:16px}
+.tq{animation-duration:1.2s;animation-timing-function:ease-in-out;animation-delay:0s;animation-iteration-count:infinite;animation-direction:normal;animation-fill-mode:none;animation-play-state:running;animation-name:k1;animation-timeline:auto;animation-range-start:normal;animation-range-end:normal}
+.tr{padding-top:32px;padding-right:0px;padding-bottom:32px;padding-left:0px}
+.ts{border-top-left-radius:100%;border-top-right-radius:100%;border-bottom-right-radius:100%;border-bottom-left-radius:100%}
+.tt{margin-top:4px}
+.tu{margin-bottom:8px}
+.tv{height:8px}
+.tw{width:120px}
+.tx{width:80px}
+.ty{margin-top:12px}
+.tz{height:10px}
+.ua{width:90%}
+.ug{height:0px}
+.uj{height:20px}
+.uk{width:220px}
+.ul{width:180px}
+.um{margin-top:24px;margin-right:0px;margin-bottom:24px;margin-left:0px}
+.un{height:148px}
+.uo{margin-bottom:32px}
+.wb{flex-grow:0}
+.wc{height:200px}
+.wd{margin-bottom:16px}
+.we{width:158px}
+.wf{height:16px}
+.wg{width:288px}
+.wh{width:296px}
+.wi{margin-bottom:56px}
+.wj{width:224px}
+.wk{border-bottom-width:;border-bottom-style:;border-bottom-color:}
+.wl{margin-top:72px}
+.wm{padding-top:24px;padding-right:0px;padding-bottom:24px;padding-left:0px}
+.wn{margin-bottom:0px}
+.wo{margin-right:16px}
+.wp{padding-top:24px;padding-right:24px;padding-bottom:24px;padding-left:24px}
+.wq{border-bottom-width:;border-bottom-style:;border-bottom-color:}
+.wr{border-top-width:;border-top-style:;border-top-color:}
+.ws{margin-top:24px}
+.wy{font-family:gt-super, Georgia, Cambria, "Times New Roman", Times, serif}
+.wz{font-size:18px}
+.xa{line-height:21px}
+.xb{letter-spacing:-0.015em}
+.xc{font-feature-settings:"pnum", "lnum"}
+.xd{color:var(--color-fg-neutral-primary-hover)}
+.xe button{border-top-left-radius:0px;border-top-right-radius:0px;border-bottom-right-radius:0px;border-bottom-left-radius:0px}
+.xf button{border-top-right-radius:4px}
+.xg button{border-bottom-right-radius:4px}
+.xl{width:280px}
+.xm{border-top-color:transparent;border-right-color:transparent;border-bottom-color:transparent;border-left-color:transparent}
+.xn input, textarea{padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.xu{background-color:inherit}
+.xv{line-height:inherit}
+.xw{text-align:inherit}
+.xx{padding-top:8px;padding-right:16px;padding-bottom:8px;padding-left:16px}
+.xy{fill:var(--color-fg-neutral-tertiary)}
+.xz{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:}
+.ya{border-top-color:;border-right-color:;border-bottom-color:;border-left-color:}
+.yd:disabled:hover{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:}
+.ye:disabled:hover{border-top-color:;border-right-color:;border-bottom-color:;border-left-color:}
+.yp{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:}
+.yq{border-top-color:;border-right-color:;border-bottom-color:;border-left-color:}
+.yr{border-top-left-radius:2px;border-top-right-radius:2px;border-bottom-right-radius:2px;border-bottom-left-radius:2px}
+.ys{flex-grow:1}
+.yt{margin-right:10px}
+.yu{height:17px}
+.yv{width:17px}
+.yw{top:0px}
+.yx{left:0px}
+.yy{background-color:color-mix(in srgb, var(--color-bg-neutral-primary) 60%, transparent)}
+.yz{z-index:510}
+.za{transition-behavior:normal;transition-duration:0.6s;transition-timing-function:cubic-bezier(0.23, 1, 0.32, 1);transition-delay:0s;transition-property:opacity}
+.zq{top:calc(201px + 100vh)}
+.zr{padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.zs{margin-top:auto}
+.zt{margin-bottom:auto}
+.zu{height:fit-content}
+.zv{background-color:color-mix(in srgb, var(--color-bg-scrim) 81%, transparent)}
+.zw{overflow-x:hidden}
+.aba{bottom:0px}
+.abb{right:0px}
+.abc{z-index:800}
+.abv{border-top-width:2px;border-right-width:2px;border-bottom-width:2px;border-left-width:2px}
+.abw{border-top-color:;border-right-color:;border-bottom-color:;border-left-color:}
+.abx{animation-duration:2s;animation-timing-function:linear;animation-delay:0s;animation-iteration-count:infinite;animation-direction:normal;animation-fill-mode:none;animation-play-state:running;animation-name:k3;animation-timeline:auto;animation-range-start:normal;animation-range-end:normal}
+.aby{top:12px}
+.abz{right:12px}
+.aj:hover:not(:disabled){color:var(--color-fg-neutral-primary)}
+.ak:hover:not(:disabled){fill:var(--color-fg-neutral-primary)}
+.bi:hover{background-image:initial;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:rgb(21, 109, 18)}
+.bj:hover{border-top-color:;border-right-color:;border-bottom-color:;border-left-color:}
+.bk:hover{cursor:pointer}
+.dp:hover{color:var(--color-fg-neutral-primary)}
+.dq:hover{fill:var(--color-fg-neutral-primary)}
+.eh:hover{background-color:rgba(0, 0, 0, 0.1)}
+.iw:hover{background-color:var(--color-bg-neutral-secondary)}
+.ja:hover{border-left-color:transparent}
+.ky:hover{text-decoration-line:underline;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+.mq:hover{fill:var(--color-fg-neutral-secondary-hover)}
+.ng:hover p{color:var(--color-fg-neutral-secondary-hover)}
+.nh:hover{color:var(--color-fg-neutral-secondary-hover)}
+.yb:hover{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:}
+.yc:hover{border-top-color:;border-right-color:;border-bottom-color:;border-left-color:}
+.mp:focus-visible{fill:var(--color-fg-neutral-secondary-hover)}
+.pt:focus{transform:scale(1.01)}
+.mu:active{border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none}
+@media (min-width: 1080px){.av{font-size:14px}
+.aw{line-height:20px}
+.bc{font-size:13px}
+.bd{padding-top:5px;padding-right:12px;padding-bottom:5px;padding-left:12px}
+.dl{display:flex}
+.ek{display:block}
+.hj{margin-top:0px;margin-right:64px;margin-bottom:0px;margin-left:64px}
+.hz{margin-bottom:50px}
+.id{max-width:680px}
+.jy{font-size:42px}
+.jz{margin-bottom:32px}
+.ka{line-height:52px}
+.kb{letter-spacing:-0.011em}
+.km{align-items:center}
+.kn{flex-direction:row}
+.lo{border-top-width:;border-top-style:;border-top-color:}
+.lp{border-bottom-width:;border-bottom-style:;border-bottom-color:}
+.lq{margin-top:32px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.lr{padding-top:3px;padding-right:8px;padding-bottom:3px;padding-left:8px}
+.ma > *{margin-right:24px}
+.nb{margin-top:0px}
+.no{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.pc{font-size:20px}
+.pd{margin-top:2.14em}
+.pe{line-height:32px}
+.pf{letter-spacing:-0.003em}
+.po{margin-top:56px}
+.qq{font-size:24px}
+.qr{margin-top:1.95em}
+.qs{line-height:30px}
+.qt{letter-spacing:-0.016em}
+.qz{margin-top:0.94em}
+.ru{display:inline-block}
+.sa{row-gap:8px;column-gap:8px}
+.sh{margin-bottom:0px}
+.si{margin-right:20px}
+.sw{max-width:500px}
+.tl{line-height:24px}
+.tm{letter-spacing:0px}
+.uf{margin-bottom:52px}
+.ut{padding-top:72px}
+.vg{width:calc(100% + 32px)}
+.vh{margin-left:-16px}
+.vi{margin-right:-16px}
+.vx{padding-left:16px}
+.vy{padding-right:16px}
+.vz{flex-basis:50%}
+.wa{max-width:50%}
+.wx{margin-bottom:12px}
+.xs{border-top-right-radius:0px}
+.xt{border-bottom-right-radius:0px}
+.abo{border-top-left-radius:4px;border-top-right-radius:4px;border-bottom-right-radius:4px;border-bottom-left-radius:4px}
+.abp{width:678px}
+.abu{height:400px}}
+@media (max-width: 1079.98px){.na{margin-top:0px}
+.rt{display:inline-block}}
+@media (max-width: 903.98px){.er{display:none}
+.mz{margin-top:0px}}
+@media (max-width: 727.98px){.mx{margin-top:0px}
+.my{margin-right:0px}
+.rs{display:none}}
+@media (max-width: 551.98px){.l{display:flex}
+.an{font-size:13px}
+.ao{line-height:20px}
+.ax{padding-top:0px;padding-right:8px;padding-bottom:1px;padding-left:8px}
+.ck{display:none}
+.em{min-width:100%}
+.hf{margin-top:0px;margin-right:24px;margin-bottom:0px;margin-left:24px}
+.hv{margin-bottom:2px}
+.ji{font-size:32px}
+.jj{margin-bottom:24px}
+.jk{line-height:38px}
+.jl{letter-spacing:-0.014em}
+.ke{align-items:flex-start}
+.kf{flex-direction:column-reverse}
+.lc{margin-top:24px;margin-right:-24px;margin-bottom:0px;margin-left:-24px}
+.ld{padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.ls > *{margin-right:8px}
+.ml{margin-left:0px}
+.mv{margin-top:0px}
+.mw{margin-right:0px}
+.nk{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.nv{border-top-color:;border-top-style:;border-top-width:;border-right-color:;border-right-style:;border-right-width:;border-bottom-color:;border-bottom-style:;border-bottom-width:;border-left-color:;border-left-style:;border-left-width:;border-image-source:;border-image-slice:;border-image-width:;border-image-outset:;border-image-repeat:}
+.nw{border-top-left-radius:99em;border-top-right-radius:99em;border-bottom-right-radius:99em;border-bottom-left-radius:99em}
+.nx{padding-top:0px;padding-right:16px;padding-bottom:0px;padding-left:12px}
+.ny{height:38px}
+.nz{align-items:center}
+.om{font-size:18px}
+.on{margin-top:1.56em}
+.oo{line-height:28px}
+.op{letter-spacing:-0.003em}
+.pk{margin-top:40px}
+.qa{font-size:20px}
+.qb{margin-top:1.2em}
+.qc{line-height:24px}
+.qd{letter-spacing:0px}
+.qv{margin-top:0.67em}
+.sf{flex-direction:column}
+.sg{row-gap:0px;column-gap:0px}
+.sp{margin-bottom:20px}
+.sq{margin-right:0px}
+.ta{max-width:100%}
+.tb{font-size:24px}
+.tc{line-height:30px}
+.td{letter-spacing:-0.016em}
+.ub{margin-bottom:40px}
+.uh{margin-bottom:30px}
+.up{padding-top:48px}
+.uu{width:calc(100% + 24px)}
+.uv{margin-left:-12px}
+.uw{margin-right:-12px}
+.vj{padding-left:12px}
+.vk{padding-right:12px}
+.vl{flex-basis:100%}
+.wt{margin-bottom:8px}
+.xh{width:280px}
+.xi{row-gap:16px;column-gap:16px}
+.abd{border-top-left-radius:0px;border-top-right-radius:0px;border-bottom-right-radius:0px;border-bottom-left-radius:0px}
+.abe{height:100vh!important}
+.abf{width:100vw!important}
+.abq{height:100%}
+.oa:hover{border-top-color:;border-right-color:;border-bottom-color:;border-left-color:}}
+@media (min-width: 904px) and (max-width: 1079.98px){.r{display:none}
+.at{font-size:14px}
+.au{line-height:20px}
+.ba{font-size:13px}
+.bb{padding-top:5px;padding-right:12px;padding-bottom:5px;padding-left:12px}
+.dk{display:flex}
+.eq{min-width:100%}
+.hi{margin-top:0px;margin-right:64px;margin-bottom:0px;margin-left:64px}
+.hy{margin-bottom:50px}
+.ic{max-width:680px}
+.ju{font-size:42px}
+.jv{margin-bottom:32px}
+.jw{line-height:52px}
+.jx{letter-spacing:-0.011em}
+.kk{align-items:center}
+.kl{flex-direction:row}
+.lk{border-top-width:;border-top-style:;border-top-color:}
+.ll{border-bottom-width:;border-bottom-style:;border-bottom-color:}
+.lm{margin-top:32px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.ln{padding-top:3px;padding-right:8px;padding-bottom:3px;padding-left:8px}
+.ly > *{margin-right:24px}
+.nn{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.oy{font-size:20px}
+.oz{margin-top:2.14em}
+.pa{line-height:32px}
+.pb{letter-spacing:-0.003em}
+.pn{margin-top:56px}
+.qm{font-size:24px}
+.qn{margin-top:1.95em}
+.qo{line-height:30px}
+.qp{letter-spacing:-0.016em}
+.qy{margin-top:0.94em}
+.sb{row-gap:8px;column-gap:8px}
+.sj{margin-bottom:0px}
+.sk{margin-right:20px}
+.sx{max-width:500px}
+.tj{line-height:24px}
+.tk{letter-spacing:0px}
+.ue{margin-bottom:52px}
+.us{padding-top:72px}
+.vd{width:calc(100% + 32px)}
+.ve{margin-left:-16px}
+.vf{margin-right:-16px}
+.vt{padding-left:16px}
+.vu{padding-right:16px}
+.vv{flex-basis:50%}
+.vw{max-width:50%}
+.ww{margin-bottom:12px}
+.xq{border-top-right-radius:0px}
+.xr{border-bottom-right-radius:0px}
+.abm{border-top-left-radius:4px;border-top-right-radius:4px;border-bottom-right-radius:4px;border-bottom-left-radius:4px}
+.abn{width:678px}
+.abt{height:400px}}
+@media (min-width: 728px) and (max-width: 903.98px){.p{display:flex}
+.ar{font-size:13px}
+.as{line-height:20px}
+.az{padding-top:0px;padding-right:8px;padding-bottom:1px;padding-left:8px}
+.da{display:none}
+.ep{min-width:100%}
+.hh{margin-top:0px;margin-right:48px;margin-bottom:0px;margin-left:48px}
+.hx{margin-bottom:50px}
+.ib{max-width:680px}
+.jq{font-size:42px}
+.jr{margin-bottom:32px}
+.js{line-height:52px}
+.jt{letter-spacing:-0.011em}
+.ki{align-items:center}
+.kj{flex-direction:row}
+.lg{border-top-width:;border-top-style:;border-top-color:}
+.lh{border-bottom-width:;border-bottom-style:;border-bottom-color:}
+.li{margin-top:32px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.lj{padding-top:3px;padding-right:8px;padding-bottom:3px;padding-left:8px}
+.lw > *{margin-right:24px}
+.nm{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.ou{font-size:20px}
+.ov{margin-top:2.14em}
+.ow{line-height:32px}
+.ox{letter-spacing:-0.003em}
+.pm{margin-top:56px}
+.qi{font-size:24px}
+.qj{margin-top:1.95em}
+.qk{line-height:30px}
+.ql{letter-spacing:-0.016em}
+.qx{margin-top:0.94em}
+.sc{row-gap:8px;column-gap:8px}
+.sl{margin-bottom:0px}
+.sm{margin-right:20px}
+.sy{max-width:500px}
+.th{line-height:24px}
+.ti{letter-spacing:0px}
+.ud{margin-bottom:52px}
+.ur{padding-top:72px}
+.va{width:calc(100% + 28px)}
+.vb{margin-left:-14px}
+.vc{margin-right:-14px}
+.vp{padding-left:14px}
+.vq{padding-right:14px}
+.vr{flex-basis:50%}
+.vs{max-width:50%}
+.wv{margin-bottom:12px}
+.xo{border-top-right-radius:0px}
+.xp{border-bottom-right-radius:0px}
+.abj{border-top-left-radius:4px;border-top-right-radius:4px;border-bottom-right-radius:4px;border-bottom-left-radius:4px}
+.abk{height:auto}
+.abl{width:600px}
+.abs{height:400px}}
+@media (min-width: 552px) and (max-width: 727.98px){.n{display:flex}
+.ap{font-size:13px}
+.aq{line-height:20px}
+.ay{padding-top:0px;padding-right:8px;padding-bottom:1px;padding-left:8px}
+.cz{display:none}
+.eo{min-width:100%}
+.hg{margin-top:0px;margin-right:24px;margin-bottom:0px;margin-left:24px}
+.hw{margin-bottom:2px}
+.jm{font-size:32px}
+.jn{margin-bottom:24px}
+.jo{line-height:38px}
+.jp{letter-spacing:-0.014em}
+.kg{align-items:flex-start}
+.kh{flex-direction:column-reverse}
+.le{margin-top:24px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.lf{padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.lu > *{margin-right:8px}
+.mm{margin-left:0px}
+.nl{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.oc{border-top-color:;border-top-style:;border-top-width:;border-right-color:;border-right-style:;border-right-width:;border-bottom-color:;border-bottom-style:;border-bottom-width:;border-left-color:;border-left-style:;border-left-width:;border-image-source:;border-image-slice:;border-image-width:;border-image-outset:;border-image-repeat:}
+.od{border-top-left-radius:99em;border-top-right-radius:99em;border-bottom-right-radius:99em;border-bottom-left-radius:99em}
+.oe{padding-top:0px;padding-right:16px;padding-bottom:0px;padding-left:12px}
+.of{height:38px}
+.og{align-items:center}
+.oq{font-size:18px}
+.or{margin-top:1.56em}
+.os{line-height:28px}
+.ot{letter-spacing:-0.003em}
+.pl{margin-top:40px}
+.qe{font-size:20px}
+.qf{margin-top:1.2em}
+.qg{line-height:24px}
+.qh{letter-spacing:0px}
+.qw{margin-top:0.67em}
+.sd{flex-direction:column}
+.se{row-gap:0px;column-gap:0px}
+.sn{margin-bottom:20px}
+.so{margin-right:0px}
+.sz{max-width:100%}
+.te{font-size:24px}
+.tf{line-height:30px}
+.tg{letter-spacing:-0.016em}
+.uc{margin-bottom:40px}
+.ui{margin-bottom:30px}
+.uq{padding-top:48px}
+.ux{width:calc(100% + 24px)}
+.uy{margin-left:-12px}
+.uz{margin-right:-12px}
+.vm{padding-left:12px}
+.vn{padding-right:12px}
+.vo{flex-basis:100%}
+.wu{margin-bottom:8px}
+.xj{width:280px}
+.xk{row-gap:16px;column-gap:16px}
+.abg{border-top-left-radius:0px;border-top-right-radius:0px;border-bottom-right-radius:0px;border-bottom-left-radius:0px}
+.abh{height:100vh!important}
+.abi{width:100vw!important}
+.abr{height:100%}
+.oh:hover{border-top-color:;border-right-color:;border-bottom-color:;border-left-color:}}
+@media print{.ex{display:none}}
+@media (prefers-reduced-motion: reduce){.fi{transition-behavior:normal;transition-duration:0s;transition-timing-function:ease;transition-delay:0s;transition-property:none}}
+@media (prefers-reduced-motion: no-preference){.gs{transition-behavior:normal;transition-duration:200ms;transition-timing-function:ease;transition-delay:0s;transition-property:opacity}
+.pq{transition-behavior:normal;transition-duration:300ms;transition-timing-function:cubic-bezier(0.2, 0, 0.2, 1);transition-delay:0s;transition-property:transform}
+.zy{scroll-behavior:smooth}
+.zz{animation-duration:300ms;animation-timing-function:cubic-bezier(0.25, 0.1, 0.25, 1);animation-delay:0s;animation-iteration-count:1;animation-direction:normal;animation-fill-mode:forwards;animation-play-state:running;animation-name:k2;animation-timeline:auto;animation-range-start:normal;animation-range-end:normal}}
+@media (max-width: 1256px){.gt{display:none}}</style></head><body style="overflow: hidden;"><div class="a b c"><div class="e f g h c" style="transform: translateY(0px);"><div class="i j k am cc cd"><div class="am j ce"><a class="bx x by cf ca ab cb ac ae af ag ah ai aj ak am" aria-label="Homepage" data-testid="headerMediumLogo" href="https://medium.com/?source=---top_nav_layout_nav-------------------------------------------" rel="noopener follow"><div data-snap-placeholder="svg" style="display:inline-block;width:112px;height:25px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></a><div class="cj ck"><div class="am cf cl cm cn j co cp"><div class="cx cy am"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></div><input role="combobox" aria-controls="searchResults" aria-expanded="false" aria-label="search" data-testid="headerSearchInput" tabindex="0" class="cf cq z cr u cs ct cu cv cw" placeholder="Search" value=""></div></div></div><div class="ck cz da"><button type="button" class="am j db dc bp cf af dd de" aria-label="Get the Medium app"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div><span class="z b cr u dj">Get app</span></button></div><div class="ck cz p dk dl"><span><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" data-testid="headerWriteButton" href="https://medium.com/m/signin?operation=register&amp;redirect=https%3A%2F%2Fmedium.com%2Fnew-story&amp;source=---top_nav_layout_nav-----------------------new_post_topnav--------------------" rel="noopener follow"><div class="z b cr u w dm dn am j do dp dq"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div>Write</div></a></span></div><div class="dy ck cz da"><div class="am j"><p class="z b an ao ap aq ar as at au av aw w"><span><button class="z b an ao ax ap aq ay ar as az ba au bb bc aw bd be bf bg bh bi bj bk bl bm bn bo bp bq br bs bt bu bv" data-testid="headerSignUpButton">Sign up</button></span></p><div class="bw e"><p class="z b an ao ap aq ar as at au av aw w"><span><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" data-testid="headerSignInButton" href="https://medium.com/m/signin?operation=login&amp;redirect=https%3A%2F%2Fkarpathy.medium.com%2Fsoftware-2-0-a64152b37c35&amp;source=post_page---top_nav_layout_nav-----------------------global_nav--------------------" rel="noopener follow">Sign in</a></span></p></div></div></div><div class="e"><div><div class="bt" aria-describedby="1" aria-labelledby="1"><div tabindex="-1" class="cq"><button class="cf dz ac am j af dm ea eb ec" aria-label="user options menu" data-testid="headerUserIcon"><div class="e dm"><div data-snap-placeholder="img" style="display:inline-block;width:32px;height:32px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div><div class="ed ee e ef eg dr g cf eh"></div></div></button></div></div></div></div></div></div><div class="am"><div class="ej ck cz da r ek" style="width: 0px;"></div><div class="el cs em eo ep eq" style="width: calc(100% + 0px);"><div class="e"><div tabindex="-1" style="width: 1px; height: 0px; padding: 0px; overflow: hidden; position: fixed; top: 1px; left: 1px;"></div><div><div class="ex" role="dialog" aria-modal="true" tabindex="-1"><div class="yw yx cs al es yy yz af fu fw za" aria-hidden="true" role="presentation"></div></div></div><div tabindex="-1" style="width: 1px; height: 0px; padding: 0px; overflow: hidden; position: fixed; top: 1px; left: 1px;"></div><nav class="er" aria-label="Table of contents"><button type="button" aria-label="Table of contents" aria-haspopup="true" aria-expanded="false" aria-controls="_r_0_" class="es et eu ev ew ex am ey ez do ae fa cf af fb fc fd fe ff fg fh fi"><span aria-hidden="true" class="e fj fk fl ff fm fn fi"></span><span aria-hidden="true" class="e fj fk fl fo de fn fi"></span><span aria-hidden="true" class="e fj fk fl fo de fn fi"></span><span aria-hidden="true" class="e fj fk fl fo de fn fi"></span></button></nav><div class="fw dr gq gr g gs gt ff gu"><div class="am he"><div class="hf hg hh hi hj hk gh cs"><div class="hl e"><div class="fg dm gv gw gx gy gz ha hb hc hd"><div class="am hm ey hn"><a tabindex="0" rel="noopener follow" href="https://karpathy.medium.com/?source=post_page---post_author_sidebar--a64152b37c35-----------------ac9d9a35533e------------------------"><div class="e dm"><div data-snap-placeholder="img" style="display:inline-block;width:40px;height:40px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div><div class="ed ee e ho hp dr g cf hq"></div></div></a><h2 class="z hr hs u ht cv">Andrej Karpathy</h2><p class="z b cr u w"><span class="hu">I like to train deep neural nets on large datasets.</span></p></div></div></div></div></div></div><div class="hv hw hx hy hz e"><div class="am he"><div class="gh cs ia ib ic id"></div></div><article><div class="e"><div class="e"><span class="e"></span><section><div><div class="dr ij zq il im fw"></div><div><div class="am he"><div class="gh cs ia ib ic id"><div class="speechify-ignore in io am j ip do"><div class="iq ir bp is dd"><div class="it"><div class="am"><div class="am" aria-haspopup="dialog" aria-describedby="2" aria-labelledby="2"><a class="bx x by cf ca ab cb iu ae af ag ah ai aj ak am j iv iw" href="https://medium.com/tag/machine-learning?source=post_page---header_tags--a64152b37c35-----------------------------------------" rel="noopener follow"><span class="z b y u cv">Machine Learning</span></a></div></div></div><button aria-label="Follow Machine Learning" class="w dn by cf ca ab cb ix ae af ag bm am j iy iz iw ja dp"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5.96219 1V6M5.96219 11V6M5.96219 6H11M5.96219 6H1" stroke="currentColor" stroke-linecap="round"></path></svg></button></div><div class="iq ir bp is dd"><div class="it"><div class="am"><div class="am" aria-haspopup="dialog" aria-describedby="3" aria-labelledby="3"><a class="bx x by cf ca ab cb iu ae af ag ah ai aj ak am j iv iw" href="https://medium.com/tag/artificial-intelligence?source=post_page---header_tags--a64152b37c35-----------------------------------------" rel="noopener follow"><span class="z b y u cv">Artificial Intelligence</span></a></div></div></div><button aria-label="Follow Artificial Intelligence" class="w dn by cf ca ab cb ix ae af ag bm am j iy iz iw ja dp"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5.96219 1V6M5.96219 11V6M5.96219 6H11M5.96219 6H1" stroke="currentColor" stroke-linecap="round"></path></svg></button></div><div class="iq ir bp is dd"><div class="it"><div class="am"><div class="am" aria-haspopup="dialog" aria-describedby="4" aria-labelledby="4"><a class="bx x by cf ca ab cb iu ae af ag ah ai aj ak am j iv iw" href="https://medium.com/tag/programming?source=post_page---header_tags--a64152b37c35-----------------------------------------" rel="noopener follow"><span class="z b y u cv">Programming</span></a></div></div></div><button aria-label="Follow Programming" class="w dn by cf ca ab cb ix ae af ag bm am j iy iz iw ja dp"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5.96219 1V6M5.96219 11V6M5.96219 6H11M5.96219 6H1" stroke="currentColor" stroke-linecap="round"></path></svg></button></div><div class="iq ir bp is dd"><div class="it"><div class="am"><div class="am" aria-haspopup="dialog" aria-describedby="5" aria-labelledby="5"><a class="bx x by cf ca ab cb iu ae af ag ah ai aj ak am j iv iw" href="https://medium.com/tag/software-development?source=post_page---header_tags--a64152b37c35-----------------------------------------" rel="noopener follow"><span class="z b y u cv">Software Development</span></a></div></div></div><button aria-label="Follow Software Development" class="w dn by cf ca ab cb ix ae af ag bm am j iy iz iw ja dp"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5.96219 1V6M5.96219 11V6M5.96219 6H11M5.96219 6H1" stroke="currentColor" stroke-linecap="round"></path></svg></button></div><div class="iq ir bp is dd"><div class="it"><div class="am"><div class="am" aria-haspopup="dialog" aria-describedby="6" aria-labelledby="6"><a class="bx x by cf ca ab cb iu ae af ag ah ai aj ak am j iv iw" href="https://medium.com/tag/future?source=post_page---header_tags--a64152b37c35-----------------------------------------" rel="noopener follow"><span class="z b y u cv">Future</span></a></div></div></div><button aria-label="Follow Future" class="w dn by cf ca ab cb ix ae af ag bm am j iy iz iw ja dp"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5.96219 1V6M5.96219 11V6M5.96219 6H11M5.96219 6H1" stroke="currentColor" stroke-linecap="round"></path></svg></button></div></div></div></div></div><div class="hu jb jc jd je"><div class="am he"><div class="gh cs ia ib ic id"><div><h1 id="62ab" class="pw-post-title jf ht jg z jh ji jj jk jl jm jn jo jp jq jr js jt ju jv jw jx jy jz ka kb kc cv" data-testid="storyTitle">Software 2.0</h1><div><div class="speechify-ignore am kd"><div class="speechify-ignore cs e"><div class="am ke kf kg kh ki kj kk kl km kn ko"><div class="am j ko"><div class="am kp"><div><div class="bt"><a rel="noopener follow" href="https://karpathy.medium.com/?source=post_page---byline--a64152b37c35-----------------------------------------"><div class="e kq kr ee ks kt"><div class="e dm"><div data-snap-placeholder="img" style="display:inline-block;width:32px;height:32px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div><div class="ku ee e ef eg dr g kv eh"></div></div></div></a></div></div></div><span class="z b cr u cv"><div class="kw am j"><div class="am j kx"><div class="am j"><div><div class="bt"><span class="z b cr u cv"><a class="bx x by bz ca ab cb ac ae af ag ah ai ky" data-testid="authorName" rel="noopener follow" href="https://karpathy.medium.com/?source=post_page---byline--a64152b37c35-----------------------------------------">Andrej Karpathy</a></span></div></div></div><div class="kz bt"></div></div></div></span></div><div class="am j ip"><span class="z b cr u w"><div class="am ce"><span data-testid="storyReadTime">9 min read</span><div class="la lb e" aria-hidden="true"><span class="e" aria-hidden="true"><span class="z b cr u w">·</span></span></div><span data-testid="storyPublishDate">Nov 12, 2017</span></div></span></div></div><div class="am kd lc ld le lf lg lh li lj lk ll lm ln lo lp lq lr"><div class="ck cz p dk dl j"><div class="am j"><div class="mh e"><div class="am j mi mj"><div class="pw-multi-vote-icon dm mk ml mm mn"><span><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" data-testid="headerClapButton" href="https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2F_%2Fvote%2Fp%2Fa64152b37c35&amp;operation=register&amp;redirect=https%3A%2F%2Fkarpathy.medium.com%2Fsoftware-2-0-a64152b37c35&amp;user=Andrej+Karpathy&amp;userId=ac9d9a35533e&amp;source=---header_actions--a64152b37c35---------------------clap_footer--------------------" rel="noopener follow"><div><div class="bt" aria-describedby="7" aria-labelledby="7"><div tabindex="-1" class="cq"><div class="mo af dn mp mq mr ac ms mt mu mn" role="presentation"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></div></div></div></div></a></span></div><div class="pw-multi-vote-count e mv mw mx my mz na nb"><p class="z b y u w"><span class="nc">--</span></p></div></div></div><div class="nd dy e"><div><div class="bt" aria-describedby="8" aria-labelledby="8"><div tabindex="-1" class="cq"><button class="af mo ff nf am j dn mq ng" aria-label="responses"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div><p class="z b y u w"><span class="pw-responses-count ne kc">194</span></p></button></div></div></div></div><div class="am j w"><div><div class="bt" aria-describedby="9" aria-labelledby="9"><div tabindex="-1" class="cq"><span><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2F_%2Frepost%2Fp%2Fa64152b37c35&amp;operation=register&amp;redirect=https%3A%2F%2Fkarpathy.medium.com%2Fsoftware-2-0-a64152b37c35&amp;user=Andrej+Karpathy&amp;userId=ac9d9a35533e&amp;source=---header_actions--a64152b37c35---------------------repost_header--------------------" rel="noopener follow"><span class="mo dz bx af ff ms am j mt mu mn ac nh ni" aria-disabled="false" aria-label="Repost"><div class="dg df e dm"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></div></span></a></span></div></div></div><div class="ne e"><p class="z b y u bx">--</p></div></div></div></div><div class="am j ls lt lu lv lw lx ly lz ma mb mc md me mf mg"><div class="ck cz"><div><div class="bt" aria-describedby="10" aria-labelledby="10"><div tabindex="-1" class="cq"><span><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" data-testid="headerBookmarkButton" href="https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2F_%2Fbookmark%2Fp%2Fa64152b37c35&amp;operation=register&amp;redirect=https%3A%2F%2Fkarpathy.medium.com%2Fsoftware-2-0-a64152b37c35&amp;source=---header_actions--a64152b37c35---------------------bookmark_footer--------------------" rel="noopener follow"><span class=""><div data-snap-placeholder="svg" style="display:inline-block;width:25px;height:25px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></span></a></span></div></div></div></div><div class="bs iq hm"><div class="e ce"><div class="am he"><div class="nk nl nm nn no np gh cs"><div class="am"><span><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2Fplans%3Fdimension%3Dpost_audio_button%26postId%3Da64152b37c35&amp;operation=register&amp;redirect=https%3A%2F%2Fkarpathy.medium.com%2Fsoftware-2-0-a64152b37c35&amp;source=---header_actions--a64152b37c35---------------------post_audio_button--------------------" rel="noopener follow"><div><div class="bt" aria-describedby="11" aria-labelledby="11"><div tabindex="-1" class="cq"><button aria-label="Listen" data-testid="audioPlayButton" class="bx dn by bz ca ab cb nq ae af ag bm nr ns nt nu nv nw nx ny l nz oa ob oc od oe of n og oh oi"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></button></div></div></div></a></span></div></div></div></div></div><div class="bt" aria-describedby="postFooterSocialMenu" aria-labelledby="postFooterSocialMenu" aria-haspopup="dialog"><div><div class="bt" aria-describedby="12" aria-labelledby="12"><div tabindex="-1" class="cq"><button aria-controls="postFooterSocialMenu" aria-expanded="false" aria-label="Share Post" data-testid="headerSocialShareButton" class="bx dn by bz ca ab cb nq ae af ag bm nr ns nt nu nv nw nx ny l nz oa ob oc od oe of n og oh oi"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></button></div></div></div></div></div></div></div></div></div></div><p id="de15" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">I sometimes see people refer to neural networks as just “another tool in your machine learning toolbox”. They have some pros and cons, they work here or there, and sometimes you can use them to win Kaggle competitions. Unfortunately, this interpretation completely misses the forest for the trees. Neural networks are not just another classifier, they represent the beginning of a fundamental shift in how we develop software. They are Software 2.0.</p><p id="2814" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">The “classical stack” of <strong class="ol jh">Software 1.0</strong> is what we’re all familiar with — it is written in languages such as Python, C++, etc. It consists of explicit instructions to the computer written by a programmer. By writing each line of code, the programmer identifies a specific point in program space with some desirable behavior.</p><figure class="pk pl pm pn po pp ph pi paragraph-image"><div role="button" tabindex="0" class="pq pr dm ps cs pt"><span class="dr ds dt ac du dv dw dd dx speechify-ignore">Press enter or click to view image in full size</span><div class="ph pi pj"><div data-snap-placeholder="picture" style="display:inline-block;width:680px;height:18px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></div></div></figure><p id="b05f" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">In contrast, <strong class="ol jh">Software 2.0</strong> is written in much more abstract, human unfriendly language, such as the weights of a neural network. No human is involved in writing this code because there are a lot of weights (typical networks might have millions), and coding directly in weights is kind of hard (I tried).</p><figure class="pk pl pm pn po pp ph pi paragraph-image"><div role="button" tabindex="0" class="pq pr dm ps cs pt"><span class="dr ds dt ac du dv dw dd dx speechify-ignore">Press enter or click to view image in full size</span><div class="ph pi pv"><div data-snap-placeholder="picture" style="display:inline-block;width:680px;height:18px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></div></div></figure><p id="eabb" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">Instead, our approach is to specify some goal on the behavior of a desirable program (e.g., “satisfy a dataset of input output pairs of examples”, or “win a game of Go”), write a rough skeleton of the code (i.e. a neural net architecture) that identifies a subset of program space to search, and use the computational resources at our disposal to search this space for a program that works. In the case of neural networks, we restrict the search to a continuous subset of the program space where the search process can be made (somewhat surprisingly) efficient with backpropagation and stochastic gradient descent.</p><figure class="pk pl pm pn po pp ph pi paragraph-image"><div role="button" tabindex="0" class="pq pr dm ps cs pt"><span class="dr ds dt ac du dv dw dd dx speechify-ignore">Press enter or click to view image in full size</span><div class="ph pi pw"><div data-snap-placeholder="picture" style="display:inline-block;width:680px;height:18px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></div></div></figure><p id="26d1" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">To make the analogy explicit, in Software 1.0, human-engineered source code (e.g. some .cpp files) is compiled into a binary that does useful work. In Software 2.0 most often the source code comprises 1) the dataset that defines the desirable behavior and 2) the neural net architecture that gives the rough skeleton of the code, but with many details (the weights) to be filled in. The process of training the neural network compiles the dataset into the binary — the final neural network. In most practical applications today, the neural net architectures and the training systems are increasingly standardized into a commodity, so most of the active “software development” takes the form of curating, growing, massaging and cleaning labeled datasets. This is fundamentally altering the programming paradigm by which we iterate on our software, as the teams split in two: the 2.0 programmers (data labelers) edit and grow the datasets, while a few 1.0 programmers maintain and iterate on the surrounding training code infrastructure, analytics, visualizations and labeling interfaces.</p><p id="d3ca" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">It turns out that a large portion of real-world problems have the property that it is significantly easier to collect the data (or more generally, identify a desirable behavior) than to explicitly write the program. Because of this and many other benefits of Software 2.0 programs that I will go into below, we are witnessing a massive transition across the industry where of a lot of 1.0 code is being ported into 2.0 code. Software (1.0) is eating the world, and now AI (Software 2.0) is eating software.</p><h2 id="196c" class="px py jg z pz qa qb qc qd qe qf qg qh qi qj qk ql qm qn qo qp qq qr qs qt qu cv">Ongoing transition</h2><p id="f0ad" class="pw-post-body-paragraph oj ok jg ol b om qv oo op oq qw os ot ou qx ow ox oy qy pa pb pc qz pe pf pg hu cv">Let’s briefly examine some concrete examples of this ongoing transition. In each of these areas we’ve seen improvements over the last few years when we give up on trying to address a complex problem by writing explicit code and instead transition the code into the 2.0 stack.</p><p id="ebff" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">Visual Recognition</strong> used to consist of engineered features with a bit of machine learning sprinkled on top at the end (e.g., an SVM). Since then, we discovered much more powerful visual features by obtaining large datasets (e.g. ImageNet) and searching in the space of Convolutional Neural Network architectures. More recently, we don’t even trust ourselves to hand-code the architectures and we’ve begun <a class="bx ra" href="https://arxiv.org/abs/1703.01041" rel="noopener ugc nofollow" target="_blank">searching over those</a> as well.</p><p id="6785" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">Speech recognition</strong> used to involve a lot of preprocessing, gaussian mixture models and hidden markov models, but <a class="bx ra" href="https://github.com/syhw/wer_are_we" rel="noopener ugc nofollow" target="_blank">today </a>consist almost entirely of neural net stuff. A very related, often cited humorous quote attributed to Fred Jelinek from 1985 reads “Every time I fire a linguist, the performance of our speech recognition system goes up”.</p><p id="b24e" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">Speech synthesis</strong> has historically been approached with various stitching mechanisms, but today the state of the art models are large ConvNets (e.g. <a class="bx ra" href="https://deepmind.com/blog/wavenet-launches-google-assistant/" rel="noopener ugc nofollow" target="_blank">WaveNet</a>) that produce raw audio signal outputs.</p><p id="a4e3" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">Machine Translation</strong> has usually been approaches with phrase-based statistical techniques, but neural networks are quickly becoming dominant. My favorite architectures are trained in the <a class="bx ra" href="https://arxiv.org/abs/1611.04558" rel="noopener ugc nofollow" target="_blank">multilingual setting</a>, where a single model translates from any source language to any target language, and in weakly supervised (or entirely <a class="bx ra" href="https://arxiv.org/abs/1710.11041" rel="noopener ugc nofollow" target="_blank">unsupervised</a>) settings.</p><p id="386f" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">Games. </strong>Explicitly hand-coded Go playing programs have been developed for a long while, but <a class="bx ra" href="https://deepmind.com/blog/alphago-zero-learning-scratch/" rel="noopener ugc nofollow" target="_blank">AlphaGo Zero</a> (a ConvNet that looks at the raw state of the board and plays a move) has now become by far the strongest player of the game. I expect we’re going to see very similar results in other areas, e.g. <a class="bx ra" href="https://blog.openai.com/more-on-dota-2/" rel="noopener ugc nofollow">DOTA 2</a>, or <a class="bx ra" href="https://deepmind.com/blog/deepmind-and-blizzard-open-starcraft-ii-ai-research-environment/" rel="noopener ugc nofollow" target="_blank">StarCraft</a>.</p><p id="089d" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">Databases</strong>. More traditional systems outside of Artificial Intelligence are also seeing early hints of a transition. For instance, “<a class="bx ra" href="https://arxiv.org/abs/1712.01208" rel="noopener ugc nofollow" target="_blank">The Case for Learned Index Structures</a>” replaces core components of a data management system with a neural network, outperforming cache-optimized B-Trees by up to 70% in speed while saving an order-of-magnitude in memory.</p><p id="6c91" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">You’ll notice that many of my links above involve work done at Google. This is because Google is currently at the forefront of re-writing large chunks of itself into Software 2.0 code. “<a class="bx ra" href="https://arxiv.org/abs/1706.05137" rel="noopener ugc nofollow" target="_blank">One model to rule them all</a>” provides an early sketch of what this might look like, where the statistical strength of the individual domains is amalgamated into one consistent understanding of the world.</p><h2 id="0fac" class="px py jg z pz qa qb qc qd qe qf qg qh qi qj qk ql qm qn qo qp qq qr qs qt qu cv">The benefits of Software 2.0</h2><p id="d6c4" class="pw-post-body-paragraph oj ok jg ol b om qv oo op oq qw os ot ou qx ow ox oy qy pa pb pc qz pe pf pg hu cv">Why should we prefer to port complex programs into Software 2.0? Clearly, one easy answer is that they work better in practice. However, there are a lot of other convenient reasons to prefer this stack. Let’s take a look at some of the benefits of Software 2.0 (think: a ConvNet) compared to Software 1.0 (think: a production-level C++ code base). Software 2.0 is:</p><div class="wp wq wr ws am j ey"><div class="wt wu wv ww wx e bv"><h2 class="wy b wz xa xb xc xd">Get Andrej Karpathy’s stories in&nbsp;your&nbsp;inbox</h2></div><div class="wd e bv"><p class="z b cr u w">Join Medium for free to get updates from&nbsp;this&nbsp;writer.</p></div><div class="xh sf xi xj sd xk am"><span class="z b cr u cv"><div class="xl am ey"><div class="am xl br bq ig rf xm ei ff xn xo xp xq xr xs xt"><input class="xu ca by cb xv xw dx mr cw gg cs" placeholder="Enter your email" type="text" value=""></div></div></span><div class="ck cz sv ej"><div class="xe xf xg"><button class="z b cr u dj xx xy xz ya yb yc bk bl bm yd ye bp bq br bs bt bu bv">Subscribe</button></div></div></div><div class="tp e"><label class="am j"><div class="yt yu yv am ir ej dm"><span class="j yp yq bq br yr bs af am ys he"><svg width="11" height="11" viewBox="0 0 11 11" xmlns="http://www.w3.org/2000/svg" class="xy"><path d="M0 6.313L3.704 10.018L4.608 10.922L5.268 9.827L10.564 1.032L8.85 0L3.554 8.795L5.117 8.604L1.413 4.899L0 6.313Z"></path></svg></span></div><div class="e"><p class="z b cr u cv">Remember me for faster sign in</p></div></label></div></div><p id="4486" class="pw-post-body-paragraph oj ok jg ol b om oo op oq os ot ou ow ox oy pa pb pc pe pf ws pg hu cv"><strong class="ol jh">Computationally homogeneous</strong>. A typical neural network is, to the first order, made up of a sandwich of only two operations: matrix multiplication and thresholding at zero (ReLU). Compare that with the instruction set of classical software, which is significantly more heterogenous and complex. Because you only have to provide Software 1.0 implementation for a small number of the core computational primitives (e.g. matrix multiply), it is much easier to make various correctness/performance guarantees.</p><p id="061b" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">Simple to bake into silicon</strong>. As a corollary, since the instruction set of a neural network is relatively small, it is significantly easier to implement these networks much closer to silicon, e.g. with custom <a class="bx ra" href="https://www.forbes.com/sites/moorinsights/2017/08/04/will-asic-chips-become-the-next-big-thing-in-ai/#7d6d7c0511d9" rel="noopener ugc nofollow" target="_blank">ASICs</a>, <a class="bx ra" href="https://spectrum.ieee.org/semiconductors/design/neuromorphic-chips-are-destined-for-deep-learningor-obscurity" rel="noopener ugc nofollow" target="_blank">neuromorphic chips</a>, and so on. The world will change when low-powered intelligence becomes pervasive around us. E.g., small, inexpensive chips could come with a pretrained ConvNet, a speech recognizer, and a WaveNet speech synthesis network all integrated in a small protobrain that you can attach to stuff.</p><p id="b1d9" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">Constant running time</strong>. Every iteration of a typical neural net forward pass takes exactly the same amount of FLOPS. There is zero variability based on the different execution paths your code could take through some sprawling C++ code base. Of course, you could have dynamic compute graphs but the execution flow is normally still significantly constrained. This way we are also almost guaranteed to never find ourselves in unintended infinite loops.</p><p id="c82b" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">Constant memory use</strong>. Related to the above, there is no dynamically allocated memory anywhere so there is also little possibility of swapping to disk, or memory leaks that you have to hunt down in your code.</p><p id="3424" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">It is highly portable</strong>. A sequence of matrix multiplies is significantly easier to run on arbitrary computational configurations compared to classical binaries or scripts.</p><p id="febb" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">It is very agile</strong>. If you had a C++ code and someone wanted you to make it twice as fast (at cost of performance if needed), it would be highly non-trivial to tune the system for the new spec. However, in Software 2.0 we can take our network, remove half of the channels, retrain, and there — it runs exactly at twice the speed and works a bit worse. It’s magic. Conversely, if you happen to get more data/compute, you can immediately make your program work better just by adding more channels and retraining.</p><p id="075d" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">Modules can meld into an optimal whole</strong>. Our software is often decomposed into modules that communicate through public functions, APIs, or endpoints. However, if two Software 2.0 modules that were originally trained separately interact, we can easily backpropagate through the whole. Think about how amazing it could be if your web browser could automatically re-design the low-level system instructions 10 stacks down to achieve a higher efficiency in loading web pages. Or if the computer vision library (e.g. OpenCV) you imported could be auto-tuned on your specific data. With 2.0, this is the default behavior.</p><p id="c472" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv"><strong class="ol jh">It is better than you</strong>. Finally, and most importantly, a neural network is a better piece of code than anything you or I can come up with in a large fraction of valuable verticals, which currently at the very least involve anything to do with images/video and sound/speech.</p><h2 id="375e" class="px py jg z pz qa qb qc qd qe qf qg qh qi qj qk ql qm qn qo qp qq qr qs qt qu cv">The limitations of Software 2.0</h2><p id="8f48" class="pw-post-body-paragraph oj ok jg ol b om qv oo op oq qw os ot ou qx ow ox oy qy pa pb pc qz pe pf pg hu cv">The 2.0 stack also has some of its own disadvantages. At the end of the optimization we’re left with large networks that work well, but it’s very hard to tell how. Across many applications areas, we’ll be left with a choice of using a 90% accurate model we understand, or 99% accurate model we don’t.</p><p id="de95" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">The 2.0 stack can <a class="bx ra" href="https://motherboard.vice.com/en_us/article/nz7798/weve-already-taught-artificial-intelligence-to-be-racist-sexist" rel="noopener ugc nofollow" target="_blank">fail in unintuitive and embarrassing ways</a> ,or worse, they can “silently fail”, e.g., by silently adopting biases in their training data, which are very difficult to properly analyze and examine when their sizes are easily in the millions in most cases.</p><p id="7188" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">Finally, we’re still discovering some of the peculiar properties of this stack. For instance, the existence of <a class="bx ra" href="https://blog.openai.com/adversarial-example-research/" rel="noopener ugc nofollow" target="_blank">adversarial examples</a> and <a class="bx ra" href="https://github.com/yenchenlin/awesome-adversarial-machine-learning" rel="noopener ugc nofollow" target="_blank">attacks</a> highlights the unintuitive nature of this stack.</p><h2 id="385e" class="px py jg z pz qa qb qc qd qe qf qg qh qi qj qk ql qm qn qo qp qq qr qs qt qu cv">Programming in the 2.0 stack</h2><p id="3494" class="pw-post-body-paragraph oj ok jg ol b om qv oo op oq qw os ot ou qx ow ox oy qy pa pb pc qz pe pf pg hu cv">Software 1.0 is code we write. Software 2.0 is code written by the optimization based on an evaluation criterion (such as “classify this training data correctly”). It is likely that any setting where the program is not obvious but one can repeatedly evaluate the performance of it (e.g. — did you classify some images correctly? do you win games of Go?) will be subject to this transition, because the optimization can find much better code than what a human can write.</p><figure class="pk pl pm pn po pp ph pi paragraph-image"><div class="ph pi rb"><div data-snap-placeholder="picture" style="display:inline-block;width:596px;height:18px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></div></figure><p id="8133" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">The lens through which we view trends matters. If you recognize Software 2.0 as a new and emerging programming paradigm instead of simply treating neural networks as a pretty good classifier in the class of machine learning techniques, the extrapolations become more obvious, and it’s clear that there is much more work to do.</p><p id="df86" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">In particular, we’ve built up a vast amount of tooling that assists humans in writing 1.0 code, such as powerful IDEs with features like syntax highlighting, debuggers, profilers, go to def, git integration, etc. In the 2.0 stack, the programming is done by accumulating, massaging and cleaning datasets. For example, when the network fails in some hard or rare cases, we do not fix those predictions by writing code, but by including more labeled examples of those cases. Who is going to develop the first Software 2.0 IDEs, which help with all of the workflows in accumulating, visualizing, cleaning, labeling, and sourcing datasets? Perhaps the IDE bubbles up images that the network suspects are mislabeled based on the per-example loss, or assists in labeling by seeding labels with predictions, or suggests useful examples to label based on the uncertainty of the network’s predictions.</p><p id="c0b6" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">Similarly, Github is a very successful home for Software 1.0 code. Is there space for a Software 2.0 Github? In this case repositories are datasets and commits are made up of additions and edits of the labels.</p><p id="5414" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">Traditional package managers and related serving infrastructure like pip, conda, docker, etc. help us more easily deploy and compose binaries. How do we effectively deploy, share, import and work with Software 2.0 binaries? What is the conda equivalent for neural networks?</p><p id="9cc6" class="pw-post-body-paragraph oj ok jg ol b om on oo op oq or os ot ou ov ow ox oy oz pa pb pc pd pe pf pg hu cv">In the short term, Software 2.0 will become increasingly prevalent in any domain where repeated evaluation is possible and cheap, and where the algorithm itself is difficult to design explicitly. There are many exciting opportunities to consider the entire software development ecosystem and how it can be adapted to this new programming paradigm. And in the long run, the future of this paradigm is bright because it is increasingly clear that when we develop AGI, it will certainly be written in Software 2.0.</p></div></div></div></div></section></div></div></article></div><div class="am he"><div class="gh cs ia ib ic id"><div class="rc rd am ip do"><div class="am"><div class="iq ir bp is dd"><div class="it"><div class="am"><div class="am" aria-haspopup="dialog" aria-describedby="14" aria-labelledby="14"><a class="bx x by cf ca ab cb re ae af ag ah ai aj ak am j iv iw" href="https://medium.com/tag/machine-learning?source=post_page---footer_tags--a64152b37c35-----------------------------------------" rel="noopener follow"><span class="z b cr u cv">Machine Learning</span></a></div></div></div><button aria-label="Follow Machine Learning" class="w dn by cf ca ab cb rf ae af ag bm am j iy iz iw ja dp"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5.96219 1V6M5.96219 11V6M5.96219 6H11M5.96219 6H1" stroke="currentColor" stroke-linecap="round"></path></svg></button></div></div><div class="am"><div class="iq ir bp is dd"><div class="it"><div class="am"><div class="am" aria-haspopup="dialog" aria-describedby="15" aria-labelledby="15"><a class="bx x by cf ca ab cb re ae af ag ah ai aj ak am j iv iw" href="https://medium.com/tag/artificial-intelligence?source=post_page---footer_tags--a64152b37c35-----------------------------------------" rel="noopener follow"><span class="z b cr u cv">Artificial Intelligence</span></a></div></div></div><button aria-label="Follow Artificial Intelligence" class="w dn by cf ca ab cb rf ae af ag bm am j iy iz iw ja dp"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5.96219 1V6M5.96219 11V6M5.96219 6H11M5.96219 6H1" stroke="currentColor" stroke-linecap="round"></path></svg></button></div></div><div class="am"><div class="iq ir bp is dd"><div class="it"><div class="am"><div class="am" aria-haspopup="dialog" aria-describedby="16" aria-labelledby="16"><a class="bx x by cf ca ab cb re ae af ag ah ai aj ak am j iv iw" href="https://medium.com/tag/programming?source=post_page---footer_tags--a64152b37c35-----------------------------------------" rel="noopener follow"><span class="z b cr u cv">Programming</span></a></div></div></div><button aria-label="Follow Programming" class="w dn by cf ca ab cb rf ae af ag bm am j iy iz iw ja dp"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5.96219 1V6M5.96219 11V6M5.96219 6H11M5.96219 6H1" stroke="currentColor" stroke-linecap="round"></path></svg></button></div></div><div class="am"><div class="iq ir bp is dd"><div class="it"><div class="am"><div class="am" aria-haspopup="dialog" aria-describedby="17" aria-labelledby="17"><a class="bx x by cf ca ab cb re ae af ag ah ai aj ak am j iv iw" href="https://medium.com/tag/software-development?source=post_page---footer_tags--a64152b37c35-----------------------------------------" rel="noopener follow"><span class="z b cr u cv">Software Development</span></a></div></div></div><button aria-label="Follow Software Development" class="w dn by cf ca ab cb rf ae af ag bm am j iy iz iw ja dp"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5.96219 1V6M5.96219 11V6M5.96219 6H11M5.96219 6H1" stroke="currentColor" stroke-linecap="round"></path></svg></button></div></div><div class="am"><div class="iq ir bp is dd"><div class="it"><div class="am"><div class="am" aria-haspopup="dialog" aria-describedby="18" aria-labelledby="18"><a class="bx x by cf ca ab cb re ae af ag ah ai aj ak am j iv iw" href="https://medium.com/tag/future?source=post_page---footer_tags--a64152b37c35-----------------------------------------" rel="noopener follow"><span class="z b cr u cv">Future</span></a></div></div></div><button aria-label="Follow Future" class="w dn by cf ca ab cb rf ae af ag bm am j iy iz iw ja dp"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5.96219 1V6M5.96219 11V6M5.96219 6H11M5.96219 6H1" stroke="currentColor" stroke-linecap="round"></path></svg></button></div></div></div></div></div><div class="e"></div><footer class="rg rh ri rj rk am j rl rm"><div class="e ce"><div class="am he"><div class="gh cs ia ib ic id"><div class="am kd ex"><div class="am j mi"><div class="rn e"><span class="e ck rs er rt ru"><div class="am j mi mj"><div class="pw-multi-vote-icon dm mk ml mm mn"><span><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" data-testid="footerClapButton" href="https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2F_%2Fvote%2Fp%2Fa64152b37c35&amp;operation=register&amp;redirect=https%3A%2F%2Fkarpathy.medium.com%2Fsoftware-2-0-a64152b37c35&amp;user=Andrej+Karpathy&amp;userId=ac9d9a35533e&amp;source=---footer_actions--a64152b37c35---------------------clap_footer--------------------" rel="noopener follow"><div><div class="bt" aria-describedby="20" aria-labelledby="20"><div tabindex="-1" class="cq"><div class="mo af dn mp mq mr ac ms mt mu mn" role="presentation"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></div></div></div></div></a></span></div><div class="pw-multi-vote-count e mv mw mx my mz na nb"><p class="z b y u cv"><span class="nc">--</span></p></div></div></span></div><div class="rv am"><div><div class="bt" aria-describedby="21" aria-labelledby="21"><div tabindex="-1" class="cq"><button class="af mo ff nf am j dn mq ng" aria-label="responses"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div><p class="z b cr u w"><span class="pw-responses-count ne kc">194</span></p></button></div></div></div></div><div class="am j w"><div><div class="bt" aria-describedby="22" aria-labelledby="22"><div tabindex="-1" class="cq"><span><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2F_%2Frepost%2Fp%2Fa64152b37c35&amp;operation=register&amp;redirect=https%3A%2F%2Fkarpathy.medium.com%2Fsoftware-2-0-a64152b37c35&amp;user=Andrej+Karpathy&amp;userId=ac9d9a35533e&amp;source=---footer_actions--a64152b37c35---------------------repost_footer--------------------" rel="noopener follow"><span class="mo dz bx af ff ms am j mt mu mn ac nh ni" aria-disabled="false" aria-label="Repost"><div class="dg df e dm"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></div></span></a></span></div></div></div><div class="ne e"><p class="z b y u bx">--</p></div></div></div><div class="am j"><div class="ck"><div class="rw e ej"><div><div class="bt" aria-describedby="23" aria-labelledby="23"><div tabindex="-1" class="cq"><span><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" data-testid="footerBookmarkButton" href="https://medium.com/m/signin?actionUrl=https%3A%2F%2Fmedium.com%2F_%2Fbookmark%2Fp%2Fa64152b37c35&amp;operation=register&amp;redirect=https%3A%2F%2Fkarpathy.medium.com%2Fsoftware-2-0-a64152b37c35&amp;source=---footer_actions--a64152b37c35---------------------bookmark_footer--------------------" rel="noopener follow"><span class=""><div data-snap-placeholder="svg" style="display:inline-block;width:25px;height:25px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></span></a></span></div></div></div></div></div><div class="rw e ej"><div class="bt" aria-describedby="postFooterSocialMenu" aria-labelledby="postFooterSocialMenu" aria-haspopup="dialog"><div><div class="bt" aria-describedby="24" aria-labelledby="24"><div tabindex="-1" class="cq"><button aria-controls="postFooterSocialMenu" aria-expanded="false" aria-label="Share Post" data-testid="footerSocialShareButton" class="bx dn by bz ca ab cb nq ae af ag bm nr ns nt nu"><div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></button></div></div></div></div></div></div></div></div></div></div></footer><div class="rx e"><div class="am he"><div class="gh cs ia ib ic id"><div class="am ey ry"><div class="am kn sa kl sb kj sc sd se sf sg"><div class="sh si sj sk sl sm sn so sp sq am kd"><div class="ck cz"><a tabindex="0" rel="noopener follow" href="https://karpathy.medium.com/?source=post_page---post_author_info--a64152b37c35-----------------------------------------"><div class="e dm"><div data-snap-placeholder="img" style="display:inline-block;width:48px;height:48px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div><div class="ed ee e sr ss dr g cf hq"></div></div></a></div></div><div class="gh am ey el"><div class="sw sx sy sz ta e"><a class="bx x by ca ab cb ac ae af ag ah ai aj ak" rel="noopener follow" href="https://karpathy.medium.com/?source=post_page---post_author_info--a64152b37c35-----------------------------------------"><h2 class="z hr tb tc td te tf tg ou th ti oy tj tk pc tl tm cv">Written by Andrej Karpathy</h2></a><div class="tn am kp"><div class="e ej"><span class="pw-follower-count z b cr u w"><a class="bx x by bz ca ab cb ac ae af ag ah ai ky" rel="noopener follow" href="https://karpathy.medium.com/followers?source=post_page---post_author_info--a64152b37c35-----------------------------------------">61K followers</a></span></div><div class="z b cr u w am rz"><span class="to e" aria-hidden="true"><span class="z b cr u w">·</span></span><a class="bx x by bz ca ab cb ac ae af ag ah ai ky" rel="noopener follow" href="https://karpathy.medium.com/following?source=post_page---post_author_info--a64152b37c35-----------------------------------------">186 following</a></div></div><div class="tp e"><p class="z b cr u cv"><span class="hu">I like to train deep neural nets on large datasets.</span></p></div></div></div><div class="ck cz"></div></div></div></div></div></div><div><div class="am he"><div class="gh cs ia ib ic id"><div class="tq tr"><div class="am mi"><div class="ts ef eg e ei"></div><div class="v tt e"><div class="tu tv tw e ei"></div><div class="tv tx e ei"></div></div></div><div class="ty e"><div class="tu tz cs e ei"></div><div class="tu tz cs e ei"></div><div class="tz ua e ei"></div></div></div></div></div></div><div><div class="ub uc ud ue uf e"><div class="ug cs k uh ui hx hy hz"></div><div class="am he"><div class="gh cs ia ib ic id"><div class="tu uj uk e ei"></div><div class="uj ul e ei"></div><div class="um am hn"><div class="un cm e ei"></div><div class="un cm e ei"></div></div><div class="uo uj ss e ei"></div></div></div></div></div><div class="up uq ur us ut e"><div><div class="am he"><div class="gh cs ia ib ic id"><div class="ir am mi ip uu uv uw ux uy uz va vb vc vd ve vf vg vh vi"><div class="vj vk vl ta vm vn vo sz vp vq vr vs vt vu vv vw vx vy vz wa wb"><div class="uo wc cs e ei"></div><div class="wd ef we e ei"></div><div class="tu wf wg e ei"></div><div class="tu wf wh e ei"></div><div class="wi wf wj e ei"></div></div><div class="vj vk vl ta vm vn vo sz vp vq vr vs vt vu vv vw vx vy vz wa wb"><div class="uo wc cs e ei"></div><div class="wd ef we e ei"></div><div class="tu wf wg e ei"></div><div class="tu wf wh e ei"></div><div class="wi wf wj e ei"></div></div></div></div></div></div><div><div class="am he"><div class="gh cs ia ib ic id"><div class="ir am mi ip uu uv uw ux uy uz va vb vc vd ve vf vg vh vi"><div class="vj vk vl ta vm vn vo sz vp vq vr vs vt vu vv vw vx vy vz wa wb"><div class="uo wc cs e ei"></div><div class="wd ef we e ei"></div><div class="tu wf wg e ei"></div><div class="tu wf wh e ei"></div><div class="wi wf wj e ei"></div></div><div class="vj vk vl ta vm vn vo sz vp vq vr vs vt vu vv vw vx vy vz wa wb"><div class="uo wc cs e ei"></div><div class="wd ef we e ei"></div><div class="tu wf wg e ei"></div><div class="tu wf wh e ei"></div><div class="wi wf wj e ei"></div></div></div></div></div></div><div class="ck cz da"><div class="ug cs wk wl"></div><div class="am he"><div class="gh cs ia ib ic id"><div class="wm am mi ip"><div class="wn wo e"><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://help.medium.com/hc/en-us?source=post_page-----a64152b37c35-----------------------------------------" rel="noopener follow"><p class="z b y u w">Help</p></a></div><div class="wn wo e"><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://status.medium.com/?source=post_page-----a64152b37c35-----------------------------------------" rel="noopener follow"><p class="z b y u w">Status</p></a></div><div class="wn wo e"><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://medium.com/about?autoplay=1&amp;source=post_page-----a64152b37c35-----------------------------------------" rel="noopener follow"><p class="z b y u w">About</p></a></div><div class="wn wo e"><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://medium.com/jobs-at-medium/work-at-medium-959d1a85284e?source=post_page-----a64152b37c35-----------------------------------------" rel="noopener follow"><p class="z b y u w">Careers</p></a></div><div class="wn wo e"><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="mailto:pressinquiries@medium.com" rel="noopener follow"><p class="z b y u w">Press</p></a></div><div class="wn wo e"><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://blog.medium.com/?source=post_page-----a64152b37c35-----------------------------------------" rel="noopener follow"><p class="z b y u w">Blog</p></a></div><div class="wn wo e"><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://medium.com/store" rel="noopener follow" target="_blank"><p class="z b y u w">Store</p></a></div><div class="wn wo e"><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://policy.medium.com/medium-privacy-policy-f03bf92035c9?source=post_page-----a64152b37c35-----------------------------------------" rel="noopener follow"><p class="z b y u w">Privacy</p></a></div><div class="wn wo e"><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://policy.medium.com/medium-rules-30e5502c4eb4?source=post_page-----a64152b37c35-----------------------------------------" rel="noopener follow"><p class="z b y u w">Rules</p></a></div><div class="wn wo e"><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://policy.medium.com/medium-terms-of-service-9db0094a1e0f?source=post_page-----a64152b37c35-----------------------------------------" rel="noopener follow"><p class="z b y u w">Terms</p></a></div><div class="wn e"><a class="bx x by bz ca ab cb ac ae af ag ah ai aj ak" href="https://speechify.com/medium?source=post_page-----a64152b37c35-----------------------------------------" rel="noopener follow"><p class="z b y u w">Text to speech</p></a></div></div></div></div></div></div></div></div></div></div><div><div tabindex="0" style="width: 1px; height: 0px; padding: 0px; overflow: hidden; position: fixed; top: 1px; left: 1px;"></div><div><div role="dialog" aria-modal="true" class="am j he zv zw fx zx zy zz es g aba ij abb abc" tabindex="-1"><div class="zr zs zt zu" style="opacity: 1; transform: scale(1);"><div class="pw-susi-modal abd abe abf abg abh abi abj abk abl abm abn abo abp ft e dm fs"><div class="abq abr abs abt abu am j he"><div class="hp ho ee abv br abw abx"></div></div><div class="e dr aby abz"><button class="bx x by bz ca ab cb ac ae af ag ah ai aj ak am" data-testid="close-button" aria-label="close"><svg class="dn w dq dp" width="29" height="29"><path d="M20.13 8.11l-5.61 5.61-5.609-5.61-.801.801 5.61 5.61-5.61 5.61.801.8 5.61-5.609 5.61 5.61.8-.801-5.609-5.61 5.61-5.61" fill-rule="evenodd"></path></svg></button></div></div></div></div></div><div tabindex="0" style="width: 1px; height: 0px; padding: 0px; overflow: hidden; position: fixed; top: 1px; left: 1px;"></div></div></body></html>

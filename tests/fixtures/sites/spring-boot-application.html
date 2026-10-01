@@ -1,0 +1,1452 @@
+<!doctype html>
+<!-- 离线快照：https://docs.spring.io/spring-boot/reference/features/spring-application.html ，抓取于 2026-10-01，由 scripts/compat/snapshot.mjs 精简（去脚本/iframe/图片，仅保留命中样式），仅用于本扩展兼容性回归测试；内容版权归原站点所有 -->
+<html lang="en"><head> <meta charset="utf-8"> <meta name="viewport" content="width=device-width,initial-scale=1"> <title>SpringApplication :: Spring Boot</title>                  <style>:root{--color-white:#fff;--color-gray-10:#c1c1c1;--color-gray-30:#8e8e8e;--color-gray-50:grey;--rem-base:18;--body-font-size:1.0625em;--body-font-size--desktop:1.125em;--body-line-height:1.15;--body-font-family:"Open Sans",sans;--body-font-weight-bold:600;--font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";--font-family-special:"Metropolis","Helvetica","Arial",sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";--monospace-font-family:"SFMono-Regular","Consolas","Liberation Mono","Menlo",monospace;--body-background-color:#fff;--panel-border-color:#eaedf0;--color-accent-1:#ebf2f2;--color-accent-3:#6db33f;--body-font-color:#191e1e;--body-font-light-color:#273030;--body-font-dark-color:#141818;--link-font-color:#1565c0;--link_hover-font-color:#104d92;--code-link-font-color:var(--link-font-color);--scrollbar-thumb-color:silver;--scrollbar_hover-thumb-color:silver;--selected-background-color:#191e1e;--caption-font-style:italic;--admonition-label-font-weight:var(--body-font-weight-bold);--admonition-font-color:#f0f0f0;--note-color:#015785;--note-on-color:var(--admonition-font-color);--tip-color:#3e6b1f;--tip-on-color:var(--admonition-font-color);--warning-color:#bd7400;--warning-on-color:var(--admonition-font-color);--admonition-font-weight:500;--highlight-font-color:#24292e;--highlight-keyword-font-color:#d73a49;--highlight-comment-font-color:#6a737d;--highlight-string-font-color:#032f62;--highlight-meta-font-color:#6a737d;--highlight-constant-font-color:#032f62;--highlight-type-font-color:#6f42c1;--tabs-background-color:var(--body-background-color);--tabs-font-color:var(--body-font-color);--tabs-selected-background-color:var(--selected-background-color);--tabs-selected-font-color:var(--body-background-color);--tabs-hover-font-color:var(--hover-link-font-color);--tabs-hover-background:var(--color-accent-1);--toc-font-color:var(--body-font-color);--toc-active-font-color:var(--body-background-color);--toc-heading-font-color:var(--doc-font-color);--toc-line-height:1.2;--codetools-button-filter:none;--codetools-hover-background-color:var(--color-accent-1);--social-icon-color:#fff;--social-icon-circle:#191e1e;--navbar-font-color:var(--body-font-color);--navbar-menu-font-color:var(--body-font-color);--nav-border-color:var(--color-gray-10);--nav-line-height:1.35;--toolbar-muted-color:var(--color-gray-30);--breadcrumb-font-color:var(--body-font-light-color);--breadcrumb-hover-font-color:var(--link_hover-font-color);--doc-font-color:var(--body-font-color);--doc-font-size:inherit;--doc-font-size--desktop:calc(17/var(--rem-base)*1rem);--doc-line-height:1.6;--heading-font-color:var(--body-font-dark-color);--heading-font-weight:600;--alt-heading-font-weight:600;--caption-font-color:var(--body-font-light-color);--caption-font-weight:400;--code-font-color:var(--body-font-color);--pre-border-color:var(--panel-border-color);--pre-annotation-font-color:var(--color-gray-50);--footer-line-height:var(--doc-line-height);--footer-background:var(--body-background-color);--footer-font-color:var(--color-gray-30);--footer-link-font-color:#111;--navbar-height:calc(83/var(--rem-base)*1rem);--toolbar-height:calc(45/var(--rem-base)*1rem);--body-top:var(--navbar-height);--body-min-height:calc(100vh - var(--body-top));--nav-height:calc(var(--body-min-height) - var(--toolbar-height));--nav-height--desktop:var(--body-min-height);--nav-panel-menu-height:100%;--nav-width:calc(300/var(--rem-base)*1rem);--toc-top:calc(var(--body-top));--toc-height:calc(100vh - var(--toc-top) - 2.5rem);--toc-width--widescreen:calc(216/var(--rem-base)*1rem);--doc-max-width:calc(720/var(--rem-base)*1rem);--doc-max-width--desktop:calc(1200/var(--rem-base)*1rem);--z-index-nav:1;--z-index-navbar:100}
+*, ::after, ::before{box-sizing:inherit}
+html{box-sizing:border-box;font-size:var(--body-font-size);height:100%;scroll-behavior:smooth}
+@media screen and (min-width: 1024px){html{font-size:var(--body-font-size--desktop)}}
+body{overflow-wrap:anywhere;background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;color:var(--body-font-color);font-family:var(--body-font-family);line-height:var(--body-line-height);margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px;tab-size:4}
+a{text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+a:hover{text-decoration-line:underline;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+code, kbd, pre{font-family:var(--monospace-font-family)}
+b, dt, strong, th{font-weight:var(--body-font-weight-bold)}
+button{cursor:pointer;font-family:inherit;font-size:1em;line-height:var(--body-line-height);margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+table{overflow-wrap:normal;border-collapse:collapse}
+::placeholder{opacity:0.5}
+@media (pointer: fine){@supports (scrollbar-width:thin){html{scrollbar-color:var(--scrollbar-thumb-color) var(--scrollbar-track-color)}
+body *{scrollbar-color:var(--scrollbar-thumb-color) transparent;scrollbar-width:thin}}
+html::-webkit-scrollbar{background-color:var(--scrollbar-track-color);height:12px;width:12px}
+body ::-webkit-scrollbar{height:6px;width:6px}
+::-webkit-scrollbar-thumb{background-clip:padding-box;background-color:var(--scrollbar-thumb-color);border-top-width:3px;border-right-width:3px;border-bottom-width:3px;border-left-width:3px;border-top-style:solid;border-right-style:solid;border-bottom-style:solid;border-left-style:solid;border-top-color:transparent;border-right-color:transparent;border-bottom-color:transparent;border-left-color:transparent;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;border-top-left-radius:12px;border-top-right-radius:12px;border-bottom-right-radius:12px;border-bottom-left-radius:12px}
+body ::-webkit-scrollbar-thumb{border-top-left-radius:6px;border-top-right-radius:6px;border-bottom-right-radius:6px;border-bottom-left-radius:6px;border-top-width:1.75px;border-right-width:1.75px;border-bottom-width:1.75px;border-left-width:1.75px}
+::-webkit-scrollbar-thumb:hover{background-color:var(--scrollbar_hover-thumb-color)}}
+@media screen and (min-width: 1024px){.body{display:flex}}
+.nav-container{font-size:calc(17/var(--rem-base)*1rem);left:0px;position:fixed;top:var(--navbar-height);visibility:hidden;width:100%;z-index:var(--z-index-nav)}
+.nav{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;border-top-width:0px;border-right-width:0px;border-bottom-width:0px;border-left-width:0px;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;height:var(--nav-height);position:relative;top:var(--toolbar-height)}
+.nav .panels{display:flex;flex-direction:column;height:inherit}
+.nav-panel-menu{height:var(--nav-panel-menu-height);overflow-y:auto}
+.nav-menu{line-height:var(--nav-line-height);min-height:100%;padding-right:2px;position:relative}
+.nav-menu a{color:inherit}
+.nav-list{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px;padding-top:0px;padding-right:1rem;padding-bottom:0px;padding-left:5px}
+.nav-menu > .nav-list .nav-list{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0.5rem;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.nav-item{list-style-position:initial;list-style-image:initial;list-style-type:none;position:relative}
+.nav-item-toggle ~ .nav-list{padding-bottom:0.125rem}
+.nav-item-toggle{background-image:none;background-position-x:50%;background-position-y:center;background-size:50% auto;background-repeat:no-repeat;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:transparent;border-top-width:medium;border-right-width:medium;border-bottom-width:medium;border-left-width:medium;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;height:calc(var(--nav-line-height)*1.1em);left:2px;line-height:inherit;margin-top:6px;outline-color:initial;outline-style:none;outline-width:initial;position:absolute;transform:rotate(-90deg);width:calc(var(--nav-line-height)*1.1em)}
+.dark-theme .nav-item.is-active > .nav-item-toggle, .nav-item.is-active > .nav-item-toggle{transform:rotate(0deg)}
+.nav-link, .nav-text{border-top-left-radius:3px;border-top-right-radius:3px;border-bottom-right-radius:3px;border-bottom-left-radius:3px;display:block;margin-left:10px;padding-top:0.4rem;padding-right:0.5rem;padding-bottom:0.4rem;padding-left:12px}
+.nav-item-toggle + .nav-link, .nav-item-toggle + .nav-text{margin-left:0px;padding-left:22px}
+.nav-item-toggle:hover + .nav-link, .nav-item-toggle:hover + .nav-text{background-image:initial;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:rgb(235, 242, 242)}
+.nav-link:hover{color:rgb(0, 102, 204)}
+.nav-link:hover, .nav-text:hover{background-image:initial;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:rgb(235, 242, 242);text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+.is-current-page > .nav-link, .is-current-page > .nav-link:hover, .is-current-page > .nav-text, .is-current-page > .nav-text:hover{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;color:var(--toc-active-font-color);font-weight:var(--body-font-weight-bold)}
+.nav-panel-menu .context{background-color:var(--body-background-color);margin-bottom:0.5rem;padding-top:0.8rem;padding-right:1rem;padding-bottom:0px;padding-left:1rem;position:sticky;top:0px;z-index:99}
+.nav-panel-menu .context .title{display:block;font-weight:700;height:24px;line-height:24px;margin-bottom:4px;overflow-x:hidden;overflow-y:hidden;padding-right:30px;text-overflow:ellipsis;white-space-collapse:collapse;text-wrap-mode:nowrap}
+button.browse-version{background-color:var(--body-background-color);border-top-width:medium;border-right-width:medium;border-bottom-width:medium;border-left-width:medium;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;border-top-left-radius:4px;border-top-right-radius:4px;border-bottom-right-radius:4px;border-bottom-left-radius:4px;height:calc(var(--nav-line-height)*1.5em);line-height:inherit;margin-left:calc(var(--nav-line-height)*-1em);outline-color:initial;outline-style:none;outline-width:initial;padding-top:4px;position:absolute;right:12px;top:15px;width:36px}
+button.browse-version svg{fill:var(--body-font-color)}
+button.browse-version:hover{background-color:rgb(235, 242, 242)}
+.nav-panel-menu .context .version{align-items:center;background-color:rgb(128, 234, 110);border-top-left-radius:4px;border-top-right-radius:4px;border-bottom-right-radius:4px;border-bottom-left-radius:4px;color:rgb(17, 17, 17);display:inline-block;font-size:calc(12/var(--rem-base)*1rem);font-weight:600;justify-content:center;padding-top:0.25em;padding-right:0.75em;padding-bottom:0.25em;padding-left:0.75em;text-transform:uppercase;white-space-collapse:collapse;text-wrap-mode:nowrap}
+.nav-menu .search{border-top-width:0px;border-right-width:0px;border-bottom-width:0px;border-left-width:0px;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;display:none;height:40px;margin-top:1rem;margin-right:-1rem;margin-bottom:0px;margin-left:-1rem;position:relative}
+.nav-resize{border-left-width:;border-left-style:;border-left-color:;bottom:0px;cursor:ew-resize;position:absolute;right:-2px;top:0px;user-select:none;width:4px;z-index:9999}
+.nav-collapse{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;border-top-width:;border-top-style:;border-top-color:;display:none;height:40px;margin-right:2px;position:relative}
+.nav-collapse button{background-color:transparent;border-top-width:medium;border-right-width:medium;border-bottom-width:medium;border-left-width:medium;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;line-height:inherit;margin-left:calc(var(--nav-line-height)*-1em);margin-top:2px;outline-color:initial;outline-style:none;outline-width:initial;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;position:absolute;right:8px;top:2px}
+.nav-collapse button, .nav-collapse button span{height:calc(var(--nav-line-height)*1.5em);width:calc(var(--nav-line-height)*1.5em)}
+.nav-collapse button span{background-image:none;background-position-x:50%;background-position-y:center;background-size:50% auto;background-repeat:no-repeat;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:transparent;display:block;transform:rotate(90deg)}
+@media screen and (min-width: 769px){.nav-container{width:var(--nav-width)}
+.nav{box-shadow:.5px 0 3px var(--nav-border-color)}}
+@media screen and (min-width: 1024px){.nav-container{flex-grow:0;flex-shrink:0;flex-basis:auto;font-size:calc(14/var(--rem-base)*1rem);position:static;top:0px;visibility:visible}
+.nav-collapse, .nav-menu .search{display:block}
+.nav{border-right-width:;border-right-style:;border-right-color:;box-shadow:none;height:var(--nav-height--desktop);position:sticky;top:var(--navbar-height)}}
+@media screen and (max-width: 1023.5px){aside.sidebar{display:none}
+main > .content{overflow-x:auto}}
+@media screen and (min-width: 1024px){main{flex-grow:1;flex-shrink:1;flex-basis:auto;min-width:0px}
+main > .content{display:flex}
+aside.sidebar{flex-basis:var(--toc-width--widescreen);order:1}}
+@media screen and (min-width: 1216px){aside.sidebar{flex-basis:var(--toc-width--widescreen)}}
+.flex{display:flex}
+footer #social-icons{flex-shrink:0;width:160px}
+footer #social-icons a{height:40px;margin-left:15px}
+footer #social-icons svg{width:40px}
+footer #social-icons a:focus svg .cls-1, footer #social-icons a:hover svg .cls-1{fill:var(--color-accent-3)}
+#youtube-icon .cls-1{fill:var(--social-icon-circle)}
+#youtube-icon .cls-2{fill:var(--social-icon-color)}
+.sidebar-links{display:none;padding-top:10px;padding-right:0px;padding-bottom:10px;padding-left:0px}
+.sidebar-links a{color:var(--body-font-dark-color);cursor:pointer;display:block;font-size:14px;height:30px;line-height:30px;margin-top:8px;margin-right:0px;margin-bottom:8px;margin-left:0px;padding-left:32px;position:relative}
+.sidebar-links a:hover{color:var(--link-font-color);text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+.sidebar-links a:hover svg{fill:var(--link-font-color)}
+.sidebar-links a svg{height:24px;left:0px;position:absolute;top:3px;width:24px}
+@media screen and (min-width: 1024px){.sidebar-links{display:block}}
+.sidebar .content{padding-top:1rem;padding-right:0px;padding-bottom:1rem;padding-left:0px;position:sticky;top:var(--toc-top)}
+.toc-menu{color:var(--toc-font-color)}
+.toc .toc-menu{margin-right:0.75rem}
+.toc .toc-menu h3{color:var(--toc-heading-font-color);display:flex;flex-direction:column;font-size:calc(16/var(--rem-base)*1rem);font-weight:700;justify-content:flex-end;line-height:1.3;margin-top:0px;margin-right:-0.5px;margin-bottom:0px;margin-left:-0.5px;padding-top:20px;padding-right:0px;padding-bottom:10px;padding-left:0px}
+.toc .toc-menu ul{font-size:calc(15/var(--rem-base)*1rem);line-height:var(--toc-line-height);list-style-position:initial;list-style-image:initial;list-style-type:none;margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px;max-height:var(--toc-height);overflow-y:auto;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;scrollbar-width:none}
+.toc .toc-menu ul::-webkit-scrollbar{height:0px;width:0px}
+@media screen and (min-width: 1024px){.toc .toc-menu h3{font-size:calc(14/var(--rem-base)*1rem)}
+.toc .toc-menu ul{font-size:calc(12/var(--rem-base)*1rem)}}
+.toc .toc-menu li{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.toc .toc-menu a{border-left-width:;border-left-style:;border-left-color:;color:inherit;display:inline-block;outline-color:initial;outline-style:none;outline-width:initial;padding-top:0.25rem;padding-right:0px;padding-bottom:0.25rem;padding-left:0.5rem;text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+.toc .toc-menu a:hover{color:var(--link-font-color)}
+.toc .toc-menu a:focus{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:}
+.doc{color:var(--doc-font-color);font-size:var(--doc-font-size);hyphens:auto;line-height:var(--doc-line-height);margin-top:;margin-right:;margin-bottom:;margin-left:;max-width:var(--doc-max-width);padding-top:0px;padding-right:1rem;padding-bottom:4rem;padding-left:1rem}
+@media screen and (min-width: 1024px){.doc{flex-grow:1;flex-shrink:1;flex-basis:auto;font-size:var(--doc-font-size--desktop);margin-top:;margin-right:;margin-bottom:;margin-left:;max-width:var(--doc-max-width--desktop);min-width:0px}}
+.doc h1, .doc h2, .doc h3, .doc h4, .doc h5, .doc h6{color:var(--heading-font-color);font-weight:var(--heading-font-weight);hyphens:none;line-height:1.3;margin-top:1rem;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.doc > h1.page:first-child{font-size:calc(36/var(--rem-base)*1rem);margin-top:1.5rem;margin-right:0px;margin-bottom:1.5rem;margin-left:0px}
+@media screen and (min-width: 769px){.doc > h1.page:first-child{margin-top:2.5rem}}
+#preamble + .sect1, .doc .sect1 + .sect1{margin-top:2rem}
+.doc h2:not(.discrete){margin-left:-1rem;margin-right:-1rem;padding-top:0.4rem;padding-right:1rem;padding-bottom:0.1rem;padding-left:1rem}
+.doc h3:not(.discrete), .doc h4:not(.discrete){font-weight:var(--alt-heading-font-weight)}
+.doc dl, .doc p{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.doc a{color:var(--link-font-color)}
+.doc a:hover{color:var(--link_hover-font-color)}
+.doc i.fa{font-style:normal;hyphens:none}
+.doc .colist > table code, .doc p code, .doc thead code{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;border-top-left-radius:0.25em;border-top-right-radius:0.25em;border-bottom-right-radius:0.25em;border-bottom-left-radius:0.25em;color:var(--code-font-color);font-size:0.95em;padding-top:0.125em;padding-right:0.25em;padding-bottom:0.125em;padding-left:0.25em}
+.doc code, .doc pre{hyphens:none}
+.doc pre{font-size:calc(16/var(--rem-base)*1rem);line-height:1.5;margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.doc .stretch{width:100%}
+.doc .dlist, .doc .exampleblock, .doc .hdlist, .doc .imageblock, .doc .listingblock, .doc .literalblock, .doc .olist, .doc .paragraph, .doc .partintro, .doc .quoteblock, .doc .sidebarblock, .doc .tabs, .doc .ulist, .doc .verseblock, .doc .videoblock, .doc details, .doc hr{margin-top:1rem;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.doc .tablecontainer, .doc .tablecontainer + *, .doc :not(.tablecontainer) > table.tableblock, .doc :not(.tablecontainer) > table.tableblock + *, .doc > table.tableblock, .doc > table.tableblock + *{margin-top:1.5rem}
+.doc table.tableblock{font-size:calc(15/var(--rem-base)*1rem)}
+.doc table.tableblock td, .doc table.tableblock th{padding-top:0.5rem;padding-right:0.5rem;padding-bottom:0.5rem;padding-left:0.5rem}
+.doc table.tableblock, .doc table.tableblock > * > tr > *{border-top-color:;border-top-style:;border-top-width:;border-right-color:;border-right-style:;border-right-width:;border-bottom-color:;border-bottom-style:;border-bottom-width:;border-left-color:;border-left-style:;border-left-width:;border-image-source:;border-image-slice:;border-image-width:;border-image-outset:;border-image-repeat:}
+.doc table.grid-all > * > tr > *{border-top-width:1px;border-right-width:1px;border-bottom-width:1px;border-left-width:1px}
+.doc table.grid-all > thead th, .doc table.grid-rows > thead th{border-bottom-width:2.5px}
+.doc table.frame-all{border-top-width:1px;border-right-width:1px;border-bottom-width:1px;border-left-width:1px}
+.doc .halign-left{text-align:left}
+.doc .valign-top{vertical-align:top}
+.doc .admonitionblock{margin-top:1.4rem;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.doc .admonitionblock p, .doc .admonitionblock td.content{font-size:calc(16/var(--rem-base)*1rem)}
+.doc .admonitionblock td.content > .title + *, .doc .admonitionblock td.content > :not(.title):first-child{margin-top:0px}
+.doc .admonitionblock td.content pre{font-size:calc(15/var(--rem-base)*1rem)}
+.doc .admonitionblock > table{position:relative;table-layout:fixed;width:100%}
+.doc .admonitionblock td.content{overflow-wrap:anywhere;background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;padding-top:1rem;padding-right:1rem;padding-bottom:0.75rem;padding-left:1rem;width:100%}
+.doc .admonitionblock td.icon{font-size:calc(15/var(--rem-base)*1rem);padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.doc .admonitionblock td.icon i{border-top-left-radius:0.45rem;border-top-right-radius:0.45rem;border-bottom-right-radius:0.45rem;border-bottom-left-radius:0.45rem;filter:none;height:1.25rem;padding-top:0px;padding-right:0.5rem;padding-bottom:0px;padding-left:0.5rem;vertical-align:initial;width:fit-content}
+.doc .admonitionblock td.icon i::after{font-weight:var(--admonition-label-font-weight)}
+.doc .admonitionblock td.icon i.icon-note{background-color:var(--note-color);color:var(--note-on-color)}
+.doc .admonitionblock td.icon i.icon-tip{background-color:var(--tip-color);color:var(--tip-on-color)}
+.doc .admonitionblock td.icon i.icon-warning{background-color:var(--warning-color);color:var(--warning-on-color)}
+.doc ol, .doc ul{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:2rem}
+.doc ol.arabic{list-style-type:decimal}
+.doc .dlist .dlist, .doc .dlist .olist, .doc .dlist .ulist, .doc .olist .dlist, .doc .olist .olist, .doc .olist .ulist, .doc .olist li + li, .doc .ulist .dlist, .doc .ulist .olist, .doc .ulist .ulist, .doc .ulist li + li{margin-top:0.5rem}
+.doc .admonitionblock .listingblock, .doc .olist .listingblock, .doc .ulist .listingblock{padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.doc .admonitionblock .title, .doc .exampleblock .title, .doc .imageblock .title, .doc .listingblock .title, .doc .literalblock .title, .doc .openblock .title, .doc .videoblock .title, .doc table.tableblock caption{color:var(--caption-font-color);font-size:calc(16/var(--rem-base)*1rem);font-style:var(--caption-font-style);font-weight:var(--caption-font-weight);hyphens:none;letter-spacing:0.01em;padding-bottom:0.075rem}
+.doc table.tableblock caption{text-align:left}
+.doc .listingblock pre:not(.highlight), .doc .literalblock pre, .doc pre.highlight > code{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;box-shadow:inset 0 0 1.75px var(--pre-border-color);display:block;overflow-x:auto;padding-top:0.875em;padding-right:0.875em;padding-bottom:0.875em;padding-left:0.875em}
+.doc .listingblock > .content{position:relative}
+.doc .source-toolbox{color:var(--pre-annotation-font-color);font-size:calc(13/var(--rem-base)*1rem);top:0.25rem;user-select:none;visibility:hidden;white-space-collapse:collapse;text-wrap-mode:nowrap}
+.doc .listingblock:hover .source-toolbox{visibility:visible}
+.doc .source-toolbox > :not(:last-child)::after{content:"|";letter-spacing:0px;padding-top:0px;padding-right:1ch;padding-bottom:0px;padding-left:1ch}
+.doc .source-toolbox .copy-button{background-image:none;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:initial;border-top-width:medium;border-right-width:medium;border-bottom-width:medium;border-left-width:medium;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;color:inherit;font-size:inherit;height:1em;line-height:inherit;outline-color:initial;outline-style:none;outline-width:initial;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;width:1em}
+.doc .source-toolbox .copy-toast{color:var(--color-white);transition-behavior:normal;transition-duration:0.5s;transition-timing-function:ease;transition-delay:0.5s;transition-property:opacity}
+.doc .source-toolbox .copy-toast::after{border-left-width:;border-left-style:;border-left-color:}
+.breadcrumbs{color:var(--doc-font-color);flex-grow:1;flex-shrink:1;flex-basis:0%;font-family:var(--font-family);font-size:calc(16/var(--rem-base)*1rem);line-height:var(--nav-line-height);padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.breadcrumbs-container{background-color:var(--body-background-color);border-bottom-width:;border-bottom-style:;border-bottom-color:;padding-top:20px;padding-right:0px;padding-bottom:20px;padding-left:0px}
+@media screen and (min-width: 1024px){.breadcrumbs{max-width:var(--doc-max-width--desktop);min-width:0px}
+.breadcrumbs-container{margin-top:0px;margin-right:-1rem;margin-bottom:0px;margin-left:-1rem;padding-top:20px;padding-right:20px;padding-bottom:20px;padding-left:20px;position:sticky;top:83px;z-index:99}}
+.breadcrumbs ul{display:flex;flex-wrap:wrap;list-style-position:initial;list-style-image:initial;list-style-type:none;margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.breadcrumbs li{display:inline;margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.breadcrumbs li::after{content:"/";padding-top:0px;padding-right:0.5rem;padding-bottom:0px;padding-left:0.5rem}
+.breadcrumbs li:last-of-type::after{content:none}
+#copy-url{background-image:none;background-repeat:no-repeat;background-size:contain;content:"";display:inline-block;filter:var(--codetools-button-filter);height:20px;margin-right:5px;vertical-align:middle;width:20px}
+#copy-url::after{content:none}
+#copy-url:hover{cursor:pointer}
+nav.pagination{border-top-width:;border-top-style:;border-top-color:;display:flex;line-height:1;margin-top:2rem;margin-right:-1rem;margin-bottom:-1rem;margin-left:-1rem;padding-top:0.75rem;padding-right:1rem;padding-bottom:0px;padding-left:1rem}
+nav.pagination span{display:flex;flex-grow:1;flex-shrink:1;flex-basis:50%;flex-direction:column}
+nav.pagination .prev{padding-right:0.5rem}
+nav.pagination .next{margin-left:auto;padding-left:0.5rem;text-align:right}
+nav.pagination span::before{color:var(--toolbar-muted-color);font-size:0.75em;padding-bottom:0.1em}
+nav.pagination .prev::before{content:"Prev"}
+nav.pagination .next::before{content:"Next"}
+nav.pagination a{font-weight:var(--body-font-weight-bold);line-height:1.3;position:relative}
+nav.pagination a::after, nav.pagination a::before{color:var(--toolbar-muted-color);font-size:1.5em;font-weight:400;line-height:0.75;position:absolute;top:0px;width:1rem}
+nav.pagination .prev a::before{content:"‹";transform:translateX(-100%)}
+nav.pagination .next a::after{content:"›"}
+@media screen and (max-width: 768px){nav.pagination{padding-top:1rem;padding-right:2rem;padding-bottom:1rem;padding-left:2rem}}
+body{padding-top:var(--navbar-height)}
+.navbar{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;border-bottom-width:;border-bottom-style:;border-bottom-color:;color:var(--navbar-font-color);font-size:calc(16/var(--rem-base)*1rem);height:var(--navbar-height);padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;position:fixed;top:0px;width:100%;z-index:var(--z-index-navbar)}
+.navbar a{text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+.navbar-brand{display:flex;padding-top:0px;padding-right:1rem;padding-bottom:0px;padding-left:1rem}
+@media screen and (min-width: 1024px){.navbar-brand{padding-top:1rem;padding-right:1rem;padding-bottom:1rem;padding-left:1rem}}
+.navbar-brand .navbar-item:first-child, .navbar-brand .navbar-item:first-child a{align-self:center;color:var(--navbar-font-color);font-size:calc(22/var(--rem-base)*1rem);padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.navbar-item, .navbar-link{-webkit-font-smoothing:antialiased;color:var(--navbar-menu-font-color);display:block;font-family:var(--font-family-special);font-size:15.2px;font-weight:500;line-height:var(--doc-line-height);padding-top:0px;padding-right:1rem;padding-bottom:0px;padding-left:1rem;transition-behavior:normal;transition-duration:0.2s;transition-timing-function:ease;transition-delay:0s;transition-property:color}
+.navbar-item{font-family:var(--font-family);font-size:16px;font-weight:500}
+.navbar-item:hover, .navbar-link:hover{text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+.navbar-item.has-dropdown{padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.navbar-link{padding-right:1.95em}
+@media screen and (max-width: 1023.5px){.navbar-brand{height:inherit}
+.navbar-brand .navbar-item{align-items:center;display:flex}
+.navbar-menu{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;box-shadow:rgba(10, 10, 10, 0.1) 0px 8px 16px;max-height:var(--body-min-height);overflow-y:auto;padding-top:0.5rem;padding-right:0px;padding-bottom:0.5rem;padding-left:0px}
+.navbar-menu:not(.is-active){display:none}
+.navbar-menu .navbar-link:hover, .navbar-menu a.navbar-item:hover{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:}}
+@media screen and (min-width: 1024px){.navbar, .navbar-end, .navbar-menu{display:flex}
+.navbar-menu{flex-grow:1;flex-shrink:1;flex-basis:auto}
+.navbar-end{margin-left:auto}
+.navbar-item, .navbar-link{display:flex;flex-grow:0;flex-shrink:0;flex-basis:auto;position:relative}
+.navbar-item:not(.has-dropdown), .navbar-link{align-items:center}
+.navbar-link::after{border-top-style:solid;border-right-style:solid;border-bottom-style:solid;border-left-style:solid;border-top-width:0px;border-right-width:0px;border-bottom-width:2px;border-left-width:2px;content:"";display:block;height:0.5rem;margin-top:-0.375em;pointer-events:none;position:absolute;right:1em;top:50%;transform:rotate(-45deg);width:0.5rem}
+.navbar-end .navbar-link, .navbar-end > .navbar-item{color:var(--navbar-font-color)}
+.navbar-end .navbar-item.has-dropdown:hover .navbar-link, .navbar-end .navbar-link:hover, .navbar-end > a.navbar-item:hover{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;color:var(--navbar-font-color)}
+.navbar-end .navbar-link::after{border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor}}
+.navbar-menu .navbar-link:hover, .navbar-menu a.navbar-item:hover{color:rgb(109, 179, 63)}
+footer.footer{background-color:var(--footer-background);border-top-width:;border-top-style:;border-top-color:;color:var(--footer-font-color);font-size:calc(15/var(--rem-base)*1rem);line-height:var(--footer-line-height);padding-top:1.5rem;padding-right:1.5rem;padding-bottom:1.5rem;padding-left:1.5rem}
+.footer p{margin-top:0.5rem;margin-right:0px;margin-bottom:0.5rem;margin-left:0px}
+.footer a, .footer p{color:var(--footer-link-font-color)}
+.footer a:hover{color:var(--link-font-color)}
+.footer .has-gray-text{color:rgb(181, 181, 181)}
+.hljs{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;color:var(--highlight-font-color);display:block;overflow-x:auto;padding-top:0.5em;padding-right:0.5em;padding-bottom:0.5em;padding-left:0.5em}
+.hljs-keyword, .hljs-selector-tag, .hljs-subst{color:var(--highlight-keyword-font-color)}
+.hljs-comment, .hljs-quote{color:var(--highlight-comment-font-color)}
+.hljs-doctag, .hljs-string{color:var(--highlight-string-font-color)}
+.hljs-meta{color:var(--highlight-meta-font-color)}
+.hljs-built_in, .hljs-builtin-name, .hljs-literal, .hljs-number, .hljs-symbol{color:var(--highlight-constant-font-color)}
+.hljs-class .hljs-title, .hljs-type{color:var(--highlight-type-font-color)}
+.language-java .hljs-comment, .language-kotlin .hljs-comment{font-style:italic}
+@media screen and (min-width: 1024px){.navbar-brand{flex-grow:1}
+.navbar-menu{flex-grow:0}}
+.fa{display:inline-block}
+.fa::before{-webkit-font-smoothing:antialiased;font-style:normal;font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;font-variant-alternates:normal;font-variant-position:normal;font-variant-emoji:normal;font-size-adjust:none;font-language-override:normal;font-kerning:auto;font-optical-sizing:auto;font-feature-settings:normal;font-variation-settings:normal;font-weight:normal;font-stretch:normal;line-height:1;font-family:FontAwesome;font-size:inherit;text-rendering:auto}
+:root .fa-flip-horizontal, :root .fa-flip-vertical, :root .fa-rotate-180, :root .fa-rotate-270, :root .fa-rotate-90{filter:none}
+html{overscroll-behavior-x:none;overscroll-behavior-y:none}
+body{background-color:var(--body-background-color);text-rendering:optimizelegibility}
+div.body{font-family:var(--font-family)}
+.doc pre.highlight{position:relative}
+.doc pre code .fold-block{clear:left;display:block;float:left;overflow-y:hidden}
+@supports (overflow:clip){.doc pre code .fold-block{clear:none;float:none;overflow-y:clip}}
+.doc pre code.is-unfolded .is-hidden-unfolded, .doc pre code:not(.is-unfolded) .is-hidden-folded{max-height:0px;opacity:0}
+.doc pre code:not(.is-unfolded) .is-hidden-folded{transition-behavior:normal, normal;transition-duration:0.3s, 0.15s;transition-timing-function:ease-in-out, linear;transition-delay:0s, 0s;transition-property:max-height, opacity}
+.doc .source-toolbox{background-color:var(--body-background-color);border-top-color:;border-top-style:;border-top-width:;border-right-color:;border-right-style:;border-right-width:;border-bottom-color:;border-bottom-style:;border-bottom-width:;border-left-color:;border-left-style:;border-left-width:;border-image-source:;border-image-slice:;border-image-width:;border-image-outset:;border-image-repeat:;border-top-left-radius:2px;border-top-right-radius:2px;border-bottom-right-radius:2px;border-bottom-left-radius:2px;bottom:0.5rem;display:flex;font-family:var(--body-font-family);line-height:1;opacity:0;position:absolute;right:0.5rem;transition-behavior:normal;transition-duration:0.15s;transition-timing-function:ease-in-out;transition-delay:0s;transition-property:opacity;z-index:1}
+.doc pre.highlight:hover .source-toolbox{opacity:1}
+.doc .source-toolbox > :not(:last-child){border-right-width:;border-right-style:;border-right-color:}
+.doc .source-toolbox button{background-image:none;background-position-x:50%;background-position-y:center;background-size:16px 16px;background-repeat:no-repeat;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:initial;border-top-width:medium;border-right-width:medium;border-bottom-width:medium;border-left-width:medium;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;color:inherit;cursor:pointer;font-size:inherit;height:24px;line-height:inherit;outline-color:initial;outline-style:none;outline-width:initial;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;width:24px}
+.doc .source-toolbox .copy-button{align-items:center;display:flex;flex-direction:column}
+.doc .source-toolbox .copy-toast{background-color:var(--body-font-color);border-top-left-radius:0.25em;border-top-right-radius:0.25em;border-bottom-right-radius:0.25em;border-bottom-left-radius:0.25em;color:rgb(255, 255, 255);cursor:auto;display:inline-flex;flex-grow:0;flex-shrink:0;flex-basis:auto;justify-content:center;margin-top:1em;opacity:0;padding-top:0.5em;padding-right:0.5em;padding-bottom:0.5em;padding-left:0.5em;position:relative;top:100%;transition-behavior:normal;transition-duration:0.5s;transition-timing-function:ease;transition-delay:0.75s;transition-property:opacity;white-space-collapse:collapse;text-wrap-mode:nowrap}
+.doc .source-toolbox .copy-toast::after{border-top-width:0.55em;border-top-style:solid;border-top-color:transparent;border-right-width:0.55em;border-right-style:solid;border-right-color:transparent;border-bottom-width:0.55em;border-bottom-style:solid;border-bottom-color:transparent;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;border-left-width:;border-left-style:;border-left-color:;content:"";height:1em;position:absolute;top:0px;transform:rotate(-90deg) translateX(50%) translateY(50%);transform-origin:left center;width:1em}
+.doc .admonitionblock code{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;border-top-left-radius:0.25em;border-top-right-radius:0.25em;border-bottom-right-radius:0.25em;border-bottom-left-radius:0.25em;color:var(--code-font-color);font-size:0.95em;padding-top:0.125em;padding-right:0.25em;padding-bottom:0.125em;padding-left:0.25em}
+.doc .admonitionblock a code, .doc p a code, .doc thead a code{color:var(--code-link-font-color)}
+.doc .listingblock pre:not(.highlight), .doc .literalblock pre, .doc pre.highlight > code{border-top-left-radius:4px;border-top-right-radius:4px;border-bottom-right-radius:4px;border-bottom-left-radius:4px}
+.doc .source-toolbox{border-top-color:;border-right-color:;border-bottom-color:;border-left-color:;top:unset;visibility:visible}
+.doc .source-toolbox > :not(:last-child)::after{content:unset}
+.doc .source-toolbox > :not(:last-child){border-top-color:;border-right-color:;border-bottom-color:;border-left-color:}
+.doc .source-toolbox button:hover{background-color:var(--codetools-hover-background-color);transition-behavior:normal;transition-duration:0.3s;transition-timing-function:ease;transition-delay:0s;transition-property:filter}
+.doc .source-toolbox button{filter:var(--codetools-button-filter)}
+.doc .source-toolbox .copy-button, .doc .source-toolbox .fold-button, .doc code.is-unfolded + .source-toolbox .fold-button{height:24px;width:24px}
+.doc .source-toolbox .copy-button{background-image:none;background-position-x:50%;background-position-y:50%;background-size:16px 16px;background-repeat:no-repeat;background-attachment:scroll;background-origin:padding-box;background-clip:border-box;background-color:initial}
+.doc .source-toolbox .fold-button{background-image:none;background-position-x:50%;background-position-y:50%;background-size:16px 16px;background-repeat:no-repeat;background-attachment:scroll;background-origin:padding-box;background-clip:border-box;background-color:initial}
+.doc .source-toolbox .copy-toast{background-color:var(--doc-font-color);filter:var(--codetools-button-filter)}
+.doc > h1#page-title{font-size:calc(42/var(--rem-base)*1rem);margin-top:0.8rem;margin-right:0px;margin-bottom:0.2rem;margin-left:0px}
+.doc h3, .doc h4, .doc h5, .doc h6{margin-top:2rem;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.doc .admonitionblock td.icon i{align-items:center;background-position-x:0.5em;background-position-y:0px;background-repeat:no-repeat;display:inline-flex;filter:invert(100%);height:16px;padding-left:2em;vertical-align:middle;width:auto}
+.doc .admonitionblock td.icon{border-top-left-radius:0.5rem;border-top-right-radius:0.5rem;border-bottom-right-radius:0.5rem;border-bottom-left-radius:0.5rem;font-size:calc(14/var(--rem-base)*1rem);left:0px;line-height:1;padding-top:0.35em;padding-right:0.075em;padding-bottom:0.35em;padding-left:0.075em;position:absolute;top:0px;transform:translate(-0.5rem, -50%)}
+.doc .admonitionblock td.icon i::after{border-left-width:1px;border-left-style:solid;border-left-color:rgba(255, 255, 255, 0.3);color:var(--admonition-font-color);content:attr(title);filter:invert(100%);font-style:normal;font-weight:var(--admonition-font-weight);hyphens:none;margin-top:-0.05em;margin-right:-0.05em;margin-bottom:-0.05em;margin-left:-0.05em;padding-top:0px;padding-right:0.5em;padding-bottom:0px;padding-left:0.5em;text-transform:uppercase}
+.doc .admonitionblock i.fa{background-size:16px 16px}
+.doc .admonitionblock.note .icon{background-color:var(--note-color)}
+.doc .admonitionblock td.icon i.icon-note{background-image:none;background-position-x:0.5em;background-position-y:50%;background-size:16px 16px;background-repeat:no-repeat;background-attachment:scroll;background-origin:padding-box;background-clip:border-box;background-color:initial}
+.doc .admonitionblock.tip .icon{background-color:var(--tip-color)}
+.doc .admonitionblock td.icon i.icon-tip{background-image:none;background-position-x:0.5em;background-position-y:50%;background-size:16px 16px;background-repeat:no-repeat;background-attachment:scroll;background-origin:padding-box;background-clip:border-box;background-color:initial}
+.doc .admonitionblock.warning .icon{background-color:var(--warning-color)}
+.doc .admonitionblock td.icon i.icon-warning{background-image:none;background-position-x:0.5em;background-position-y:50%;background-size:16px 16px;background-repeat:no-repeat;background-attachment:scroll;background-origin:padding-box;background-clip:border-box;background-color:initial}
+.doc table.tableblock{display:block;overflow-x:auto;overflow-y:hidden;width:100%}
+.doc table.tableblock td{min-width:10rem}
+.doc table.frame-all, .doc table.frame-ends, .doc table.frame-sides{border-top-width:0px;border-right-width:0px;border-bottom-width:0px;border-left-width:0px}
+.doc table.grid-all > * > tr > *{border-right-width:medium;border-left-width:medium;border-right-style:none;border-left-style:none;border-right-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;border-bottom-width:;border-bottom-style:;border-bottom-color:;border-top-width:;border-top-style:;border-top-color:}
+.doc table.grid-all > tbody > tr:hover{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:}
+.breadcrumbs, .breadcrumbs a{color:var(--breadcrumb-font-color)}
+.breadcrumbs a:hover{color:var(--breadcrumb-hover-font-color)}
+.theme-toggler{align-self:center;background-image:initial;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:rgb(215, 231, 231);border-top-left-radius:5px;border-top-right-radius:5px;border-bottom-right-radius:5px;border-bottom-left-radius:5px;cursor:pointer;display:inline-block;font-size:13px;height:10px;margin-left:5px;margin-right:1rem;position:relative;width:36px}
+.theme-toggler input{opacity:0}
+.theme-toggler span.text{background-color:transparent;display:block;overflow-x:hidden;overflow-y:hidden;text-indent:-6000em}
+.theme-toggler span.icon{background-image:initial;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:rgb(0, 0, 0);border-top-left-radius:12px;border-top-right-radius:12px;border-bottom-right-radius:12px;border-bottom-left-radius:12px;color:rgb(255, 255, 255);display:block;height:24px;left:-1px;position:absolute;top:-7px;transition-behavior:normal;transition-duration:0.5s;transition-timing-function:ease;transition-delay:0s;transition-property:left;width:24px}
+@media screen and (max-width: 1024px){.theme-toggler{position:absolute;right:0px;top:90px}}
+.DocSearch-Button{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;border-bottom-width:;border-bottom-style:;border-bottom-color:;border-left-width:;border-left-style:;border-left-color:;border-top-left-radius:0px;border-top-right-radius:0px;border-bottom-right-radius:0px;border-bottom-left-radius:0px;border-right-width:;border-right-style:;border-right-color:;border-top-width:;border-top-style:;border-top-color:;color:var(--body-font-color);display:block;font-weight:400;height:40px;line-height:40px;margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px;padding-left:40px;position:relative;text-align:left;width:100%}
+.DocSearch-Button span.search-key{color:var(--body-font-color);opacity:0.4;position:absolute;right:20px;top:0px}
+.DocSearch-Button:focus{outline-color:initial!important;outline-style:none!important;outline-width:initial!important}
+.DocSearch-Button:active, .DocSearch-Button:focus, .DocSearch-Button:hover{background-image:;background-position-x:;background-position-y:;background-size:;background-repeat:;background-attachment:;background-origin:;background-clip:;background-color:;box-shadow:none;color:var(--body-font-color)}
+.DocSearch-Button:hover{border-top-color:rgb(170, 170, 170);border-right-color:rgb(170, 170, 170);border-bottom-color:rgb(170, 170, 170);border-left-color:rgb(170, 170, 170);box-shadow:rgba(0, 0, 0, 0.1) 0px 2px 6px inset;color:var(--link_hover-font-color)}
+.DocSearch-Button:hover svg{fill:var(--link_hover-font-color)}
+.DocSearch-Button svg{fill:var(--body-font-color);left:15px;position:absolute;top:10px;width:20px}
+@media screen and (max-width: 1023.5px){.DocSearch-Button{border-left-width:1px;border-right-width:1px;padding-left:35px}
+.DocSearch-Button svg{left:10px}}
+.ot-sdk-show-settings{cursor:pointer}
+.tabs{margin-bottom:1.25em}
+.tablist > ul{display:flex;flex-wrap:wrap;list-style-position:initial;list-style-image:initial;list-style-type:none;margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+.tablist > ul li{align-items:center;background-color:rgb(255, 255, 255);cursor:pointer;display:flex;font-weight:700;line-height:1.5;padding-top:0.25em;padding-right:1em;padding-bottom:0.25em;padding-left:1em;position:relative}
+.tablist > ul li:focus-visible{outline-color:initial;outline-style:none;outline-width:initial}
+.tablist.ulist, .tablist.ulist > ul li{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.tablist.ulist > ul li + li{margin-left:0.25em}
+.tabs .tablist li::after{bottom:-1px;content:"";display:block;height:1px;left:0px;position:absolute;right:0px}
+.tabs.is-loading .tablist li:not(:first-child), .tabs:not(.is-loading) .tablist li:not(.is-selected){background-color:rgb(245, 245, 245)}
+.tabs.is-loading .tablist li:first-child::after, .tabs:not(.is-loading) .tablist li.is-selected::after{background-color:rgb(255, 255, 255)}
+.tablist > ul p{line-height:inherit;margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.tabpanel{background-color:rgb(255, 255, 255);padding-top:1.25em;padding-right:1.25em;padding-bottom:1.25em;padding-left:1.25em}
+.tablist > ul li, .tabpanel{border-top-width:1px;border-right-width:1px;border-bottom-width:1px;border-left-width:1px;border-top-style:solid;border-right-style:solid;border-bottom-style:solid;border-left-style:solid;border-top-color:rgb(220, 220, 220);border-right-color:rgb(220, 220, 220);border-bottom-color:rgb(220, 220, 220);border-left-color:rgb(220, 220, 220);border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch}
+.tablist > ul li{border-bottom-width:0px;border-bottom-style:none;border-bottom-color:currentcolor}
+.doc .tabs{margin-top:1rem;margin-right:0px;margin-bottom:0px;margin-left:0px}
+.doc .tablist.ulist{margin-bottom:0.25rem}
+.doc .tablist > ul{font-size:calc(12/var(--rem-base)*1rem)}
+.doc .tablist > ul li{border-top-color:;border-top-style:;border-top-width:;border-right-color:;border-right-style:;border-right-width:;border-bottom-color:;border-bottom-style:;border-bottom-width:;border-left-color:;border-left-style:;border-left-width:;border-image-source:;border-image-slice:;border-image-width:;border-image-outset:;border-image-repeat:;line-height:inherit;padding-top:0.3rem;padding-right:0.6rem;padding-bottom:0.3rem;padding-left:0.6rem}
+.doc .tablist > ul li:not(:first-child){border-left-width:medium;border-left-style:none;border-left-color:currentcolor}
+.doc .tabs.is-loading .tablist > ul li:not(:first-child):hover, .doc .tabs:not(.is-loading) .tablist > ul li:not(.is-selected):hover{background-color:var(--tabs-hover-background);color:var(--tabs-hover-font-color);text-decoration-line:underline;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial;transition-behavior:normal;transition-duration:0.3s;transition-timing-function:ease;transition-delay:0s;transition-property:filter}
+.doc .tablist.ulist > ul li + li{margin-left:0px}
+.doc .tabs.is-loading .tablist > ul li:not(:first-child), .doc .tabs:not(.is-loading) .tablist > ul li:not(.is-selected){background-color:var(--tabs-background-color);color:var(--tabs-font-color)}
+.doc .tabs.is-loading .tablist > ul li:first-child, .doc .tabs:not(.is-loading) .tablist > ul li.is-selected{background-color:var(--tabs-selected-background-color);border-top-color:;border-right-color:;border-bottom-color:;border-left-color:;color:var(--tabs-selected-font-color)}
+.doc .tabs.is-loading .tablist > ul li:first-child::after, .doc .tabs:not(.is-loading) .tablist > ul li.is-selected::after{content:none}
+.doc .tabs.is-loaded .tablist > ul li{transition-behavior:normal, normal;transition-duration:0.2s, 0.1s;transition-timing-function:ease-in-out, linear;transition-delay:0s, 0s;transition-property:background-color, color}
+.doc .tabpanel{background-color:initial;border-top-width:0px;border-right-width:0px;border-bottom-width:0px;border-left-width:0px;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}
+#onetrust-banner-sdk:focus{outline-color:rgb(0, 0, 0);outline-style:solid;outline-width:2px;outline-offset:-2px}
+#onetrust-banner-sdk a:focus{outline-color:rgb(0, 0, 0);outline-style:solid;outline-width:2px}
+#onetrust-banner-sdk #onetrust-accept-btn-handler, #onetrust-banner-sdk #onetrust-reject-all-handler, #onetrust-banner-sdk #onetrust-pc-btn-handler{outline-offset:1px}
+#onetrust-banner-sdk .ot-close-icon, #onetrust-pc-sdk .ot-close-icon, #ot-sync-ntfy .ot-close-icon{background-size:contain;background-repeat:no-repeat;background-position-x:center;background-position-y:center;height:12px;width:12px}
+#onetrust-banner-sdk, #onetrust-pc-sdk, #ot-sdk-cookie-policy, #ot-sync-ntfy{font-size:16px}
+#onetrust-banner-sdk *, #onetrust-banner-sdk ::after, #onetrust-banner-sdk ::before, #onetrust-pc-sdk *, #onetrust-pc-sdk ::after, #onetrust-pc-sdk ::before, #ot-sdk-cookie-policy *, #ot-sdk-cookie-policy ::after, #ot-sdk-cookie-policy ::before, #ot-sync-ntfy *, #ot-sync-ntfy ::after, #ot-sync-ntfy ::before{box-sizing:content-box}
+#onetrust-banner-sdk div, #onetrust-banner-sdk span, #onetrust-banner-sdk h1, #onetrust-banner-sdk h2, #onetrust-banner-sdk h3, #onetrust-banner-sdk h4, #onetrust-banner-sdk h5, #onetrust-banner-sdk h6, #onetrust-banner-sdk p, #onetrust-banner-sdk img, #onetrust-banner-sdk svg, #onetrust-banner-sdk button, #onetrust-banner-sdk section, #onetrust-banner-sdk a, #onetrust-banner-sdk label, #onetrust-banner-sdk input, #onetrust-banner-sdk ul, #onetrust-banner-sdk li, #onetrust-banner-sdk nav, #onetrust-banner-sdk table, #onetrust-banner-sdk thead, #onetrust-banner-sdk tr, #onetrust-banner-sdk td, #onetrust-banner-sdk tbody, #onetrust-banner-sdk .ot-main-content, #onetrust-banner-sdk .ot-toggle, #onetrust-banner-sdk #ot-content, #onetrust-banner-sdk #ot-pc-content, #onetrust-banner-sdk .checkbox, #onetrust-pc-sdk div, #onetrust-pc-sdk span, #onetrust-pc-sdk h1, #onetrust-pc-sdk h2, #onetrust-pc-sdk h3, #onetrust-pc-sdk h4, #onetrust-pc-sdk h5, #onetrust-pc-sdk h6, #onetrust-pc-sdk p, #onetrust-pc-sdk img, #onetrust-pc-sdk svg, #onetrust-pc-sdk button, #onetrust-pc-sdk section, #onetrust-pc-sdk a, #onetrust-pc-sdk label, #onetrust-pc-sdk input, #onetrust-pc-sdk ul, #onetrust-pc-sdk li, #onetrust-pc-sdk nav, #onetrust-pc-sdk table, #onetrust-pc-sdk thead, #onetrust-pc-sdk tr, #onetrust-pc-sdk td, #onetrust-pc-sdk tbody, #onetrust-pc-sdk .ot-main-content, #onetrust-pc-sdk .ot-toggle, #onetrust-pc-sdk #ot-content, #onetrust-pc-sdk #ot-pc-content, #onetrust-pc-sdk .checkbox, #ot-sdk-cookie-policy div, #ot-sdk-cookie-policy span, #ot-sdk-cookie-policy h1, #ot-sdk-cookie-policy h2, #ot-sdk-cookie-policy h3, #ot-sdk-cookie-policy h4, #ot-sdk-cookie-policy h5, #ot-sdk-cookie-policy h6, #ot-sdk-cookie-policy p, #ot-sdk-cookie-policy img, #ot-sdk-cookie-policy svg, #ot-sdk-cookie-policy button, #ot-sdk-cookie-policy section, #ot-sdk-cookie-policy a, #ot-sdk-cookie-policy label, #ot-sdk-cookie-policy input, #ot-sdk-cookie-policy ul, #ot-sdk-cookie-policy li, #ot-sdk-cookie-policy nav, #ot-sdk-cookie-policy table, #ot-sdk-cookie-policy thead, #ot-sdk-cookie-policy tr, #ot-sdk-cookie-policy td, #ot-sdk-cookie-policy tbody, #ot-sdk-cookie-policy .ot-main-content, #ot-sdk-cookie-policy .ot-toggle, #ot-sdk-cookie-policy #ot-content, #ot-sdk-cookie-policy #ot-pc-content, #ot-sdk-cookie-policy .checkbox, #ot-sync-ntfy div, #ot-sync-ntfy span, #ot-sync-ntfy h1, #ot-sync-ntfy h2, #ot-sync-ntfy h3, #ot-sync-ntfy h4, #ot-sync-ntfy h5, #ot-sync-ntfy h6, #ot-sync-ntfy p, #ot-sync-ntfy img, #ot-sync-ntfy svg, #ot-sync-ntfy button, #ot-sync-ntfy section, #ot-sync-ntfy a, #ot-sync-ntfy label, #ot-sync-ntfy input, #ot-sync-ntfy ul, #ot-sync-ntfy li, #ot-sync-ntfy nav, #ot-sync-ntfy table, #ot-sync-ntfy thead, #ot-sync-ntfy tr, #ot-sync-ntfy td, #ot-sync-ntfy tbody, #ot-sync-ntfy .ot-main-content, #ot-sync-ntfy .ot-toggle, #ot-sync-ntfy #ot-content, #ot-sync-ntfy #ot-pc-content, #ot-sync-ntfy .checkbox{font-family:inherit;font-weight:normal;-webkit-font-smoothing:auto;letter-spacing:normal;line-height:normal;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px;height:auto;min-height:0px;max-height:none;width:auto;min-width:0px;max-width:none;border-top-left-radius:0px;border-top-right-radius:0px;border-bottom-right-radius:0px;border-bottom-left-radius:0px;border-top-width:medium;border-right-width:medium;border-bottom-width:medium;border-left-width:medium;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;clear:none;float:none;position:static;top:auto;right:auto;bottom:auto;left:auto;text-align:left;text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial;text-indent:0px;text-shadow:none;text-transform:none;white-space-collapse:collapse;text-wrap-mode:wrap;background-image:none;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:initial;overflow-x:visible;overflow-y:visible;vertical-align:baseline;visibility:visible;z-index:auto;box-shadow:none}
+#onetrust-banner-sdk .ot-sdk-container, #onetrust-pc-sdk .ot-sdk-container, #ot-sdk-cookie-policy .ot-sdk-container{position:relative;width:100%;max-width:100%;margin-top:0px;margin-right:auto;margin-bottom:0px;margin-left:auto;padding-top:0px;padding-right:20px;padding-bottom:0px;padding-left:20px;box-sizing:border-box}
+#onetrust-banner-sdk .ot-sdk-column, #onetrust-banner-sdk .ot-sdk-columns, #onetrust-pc-sdk .ot-sdk-column, #onetrust-pc-sdk .ot-sdk-columns, #ot-sdk-cookie-policy .ot-sdk-column, #ot-sdk-cookie-policy .ot-sdk-columns{width:100%;float:left;box-sizing:border-box;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;display:initial}
+@media (min-width: 400px){#onetrust-banner-sdk .ot-sdk-container, #onetrust-pc-sdk .ot-sdk-container, #ot-sdk-cookie-policy .ot-sdk-container{width:90%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px}}
+@media (min-width: 550px){#onetrust-banner-sdk .ot-sdk-container, #onetrust-pc-sdk .ot-sdk-container, #ot-sdk-cookie-policy .ot-sdk-container{width:100%}
+#onetrust-banner-sdk .ot-sdk-column, #onetrust-banner-sdk .ot-sdk-columns, #onetrust-pc-sdk .ot-sdk-column, #onetrust-pc-sdk .ot-sdk-columns, #ot-sdk-cookie-policy .ot-sdk-column, #ot-sdk-cookie-policy .ot-sdk-columns{margin-left:4%}
+#onetrust-banner-sdk .ot-sdk-column:first-child, #onetrust-banner-sdk .ot-sdk-columns:first-child, #onetrust-pc-sdk .ot-sdk-column:first-child, #onetrust-pc-sdk .ot-sdk-columns:first-child, #ot-sdk-cookie-policy .ot-sdk-column:first-child, #ot-sdk-cookie-policy .ot-sdk-columns:first-child{margin-left:0px}
+#onetrust-banner-sdk .ot-sdk-four.ot-sdk-columns, #onetrust-pc-sdk .ot-sdk-four.ot-sdk-columns, #ot-sdk-cookie-policy .ot-sdk-four.ot-sdk-columns{width:30.6667%}
+#onetrust-banner-sdk .ot-sdk-eight.ot-sdk-columns, #onetrust-pc-sdk .ot-sdk-eight.ot-sdk-columns, #ot-sdk-cookie-policy .ot-sdk-eight.ot-sdk-columns{width:65.3333%}}
+#onetrust-banner-sdk h1, #onetrust-banner-sdk h2, #onetrust-banner-sdk h3, #onetrust-banner-sdk h4, #onetrust-banner-sdk h5, #onetrust-banner-sdk h6, #onetrust-banner-sdk p[role="heading"], #onetrust-pc-sdk h1, #onetrust-pc-sdk h2, #onetrust-pc-sdk h3, #onetrust-pc-sdk h4, #onetrust-pc-sdk h5, #onetrust-pc-sdk h6, #onetrust-pc-sdk p[role="heading"], #ot-sdk-cookie-policy h1, #ot-sdk-cookie-policy h2, #ot-sdk-cookie-policy h3, #ot-sdk-cookie-policy h4, #ot-sdk-cookie-policy h5, #ot-sdk-cookie-policy h6, #ot-sdk-cookie-policy p[role="heading"]{margin-top:0px;font-weight:600;font-family:inherit}
+#onetrust-banner-sdk h2, #onetrust-pc-sdk h2, #ot-sdk-cookie-policy h2{font-size:1.5rem;line-height:1.25}
+@media (min-width: 550px){#onetrust-banner-sdk h2, #onetrust-pc-sdk h2, #ot-sdk-cookie-policy h2{font-size:1.5rem}}
+#onetrust-banner-sdk a, #onetrust-pc-sdk a, #ot-sdk-cookie-policy a{color:rgb(86, 86, 86);text-decoration-line:underline;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+#onetrust-banner-sdk a:hover, #onetrust-pc-sdk a:hover, #ot-sdk-cookie-policy a:hover{color:rgb(86, 86, 86);text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+#onetrust-banner-sdk .ot-sdk-button, #onetrust-banner-sdk button, #onetrust-pc-sdk .ot-sdk-button, #onetrust-pc-sdk button, #ot-sdk-cookie-policy .ot-sdk-button, #ot-sdk-cookie-policy button{margin-bottom:1rem;font-family:inherit}
+#onetrust-banner-sdk .ot-sdk-button, #onetrust-banner-sdk button, #onetrust-pc-sdk .ot-sdk-button, #onetrust-pc-sdk button, #ot-sdk-cookie-policy .ot-sdk-button, #ot-sdk-cookie-policy button{display:inline-block;height:38px;padding-top:0px;padding-right:30px;padding-bottom:0px;padding-left:30px;color:rgb(85, 85, 85);text-align:center;font-size:0.9em;font-weight:400;line-height:38px;letter-spacing:0.01em;text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial;white-space-collapse:collapse;text-wrap-mode:nowrap;background-color:rgba(0, 0, 0, 0);border-top-left-radius:2px;border-top-right-radius:2px;border-bottom-right-radius:2px;border-bottom-left-radius:2px;border-top-width:1px;border-right-width:1px;border-bottom-width:1px;border-left-width:1px;border-top-style:solid;border-right-style:solid;border-bottom-style:solid;border-left-style:solid;border-top-color:rgb(187, 187, 187);border-right-color:rgb(187, 187, 187);border-bottom-color:rgb(187, 187, 187);border-left-color:rgb(187, 187, 187);border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;cursor:pointer;box-sizing:border-box}
+#onetrust-banner-sdk .ot-sdk-button:hover, #onetrust-banner-sdk :not(.ot-leg-btn-container):not(.ot-confirm-dialog-buttons) > button:not(.ot-link-btn):hover, #onetrust-banner-sdk :not(.ot-leg-btn-container):not(.ot-confirm-dialog-buttons) > button:not(.ot-link-btn):focus, #onetrust-pc-sdk .ot-sdk-button:hover, #onetrust-pc-sdk :not(.ot-leg-btn-container):not(.ot-confirm-dialog-buttons) > button:not(.ot-link-btn):hover, #onetrust-pc-sdk :not(.ot-leg-btn-container):not(.ot-confirm-dialog-buttons) > button:not(.ot-link-btn):focus, #ot-sdk-cookie-policy .ot-sdk-button:hover, #ot-sdk-cookie-policy :not(.ot-leg-btn-container):not(.ot-confirm-dialog-buttons) > button:not(.ot-link-btn):hover, #ot-sdk-cookie-policy :not(.ot-leg-btn-container):not(.ot-confirm-dialog-buttons) > button:not(.ot-link-btn):focus{color:rgb(51, 51, 51);border-top-color:rgb(136, 136, 136);border-right-color:rgb(136, 136, 136);border-bottom-color:rgb(136, 136, 136);border-left-color:rgb(136, 136, 136);opacity:0.9}
+#onetrust-banner-sdk .ot-sdk-button:focus, #onetrust-banner-sdk :not(.ot-leg-btn-container) > button:focus, #onetrust-pc-sdk .ot-sdk-button:focus, #onetrust-pc-sdk :not(.ot-leg-btn-container) > button:focus, #ot-sdk-cookie-policy .ot-sdk-button:focus, #ot-sdk-cookie-policy :not(.ot-leg-btn-container) > button:focus{outline-color:rgb(0, 0, 0);outline-style:solid;outline-width:2px}
+#onetrust-banner-sdk button, #onetrust-pc-sdk button, #ot-sdk-cookie-policy button{margin-bottom:1rem;font-family:inherit}
+#onetrust-banner-sdk .ot-sdk-container::after, #onetrust-banner-sdk .ot-sdk-row::after, #onetrust-pc-sdk .ot-sdk-container::after, #onetrust-pc-sdk .ot-sdk-row::after, #ot-sdk-cookie-policy .ot-sdk-container::after, #ot-sdk-cookie-policy .ot-sdk-row::after{content:"";display:table;clear:both}
+#onetrust-banner-sdk .ot-sdk-row, #onetrust-pc-sdk .ot-sdk-row, #ot-sdk-cookie-policy .ot-sdk-row{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px;max-width:none;display:block}
+#onetrust-banner-sdk.otFloatingFlat{position:fixed;width:58%;max-width:760px;min-height:135px;font-size:16px;right:2em;bottom:2em;z-index:2147483645;box-shadow:rgba(0, 0, 0, 0.35) 0px 0px 4px 0px;max-height:90%;overflow-x:hidden;overflow-y:auto;padding-top:2px}
+#onetrust-banner-sdk.otFloatingFlat::-webkit-scrollbar{width:11px}
+#onetrust-banner-sdk.otFloatingFlat::-webkit-scrollbar-thumb{border-top-left-radius:10px;border-top-right-radius:10px;border-bottom-right-radius:10px;border-bottom-left-radius:10px;background-image:initial;background-position-x:initial;background-position-y:initial;background-size:initial;background-repeat:initial;background-attachment:initial;background-origin:initial;background-clip:initial;background-color:rgb(193, 193, 193)}
+#onetrust-banner-sdk.otFloatingFlat .banner-close-btn-container button{position:relative}
+#onetrust-banner-sdk .ot-sdk-container{background-color:rgb(255, 255, 255);padding-top:16px;padding-bottom:16px;box-shadow:rgba(0, 0, 0, 0.2) 0px 0px 4px 0px}
+#onetrust-banner-sdk a{color:rgb(220, 220, 220)}
+#onetrust-banner-sdk .policy{overflow-x:hidden;overflow-y:hidden;margin-top:0px;margin-right:15px;margin-bottom:0px;margin-left:20px}
+#onetrust-banner-sdk .policy a{font-weight:bold}
+#onetrust-banner-sdk #onetrust-policy-title{color:dimgray;font-size:1em;line-height:1;float:left;font-weight:600;padding-bottom:10px;margin-bottom:0px}
+#onetrust-banner-sdk #onetrust-policy-text, #onetrust-banner-sdk .ot-b-addl-desc{clear:both;float:left;color:dimgray}
+#onetrust-banner-sdk #onetrust-policy-text, #onetrust-banner-sdk .ot-b-addl-desc, #onetrust-banner-sdk .ot-dpd-desc{font-size:0.813em;line-height:1.5;margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+#onetrust-banner-sdk #onetrust-policy-text *, #onetrust-banner-sdk .ot-b-addl-desc *, #onetrust-banner-sdk .ot-dpd-desc *{font-size:inherit;line-height:inherit}
+#onetrust-banner-sdk #onetrust-policy-text *{margin-bottom:0px}
+#onetrust-banner-sdk #onetrust-button-group{position:relative;margin-right:20px;right:0px;left:auto}
+#onetrust-banner-sdk .pc-btn-container{text-align:center}
+#onetrust-banner-sdk .banner-close-btn-container{overflow-x:hidden;overflow-y:hidden;margin-bottom:5px}
+#onetrust-banner-sdk .banner-close-btn-container button{float:right;line-height:normal;cursor:pointer;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;border-top-width:medium;border-right-width:medium;border-bottom-width:medium;border-left-width:medium;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;margin-right:1em}
+#onetrust-banner-sdk #onetrust-accept-btn-handler, #onetrust-banner-sdk #onetrust-reject-all-handler, #onetrust-banner-sdk #onetrust-pc-btn-handler{background-color:rgb(104, 182, 49);color:rgb(255, 255, 255);border-top-color:rgb(104, 182, 49);border-right-color:rgb(104, 182, 49);border-bottom-color:rgb(104, 182, 49);border-left-color:rgb(104, 182, 49);font-size:0.813em;font-weight:600;line-height:1;height:auto;white-space-collapse:collapse;text-wrap-mode:wrap;word-break:break-word;overflow-wrap:break-word;min-width:125px;width:100%;padding-top:12px;padding-right:10px;padding-bottom:12px;padding-left:10px}
+#onetrust-banner-sdk #onetrust-pc-btn-handler.cookie-setting-link{background-color:rgb(255, 255, 255);border-top-width:medium;border-right-width:medium;border-bottom-width:medium;border-left-width:medium;border-top-style:none;border-right-style:none;border-bottom-style:none;border-left-style:none;border-top-color:currentcolor;border-right-color:currentcolor;border-bottom-color:currentcolor;border-left-color:currentcolor;border-image-source:none;border-image-slice:100%;border-image-width:1;border-image-outset:0;border-image-repeat:stretch;color:rgb(104, 182, 49);text-decoration-line:underline;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial;padding-left:0px;padding-right:0px;box-shadow:none}
+#onetrust-banner-sdk .accept-btn-container, #onetrust-banner-sdk .reject-btn-container{text-align:center}
+#onetrust-banner-sdk .ot-close-icon{height:44px;width:44px;background-size:12px auto}
+@media (max-width: 550px){#onetrust-banner-sdk.otFloatingFlat .policy{padding-bottom:10px;overflow-x:hidden;overflow-y:hidden}
+#onetrust-banner-sdk.otFloatingFlat #onetrust-pc-btn-handler{margin-bottom:5px}}
+@media (max-width: 800px){#onetrust-banner-sdk.otFloatingFlat, #onetrust-banner-sdk.otFloatingFlat.ot-bottom-left{left:0px;width:100%;bottom:0px;border-top-left-radius:0px;border-top-right-radius:0px;border-bottom-right-radius:0px;border-bottom-left-radius:0px}
+#onetrust-banner-sdk .ot-sdk-container{padding-top:15px;padding-right:20px;padding-bottom:0px;padding-left:20px;width:100%}
+#onetrust-banner-sdk .policy{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}
+#onetrust-banner-sdk #onetrust-button-group{margin-top:0px;margin-right:0px;margin-bottom:0px;margin-left:0px}}
+@media only screen and (max-device-width: 767px){#onetrust-banner-sdk .banner-close-btn-container button{margin-bottom:0.2rem;margin-right:0px}}
+@media only screen and (min-device-width: 768px) and (max-device-width: 1024px) and (orientation: landscape), (min-device-width: 834px) and (orientation: portrait), (min-device-width: 1024px) and (orientation: portrait){#onetrust-banner-sdk.otFloatingFlat{width:74%;border-top-left-radius:0px;border-top-right-radius:0px;border-bottom-right-radius:0px;border-bottom-left-radius:0px;left:auto}}
+#onetrust-consent-sdk #onetrust-banner-sdk .ot-sdk-container{background-color:rgb(246, 246, 246)}
+#onetrust-consent-sdk #onetrust-policy-title, #onetrust-consent-sdk #onetrust-policy-text, #onetrust-consent-sdk .ot-b-addl-desc, #onetrust-consent-sdk .ot-dpd-desc, #onetrust-consent-sdk .ot-dpd-title, #onetrust-consent-sdk #onetrust-policy-text :not(.onetrust-vendors-list-handler), #onetrust-consent-sdk .ot-dpd-desc :not(.onetrust-vendors-list-handler), #onetrust-consent-sdk #onetrust-banner-sdk #banner-options *, #onetrust-banner-sdk .ot-cat-header, #onetrust-banner-sdk .ot-optout-signal{color:rgb(0, 0, 0)}
+#onetrust-consent-sdk #onetrust-banner-sdk a[href], #onetrust-consent-sdk #onetrust-banner-sdk a[href] font, #onetrust-consent-sdk #onetrust-banner-sdk .ot-link-btn{color:rgb(0, 92, 138)}
+#onetrust-consent-sdk #onetrust-banner-sdk :focus, #onetrust-consent-sdk #onetrust-banner-sdk:focus{outline-color:rgb(0, 0, 0);outline-width:1px}
+#onetrust-consent-sdk #onetrust-pc-btn-handler, #onetrust-consent-sdk #onetrust-pc-btn-handler.cookie-setting-link, #onetrust-consent-sdk #ot-dialog-cancel-handler{color:rgb(0, 92, 138);border-top-color:rgb(0, 92, 138);border-right-color:rgb(0, 92, 138);border-bottom-color:rgb(0, 92, 138);border-left-color:rgb(0, 92, 138);background-color:rgb(246, 246, 246)}
+#onetrust-banner-sdk #onetrust-policy-text a.ot-cookie-policy-link, #onetrust-banner-sdk #onetrust-policy-text a.ot-imprint-link{margin-left:5px}
+#onetrust-banner-sdk #onetrust-policy-text, #onetrust-banner-sdk .ot-dpd-desc, #onetrust-banner-sdk .ot-b-addl-desc{font-size:0.875em}
+#onetrust-banner-sdk #onetrust-accept-btn-handler, #onetrust-banner-sdk #onetrust-reject-all-handler, #onetrust-banner-sdk #onetrust-pc-btn-handler{font-size:0.875em}
+#onetrust-consent-sdk #onetrust-banner-sdk a[href]:hover, #onetrust-consent-sdk #onetrust-pc-btn-handler.cookie-setting-link:hover, #onetrust-consent-sdk #onetrust-banner-sdk a[href]:focus, #onetrust-consent-sdk #onetrust-pc-btn-handler.cookie-setting-link:focus{color:rgb(0, 131, 160);text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial;outline-color:initial;outline-style:none;outline-width:initial}
+#onetrust-consent-sdk #onetrust-banner-sdk a[href], #onetrust-consent-sdk #onetrust-pc-btn-handler.cookie-setting-link{color:rgb(0, 92, 138);text-decoration-line:none;text-decoration-thickness:initial;text-decoration-style:initial;text-decoration-color:initial}
+#onetrust-banner-sdk .ot-sdk-button, #onetrust-banner-sdk button, #onetrust-pc-sdk .ot-sdk-button, #onetrust-pc-sdk button, #ot-sdk-cookie-policy .ot-sdk-button, #ot-sdk-cookie-policy button{margin-bottom:0.675rem}
+#onetrust-banner-sdk #onetrust-policy-text a{margin-left:0px}
+#onetrust-banner-sdk #onetrust-accept-btn-handler, #onetrust-banner-sdk #onetrust-reject-all-handler, #onetrust-banner-sdk #onetrust-pc-btn-handler{padding-top:10px;padding-right:12px;padding-bottom:10px;padding-left:12px;border-top-left-radius:4px;border-top-right-radius:4px;border-bottom-right-radius:4px;border-bottom-left-radius:4px}
+@media only screen and (min-width: 1024px){#onetrust-banner-sdk #onetrust-button-group{margin-right:auto}
+#onetrust-banner-sdk:not(.ot-iab-2) #onetrust-button-group-parent{width:31%}}
+@media only screen and (min-width: 1280px){#onetrust-banner-sdk:not(.ot-iab-2) #onetrust-button-group-parent{width:30%}}
+#onetrust-banner-sdk .ot-sdk-four.ot-sdk-columns{border-right-width:medium!important;border-right-style:none!important;border-right-color:currentcolor!important}
+#onetrust-banner-sdk .ot-sdk-four.ot-sdk-columns, #onetrust-pc-sdk .ot-sdk-four.ot-sdk-columns, #ot-sdk-cookie-policy .ot-sdk-four.ot-sdk-columns{border-right-width:1px;border-right-style:solid;border-right-color:rgb(153, 153, 153)}</style></head> <body class="article">
+<header class="header"> <nav class="navbar"> <div class="navbar-brand"> <a class="navbar-item" href="https://spring.io/"> <div data-snap-placeholder="img" style="display:inline-block;width:175px;height:45px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div> </a>  </div> <div id="topbar-nav" class="navbar-menu"> <div class="navbar-end"> <div class="navbar-item has-dropdown is-hoverable"> <a class="navbar-link" href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#">Why Spring</a>  </div> <div class="navbar-item has-dropdown is-hoverable"> <a class="navbar-link" href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#">Learn</a>  </div> <div class="navbar-item has-dropdown is-hoverable"> <a class="navbar-link" href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#">Projects</a>  </div> <div class="navbar-item has-dropdown is-hoverable"> <a class="navbar-link" href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#">Resources</a>  </div> <div class="navbar-item has-dropdown is-hoverable"> <a class="navbar-link" href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#">Community</a>  </div> <div class="navbar-item has-dropdown is-hoverable is-enterprise"> <a class="navbar-link" href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#">Enterprise</a>  </div> </div> </div> <label class="theme-toggler"> <input type="checkbox" id="switch-theme-checkbox" name="switch-theme-checkbox"> <span class="icon"> <div data-snap-placeholder="svg" style="display:inline-block;width:13px;height:13px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></span> <span class="text">light</span> </label> </nav>
+</header>
+
+<div class="body">
+<div class="nav-container"> <aside class="nav"> <div class="panels"> <div class="nav-panel-menu is-active"> <nav class="nav-menu">
+<div class="context"> <span class="title">Spring Boot</span> <span class="version">4.1.1</span> <button class="browse-version" id="browse-version"> <svg height="24px" id="Layer_1" style="enable-background:new 0 0 512 512;" version="1.1" viewBox="0 0 512 512" width="24px" xml:space="preserve"><g><path d="M256,224c-17.7,0-32,14.3-32,32s14.3,32,32,32c17.7,0,32-14.3,32-32S273.7,224,256,224L256,224z"></path><path d="M128.4,224c-17.7,0-32,14.3-32,32s14.3,32,32,32c17.7,0,32-14.3,32-32S146,224,128.4,224L128.4,224z"></path><path d="M384,224c-17.7,0-32,14.3-32,32s14.3,32,32,32s32-14.3,32-32S401.7,224,384,224L384,224z"></path></g></svg> </button> <div class="search"> <button class="DocSearch-Button search-button"> <svg enable-background="new 0 0 32 32" id="Glyph" version="1.1" viewBox="0 0 32 32" xml:space="preserve" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"> <path d="M27.414,24.586l-5.077-5.077C23.386,17.928,24,16.035,24,14c0-5.514-4.486-10-10-10S4,8.486,4,14  s4.486,10,10,10c2.035,0,3.928-0.614,5.509-1.663l5.077,5.077c0.78,0.781,2.048,0.781,2.828,0  C28.195,26.633,28.195,25.367,27.414,24.586z M7,14c0-3.86,3.14-7,7-7s7,3.14,7,7s-3.14,7-7,7S7,17.86,7,14z" id="XMLID_223_"></path> </svg> <span>Search</span> <span class="search-key">CTRL + k</span> </button>
+</div>
+</div><ul class="nav-list"> <li class="nav-item is-active is-current-path">
+<ul class="nav-list"> <li class="nav-item"> <a class="nav-link navtree-icon-home" href="https://docs.spring.io/spring-boot/index.html">Overview</a> </li> <li class="nav-item"> <a class="nav-link navtree-icon-book" href="https://docs.spring.io/spring-boot/documentation.html">Documentation</a> </li> <li class="nav-item"> <a class="nav-link navtree-icon-question" href="https://docs.spring.io/spring-boot/community.html">Community</a> </li> <li class="nav-item"> <a class="nav-link navtree-icon-server" href="https://docs.spring.io/spring-boot/system-requirements.html">System Requirements</a> </li> <li class="nav-item"> <a class="nav-link navtree-icon-gift" href="https://docs.spring.io/spring-boot/installing.html">Installing Spring Boot</a> </li> <li class="nav-item"> <a class="nav-link navtree-icon-rocket" href="https://docs.spring.io/spring-boot/upgrading.html">Upgrading Spring Boot</a> </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/tutorial/index.html">Tutorials</a>
+ </li> <li class="nav-item is-active is-current-path"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/index.html">Reference</a>
+<ul class="nav-list"> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/using/index.html">Developing with Spring Boot</a>
+ </li> <li class="nav-item is-active is-current-path"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/index.html">Core Features</a>
+<ul class="nav-list"> <li class="nav-item is-current-page is-active"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/spring-application.html">SpringApplication</a> </li> <li class="nav-item"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/external-config.html">Externalized Configuration</a> </li> <li class="nav-item"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/profiles.html">Profiles</a> </li> <li class="nav-item"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/logging.html">Logging</a> </li> <li class="nav-item"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/internationalization.html">Internationalization</a> </li> <li class="nav-item"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/aop.html">Aspect-Oriented Programming</a> </li> <li class="nav-item"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/json.html">JSON</a> </li> <li class="nav-item"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/task-execution-and-scheduling.html">Task Execution and Scheduling</a> </li> <li class="nav-item"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/dev-services.html">Development-time Services</a> </li> <li class="nav-item"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/developing-auto-configuration.html">Creating Your Own Auto-configuration</a> </li> <li class="nav-item"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/kotlin.html">Kotlin Support</a> </li> <li class="nav-item"> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/features/ssl.html">SSL</a> </li>
+</ul> </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/web/index.html">Web</a>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/data/index.html">Data</a>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/io/index.html">IO</a>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/messaging/index.html">Messaging</a>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/security/index.html">Security</a>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/testing/index.html">Testing</a>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/packaging/index.html">Packaging Spring Boot Applications</a>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/reference/actuator/index.html">Production-ready Features</a>
+ </li>
+</ul> </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/how-to/index.html">How-to Guides</a>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/build-tool-plugin/index.html">Build Tool Plugins</a>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <a class="nav-link" href="https://docs.spring.io/spring-boot/cli/index.html">Spring Boot CLI</a>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <span class="nav-text" style="cursor: pointer;">Rest APIs</span>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <span class="nav-text" style="cursor: pointer;">Java APIs</span>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <span class="nav-text" style="cursor: pointer;">Kotlin APIs</span>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <span class="nav-text" style="cursor: pointer;">Specifications</span>
+ </li> <li class="nav-item"> <button class="nav-item-toggle"></button> <span class="nav-text" style="cursor: pointer;">Appendix</span>
+ </li>
+</ul> </li>
+</ul> <div class="toggle-sm">  </div> </nav> </div> <div class="nav-collapse"> <button id="nav-collapse-toggle"><span></span></button> </div> </div> <div class="nav-resize"></div> </aside>
+</div>
+<main class="article">
+ <div class="content">
+<aside class="sidebar"> <div class="content"> <div class="toc"> <div class="toc-menu"><h3>SpringApplication</h3><ul><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.startup-failure">Startup Failure</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.lazy-initialization">Lazy Initialization</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.banner">Customizing the Banner</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.customizing-spring-application">Customizing SpringApplication</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.fluent-builder-api">Fluent Builder API</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-availability">Application Availability</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-availability.liveness">Liveness State</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-availability.readiness">Readiness State</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-availability.managing">Managing the Application Availability State</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-events-and-listeners">Application Events and Listeners</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.web-environment">Web Environment</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-arguments">Accessing Application Arguments</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.command-line-runner">Using the ApplicationRunner or CommandLineRunner</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-exit">Application Exit</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.admin">Admin Features</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.startup-tracking">Application Startup tracking</a></li><li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.virtual-threads">Virtual threads</a></li></ul></div> </div> <div class="sidebar-links"> <a href="https://github.com/spring-projects/spring-boot/blob/v4.1.1/documentation/spring-boot-docs/src/docs/antora/modules/reference/pages/features/spring-application.adoc"> <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24"><path d="m16 2.012 3 3L16.713 7.3l-3-3zM4 14v3h3l8.299-8.287-3-3zm0 6h16v2H4z"></path></svg> Edit this Page </a> <a href="https://github.com/spring-projects/spring-boot" title="GitHub"> <div data-snap-placeholder="svg" style="display:inline-block;width:24px;height:24px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div> GitHub Project </a> <a href="https://stackoverflow.com/tags/spring-boot"> <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path d="M290.7 311L95 269.7 86.8 309l195.7 41zm51-87L188.2 95.7l-25.5 30.8 153.5 128.3zm-31.2 39.7L129.2 179l-16.7 36.5L293.7 300zM262 32l-32 24 119.3 160.3 32-24zm20.5 328h-200v39.7h200zm39.7 80H42.7V320h-40v160h359.5V320h-40z"></path></svg> Stack Overflow </a> </div> </div>
+</aside>
+<article class="doc">
+<div class="breadcrumbs-container"> <nav class="breadcrumbs" aria-label="breadcrumbs"> <ul> <li id="copy-url" title="Copy versioned URL"></li> <li><a href="https://docs.spring.io/spring-boot/index.html">Spring Boot</a></li> <li><a href="https://docs.spring.io/spring-boot/reference/index.html">Reference</a></li> <li><a href="https://docs.spring.io/spring-boot/reference/features/index.html">Core Features</a></li> <li><a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html">SpringApplication</a></li> </ul> </nav>
+</div><h1 id="page-title" class="page">SpringApplication</h1>
+<div id="preamble">
+<div class="sectionbody">
+<div class="paragraph">
+<p>The <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> class provides a convenient way to bootstrap a Spring application that is started from a <code>main()</code> method.
+In many situations, you can delegate to the static <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html#run(java.lang.Class,java.lang.String...)" class="apiref"><code>SpringApplication.run(Class, String...)</code></a> method, as shown in the following example:</p>
+</div>
+<div id="_tabs_1" class="openblock tabs is-sync is-loaded">
+<div class="content">
+<div class="ulist tablist">
+<ul role="tablist">
+<li id="_tabs_1_java" class="tab is-selected" tabindex="0" role="tab" aria-controls="_tabs_1_java--panel" aria-selected="true">
+<p>Java</p>
+</li>
+<li id="_tabs_1_kotlin" class="tab" tabindex="-1" role="tab" aria-controls="_tabs_1_kotlin--panel">
+<p>Kotlin</p>
+</li>
+</ul>
+</div>
+<div id="_tabs_1_java--panel" class="tabpanel" aria-labelledby="_tabs_1_java" role="tabpanel">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-java hljs"><span class="fold-block is-hidden-folded"><span class="hljs-keyword">import</span> org.springframework.boot.SpringApplication;
+<span class="hljs-keyword">import</span> org.springframework.boot.autoconfigure.SpringBootApplication;
+
+</span><span class="fold-block"><span class="hljs-meta">@SpringBootApplication</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyApplication</span> </span>{
+
+	<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> </span>{
+		SpringApplication.run(MyApplication<span class="hljs-class">.<span class="hljs-keyword">class</span>, <span class="hljs-title">args</span>)</span>;
+	}
+
+}</span></code><div class="source-toolbox"><button class="fold-button" title="Expand foldable text"></button><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+<div class="paragraph">
+<p>When your application starts, you should see something similar to the following output:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-none hljs">  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.1)
+
+2026-08-17T10:51:43.606Z  INFO 11484 --- [           main] o.s.b.d.f.logexample.MyApplication       : Starting MyApplication using Java 25.0.4 with PID 11484 (/opt/apps/myapp.jar started by myuser in /opt/apps/)
+2026-08-17T10:51:43.627Z  INFO 11484 --- [           main] o.s.b.d.f.logexample.MyApplication       : No active profile set, falling back to 1 default profile: "default"
+2026-08-17T10:51:48.207Z  INFO 11484 --- [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-08-17T10:51:48.266Z  INFO 11484 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-08-17T10:51:48.275Z  INFO 11484 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.24]
+2026-08-17T10:51:48.445Z  INFO 11484 --- [           main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 4488 ms
+2026-08-17T10:51:50.163Z  INFO 11484 --- [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat started on port 8080 (http) with context path '/'
+2026-08-17T10:51:50.190Z  INFO 11484 --- [           main] o.s.b.d.f.logexample.MyApplication       : Started MyApplication in 8.35 seconds (process running for 9.787)
+2026-08-17T10:51:50.219Z  INFO 11484 --- [ionShutdownHook] o.s.boot.tomcat.GracefulShutdown         : Commencing graceful shutdown. Waiting for active requests to complete
+2026-08-17T10:51:50.249Z  INFO 11484 --- [tomcat-shutdown] o.s.boot.tomcat.GracefulShutdown         : Graceful shutdown complete</code><div class="source-toolbox"><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>By default, <code>INFO</code> logging messages are shown, including some relevant startup details, such as the user that launched the application.
+If you need a log level other than <code>INFO</code>, you can set it, as described in <a href="https://docs.spring.io/spring-boot/reference/features/logging.html#features.logging.log-levels" class="xref page">Log Levels</a>.
+The application version is determined using the implementation version from the main application class’s package.
+Startup information logging can be turned off by setting <code>spring.main.log-startup-info</code> to <code>false</code>.
+This will also turn off logging of the application’s active profiles.</p>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-tip" title="Tip"></i>
+</td>
+<td class="content">
+To add additional logging during startup, you can override <code>logStartupInfo(boolean)</code> in a subclass of <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a>.
+</td>
+</tr>
+</tbody></table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.startup-failure">Startup Failure</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>If your application fails to start, registered <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/diagnostics/FailureAnalyzer.html" class="apiref"><code>FailureAnalyzer</code></a> beans get a chance to provide a dedicated error message and a concrete action to fix the problem.
+For instance, if you start a web application on port <code>8080</code> and that port is already in use, you should see something similar to the following message:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-none hljs">***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Embedded servlet container failed to start. Port 8080 was already in use.
+
+Action:
+
+Identify and stop the process that is listening on port 8080 or configure this application to listen on another port.</code><div class="source-toolbox"><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+<div class="admonitionblock note">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+Spring Boot provides numerous <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/diagnostics/FailureAnalyzer.html" class="apiref"><code>FailureAnalyzer</code></a> implementations, and you can <a href="https://docs.spring.io/spring-boot/how-to/application.html#howto.application.failure-analyzer" class="xref page">add your own</a>.
+</td>
+</tr>
+</tbody></table>
+</div>
+<div class="paragraph">
+<p>If no failure analyzers are able to handle the exception, you can still display the full conditions report to better understand what went wrong.
+To do so, you need to <a href="https://docs.spring.io/spring-boot/reference/features/external-config.html" class="xref page">enable the <code>debug</code> property</a> or <a href="https://docs.spring.io/spring-boot/reference/features/logging.html#features.logging.log-levels" class="xref page">enable <code>DEBUG</code> logging</a> for <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/autoconfigure/logging/ConditionEvaluationReportLoggingListener.html" class="apiref"><code>ConditionEvaluationReportLoggingListener</code></a>.</p>
+</div>
+<div class="paragraph">
+<p>For instance, if you are running your application by using <code>java -jar</code>, you can enable the <code>debug</code> property as follows:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-shell hljs"><span class="hljs-meta">$</span><span class="bash"> java -jar myproject-0.0.1-SNAPSHOT.jar --debug</span></code><div class="source-toolbox"><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.lazy-initialization">Lazy Initialization</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p><a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> allows an application to be initialized lazily.
+When lazy initialization is enabled, beans are created as they are needed rather than during application startup.
+As a result, enabling lazy initialization can reduce the time that it takes your application to start.
+In a web application, enabling lazy initialization will result in many web-related beans not being initialized until an HTTP request is received.</p>
+</div>
+<div class="paragraph">
+<p>A downside of lazy initialization is that it can delay the discovery of a problem with the application.
+If a misconfigured bean is initialized lazily, a failure will no longer occur during startup and the problem will only become apparent when the bean is initialized.
+Care must also be taken to ensure that the JVM has sufficient memory to accommodate all of the application’s beans and not just those that are initialized during startup.
+For these reasons, lazy initialization is not enabled by default and it is recommended that fine-tuning of the JVM’s heap size is done before enabling lazy initialization.</p>
+</div>
+<div class="paragraph">
+<p>Lazy initialization can be enabled programmatically using the <code>lazyInitialization</code> method on <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/builder/SpringApplicationBuilder.html" class="apiref"><code>SpringApplicationBuilder</code></a> or the <code>setLazyInitialization</code> method on <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a>.
+Alternatively, it can be enabled using the <code>spring.main.lazy-initialization</code> property as shown in the following example:</p>
+</div>
+<div id="_tabs_2" class="openblock tabs is-sync is-loaded">
+<div class="content">
+<div class="ulist tablist">
+<ul role="tablist">
+<li id="_tabs_2_properties" class="tab is-selected" tabindex="0" role="tab" aria-controls="_tabs_2_properties--panel" aria-selected="true">
+<p>Properties</p>
+</li>
+<li id="_tabs_2_yaml" class="tab" tabindex="-1" role="tab" aria-controls="_tabs_2_yaml--panel">
+<p>YAML</p>
+</li>
+</ul>
+</div>
+<div id="_tabs_2_properties--panel" class="tabpanel" aria-labelledby="_tabs_2_properties" role="tabpanel">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-properties hljs"><span class="hljs-meta">spring.main.lazy-initialization</span>=<span class="hljs-string">true</span></code><div class="source-toolbox"><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-tip" title="Tip"></i>
+</td>
+<td class="content">
+If you want to disable lazy initialization for certain beans while using lazy initialization for the rest of the application, you can explicitly set their lazy attribute to false using the <code>@Lazy(false)</code> annotation.
+</td>
+</tr>
+</tbody></table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.banner">Customizing the Banner</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>The banner that is printed on start up can be changed by adding a <code>banner.txt</code> file to your classpath or by setting the <code>spring.banner.location</code> property to the location of such a file.
+If the file has an encoding other than UTF-8, you can set <code>spring.banner.charset</code>.</p>
+</div>
+<div class="paragraph">
+<p>Inside your <code>banner.txt</code> file, you can use any key available in the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/env/Environment.html" class="apiref"><code>Environment</code></a> as well as any of the following placeholders:</p>
+</div>
+<table class="tableblock frame-all grid-all stretch">
+<caption class="title">Table 1. Banner variables</caption>
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Variable</th>
+<th class="tableblock halign-left valign-top">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>${application.version}</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The version number of your application, as declared in <code>MANIFEST.MF</code>. For example, <code>Implementation-Version: 1.0</code> is printed as <code>1.0</code>.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>${application.formatted-version}</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The version number of your application, as declared in <code>MANIFEST.MF</code> and formatted for display (surrounded with brackets and prefixed with <code>v</code>). For example <code>(v1.0)</code>.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>${spring-boot.version}</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The Spring Boot version that you are using. For example <code>4.1.1</code>.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>${spring-boot.formatted-version}</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The Spring Boot version that you are using, formatted for display (surrounded with brackets and prefixed with <code>v</code>). For example <code>(v4.1.1)</code>.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>${Ansi.NAME}</code> (or <code>${AnsiColor.NAME}</code>, <code>${AnsiBackground.NAME}</code>, <code>${AnsiStyle.NAME}</code>)</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Where <code>NAME</code> is the name of an ANSI escape code. See <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ansi/AnsiPropertySource.html" class="apiref"><code>AnsiPropertySource</code></a> for details.</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock"><code>${application.title}</code></p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">The title of your application, as declared in <code>MANIFEST.MF</code>. For example <code>Implementation-Title: MyApp</code> is printed as <code>MyApp</code>.</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonitionblock tip">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-tip" title="Tip"></i>
+</td>
+<td class="content">
+The <code>SpringApplication.setBanner(…​)</code> method can be used if you want to generate a banner programmatically.
+Use the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/Banner.html" class="apiref"><code>Banner</code></a> interface and implement your own <code>printBanner()</code> method.
+</td>
+</tr>
+</tbody></table>
+</div>
+<div class="paragraph">
+<p>You can also use the <code>spring.main.banner-mode</code> property to determine if the banner has to be printed on <a href="https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/System.html#out" class="apiref external" target="_blank"><code>System.out</code></a> (<code>console</code>), sent to the configured logger (<code>log</code>), or not produced at all (<code>off</code>).</p>
+</div>
+<div class="paragraph">
+<p>The printed banner is registered as a singleton bean under the following name: <code>springBootBanner</code>.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p>The <code>application.title</code>, <code>application.version</code>, and <code>application.formatted-version</code> properties are only available if you are using <code>java -jar</code> or <code>java -cp</code> with Spring Boot launchers.
+The values will not be resolved if you are running an unpacked jar and starting it with <code>java -cp &lt;classpath&gt; &lt;mainclass&gt;</code>
+or running your application as a native image.</p>
+</div>
+<div class="paragraph">
+<p>To use the <code>application.*</code> properties, launch your application as a packed jar using <code>java -jar</code> or as an unpacked jar using <code>java org.springframework.boot.loader.launch.JarLauncher</code>.
+This will initialize the <code>application.*</code> banner properties before building the classpath and launching your app.</p>
+</div>
+</td>
+</tr>
+</tbody></table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.customizing-spring-application">Customizing SpringApplication</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>If the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> defaults are not to your taste, you can instead create a local instance and customize it.
+For example, to turn off the banner, you could write:</p>
+</div>
+<div id="_tabs_3" class="openblock tabs is-sync is-loaded">
+<div class="content">
+<div class="ulist tablist">
+<ul role="tablist">
+<li id="_tabs_3_java" class="tab is-selected" tabindex="0" role="tab" aria-controls="_tabs_3_java--panel" aria-selected="true">
+<p>Java</p>
+</li>
+<li id="_tabs_3_kotlin" class="tab" tabindex="-1" role="tab" aria-controls="_tabs_3_kotlin--panel">
+<p>Kotlin</p>
+</li>
+</ul>
+</div>
+<div id="_tabs_3_java--panel" class="tabpanel" aria-labelledby="_tabs_3_java" role="tabpanel">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-java hljs"><span class="fold-block is-hidden-folded"><span class="hljs-keyword">import</span> org.springframework.boot.Banner;
+<span class="hljs-keyword">import</span> org.springframework.boot.SpringApplication;
+<span class="hljs-keyword">import</span> org.springframework.boot.autoconfigure.SpringBootApplication;
+
+</span><span class="fold-block"><span class="hljs-meta">@SpringBootApplication</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyApplication</span> </span>{
+
+	<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> </span>{
+		SpringApplication application = <span class="hljs-keyword">new</span> SpringApplication(MyApplication<span class="hljs-class">.<span class="hljs-keyword">class</span>)</span>;
+		application.setBannerMode(Banner.Mode.OFF);
+		application.run(args);
+	}
+
+}</span></code><div class="source-toolbox"><button class="fold-button" title="Expand foldable text"></button><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+<div class="admonitionblock note">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+The constructor arguments passed to <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> are configuration sources for Spring beans.
+In most cases, these are references to <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/annotation/Configuration.html" class="apiref"><code>@Configuration</code></a> classes, but they could also be direct references <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/stereotype/Component.html" class="apiref"><code>@Component</code></a> classes.
+</td>
+</tr>
+</tbody></table>
+</div>
+<div class="paragraph">
+<p>It is also possible to configure the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> by using an <code>application.properties</code> file.
+See <a href="https://docs.spring.io/spring-boot/reference/features/external-config.html" class="xref page">Externalized Configuration</a> for details.</p>
+</div>
+<div class="paragraph">
+<p>For a complete list of the configuration options, see the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> API documentation.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.fluent-builder-api">Fluent Builder API</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>If you need to build an <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationContext.html" class="apiref"><code>ApplicationContext</code></a> hierarchy (multiple contexts with a parent/child relationship) or if you prefer using a fluent builder API, you can use the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/builder/SpringApplicationBuilder.html" class="apiref"><code>SpringApplicationBuilder</code></a>.</p>
+</div>
+<div class="paragraph">
+<p>The <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/builder/SpringApplicationBuilder.html" class="apiref"><code>SpringApplicationBuilder</code></a> lets you chain together multiple method calls and includes <code>parent</code> and <code>child</code> methods that let you create a hierarchy, as shown in the following example:</p>
+</div>
+<div id="_tabs_4" class="openblock tabs is-sync is-loaded">
+<div class="content">
+<div class="ulist tablist">
+<ul role="tablist">
+<li id="_tabs_4_java" class="tab is-selected" tabindex="0" role="tab" aria-controls="_tabs_4_java--panel" aria-selected="true">
+<p>Java</p>
+</li>
+<li id="_tabs_4_kotlin" class="tab" tabindex="-1" role="tab" aria-controls="_tabs_4_kotlin--panel">
+<p>Kotlin</p>
+</li>
+</ul>
+</div>
+<div id="_tabs_4_java--panel" class="tabpanel" aria-labelledby="_tabs_4_java" role="tabpanel">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-java hljs">		<span class="hljs-keyword">new</span> SpringApplicationBuilder().sources(Parent<span class="hljs-class">.<span class="hljs-keyword">class</span>)
+			.<span class="hljs-title">child</span>(<span class="hljs-title">Application</span>.<span class="hljs-title">class</span>)
+			.<span class="hljs-title">bannerMode</span>(<span class="hljs-title">Banner</span>.<span class="hljs-title">Mode</span>.<span class="hljs-title">OFF</span>)
+			.<span class="hljs-title">run</span>(<span class="hljs-title">args</span>)</span>;</code><div class="source-toolbox"><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+<div class="admonitionblock note">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+There are some restrictions when creating an <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationContext.html" class="apiref"><code>ApplicationContext</code></a> hierarchy.
+For example, Web components <strong>must</strong> be contained within the child context, and the same <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/env/Environment.html" class="apiref"><code>Environment</code></a> is used for both parent and child contexts.
+See the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/builder/SpringApplicationBuilder.html" class="apiref"><code>SpringApplicationBuilder</code></a> API documentation for full details.
+</td>
+</tr>
+</tbody></table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.application-availability">Application Availability</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>When deployed on platforms, applications can provide information about their availability to the platform using infrastructure such as <a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/" class="external" target="_blank">Kubernetes Probes</a>.
+Spring Boot includes out-of-the box support for the commonly used “liveness” and “readiness” availability states.
+If you are using Spring Boot’s “actuator” support then these states are exposed as health endpoint groups.</p>
+</div>
+<div class="paragraph">
+<p>In addition, you can also obtain availability states by injecting the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/availability/ApplicationAvailability.html" class="apiref"><code>ApplicationAvailability</code></a> interface into your own beans.</p>
+</div>
+<div class="sect2">
+<h3 id="features.spring-application.application-availability.liveness">Liveness State</h3>
+<div class="paragraph">
+<p>The “Liveness” state of an application tells whether its internal state allows it to work correctly, or recover by itself if it is currently failing.
+A broken “Liveness” state means that the application is in a state that it cannot recover from, and the infrastructure should restart the application.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+In general, the "Liveness" state should not be based on external checks, such as <a href="https://docs.spring.io/spring-boot/reference/actuator/endpoints.html#actuator.endpoints.health" class="xref page">health checks</a>.
+If it did, a failing external system (a database, a Web API, an external cache) would trigger massive restarts and cascading failures across the platform.
+</td>
+</tr>
+</tbody></table>
+</div>
+<div class="paragraph">
+<p>The internal state of Spring Boot applications is mostly represented by the Spring <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationContext.html" class="apiref"><code>ApplicationContext</code></a>.
+If the application context has started successfully, Spring Boot assumes that the application is in a valid state.
+An application is considered live as soon as the context has been refreshed, see <a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-events-and-listeners">Spring Boot application lifecycle and related Application Events</a>.</p>
+</div>
+</div>
+<div class="sect2">
+<h3 id="features.spring-application.application-availability.readiness">Readiness State</h3>
+<div class="paragraph">
+<p>The “Readiness” state of an application tells whether the application is ready to handle traffic.
+A failing “Readiness” state tells the platform that it should not route traffic to the application for now.
+This typically happens during startup, while <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/CommandLineRunner.html" class="apiref"><code>CommandLineRunner</code></a> and <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ApplicationRunner.html" class="apiref"><code>ApplicationRunner</code></a> components are being processed, or at any time if the application decides that it is too busy for additional traffic.</p>
+</div>
+<div class="paragraph">
+<p>An application is considered ready as soon as application and command-line runners have been called, see <a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.application-events-and-listeners">Spring Boot application lifecycle and related Application Events</a>.</p>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-tip" title="Tip"></i>
+</td>
+<td class="content">
+Tasks expected to run during startup should be executed by <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/CommandLineRunner.html" class="apiref"><code>CommandLineRunner</code></a> and <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ApplicationRunner.html" class="apiref"><code>ApplicationRunner</code></a> components instead of using Spring component lifecycle callbacks such as <a href="https://jakarta.ee/specifications/annotations/3.0/apidocs/jakarta/annotation/PostConstruct.html" class="apiref external" target="_blank"><code>@PostConstruct</code></a>.
+</td>
+</tr>
+</tbody></table>
+</div>
+</div>
+<div class="sect2">
+<h3 id="features.spring-application.application-availability.managing">Managing the Application Availability State</h3>
+<div class="paragraph">
+<p>Application components can retrieve the current availability state at any time, by injecting the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/availability/ApplicationAvailability.html" class="apiref"><code>ApplicationAvailability</code></a> interface and calling methods on it.
+More often, applications will want to listen to state updates or update the state of the application.</p>
+</div>
+<div class="paragraph">
+<p>For example, we can export the "Readiness" state of the application to a file so that a Kubernetes "exec Probe" can look at this file:</p>
+</div>
+<div id="_tabs_5" class="openblock tabs is-sync is-loaded">
+<div class="content">
+<div class="ulist tablist">
+<ul role="tablist">
+<li id="_tabs_5_java" class="tab is-selected" tabindex="0" role="tab" aria-controls="_tabs_5_java--panel" aria-selected="true">
+<p>Java</p>
+</li>
+<li id="_tabs_5_kotlin" class="tab" tabindex="-1" role="tab" aria-controls="_tabs_5_kotlin--panel">
+<p>Kotlin</p>
+</li>
+</ul>
+</div>
+<div id="_tabs_5_java--panel" class="tabpanel" aria-labelledby="_tabs_5_java" role="tabpanel">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-java hljs"><span class="fold-block is-hidden-folded"><span class="hljs-keyword">import</span> org.springframework.boot.availability.AvailabilityChangeEvent;
+<span class="hljs-keyword">import</span> org.springframework.boot.availability.ReadinessState;
+<span class="hljs-keyword">import</span> org.springframework.context.event.EventListener;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
+
+</span><span class="fold-block"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyReadinessStateExporter</span> </span>{
+
+	<span class="hljs-meta">@EventListener</span>
+	<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">onStateChange</span><span class="hljs-params">(AvailabilityChangeEvent&lt;ReadinessState&gt; event)</span> </span>{
+		<span class="hljs-keyword">switch</span> (event.getState()) {
+			<span class="hljs-keyword">case</span> ACCEPTING_TRAFFIC -&gt; {
+				<span class="hljs-comment">// create file /tmp/healthy</span>
+			}
+			<span class="hljs-keyword">case</span> REFUSING_TRAFFIC -&gt; {
+				<span class="hljs-comment">// remove file /tmp/healthy</span>
+			}
+		}
+	}
+
+}</span></code><div class="source-toolbox"><button class="fold-button" title="Expand foldable text"></button><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+<div class="paragraph">
+<p>We can also update the state of the application, when the application breaks and cannot recover:</p>
+</div>
+<div id="_tabs_6" class="openblock tabs is-sync is-loaded">
+<div class="content">
+<div class="ulist tablist">
+<ul role="tablist">
+<li id="_tabs_6_java" class="tab is-selected" tabindex="0" role="tab" aria-controls="_tabs_6_java--panel" aria-selected="true">
+<p>Java</p>
+</li>
+<li id="_tabs_6_kotlin" class="tab" tabindex="-1" role="tab" aria-controls="_tabs_6_kotlin--panel">
+<p>Kotlin</p>
+</li>
+</ul>
+</div>
+<div id="_tabs_6_java--panel" class="tabpanel" aria-labelledby="_tabs_6_java" role="tabpanel">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-java hljs"><span class="fold-block is-hidden-folded"><span class="hljs-keyword">import</span> org.springframework.boot.availability.AvailabilityChangeEvent;
+<span class="hljs-keyword">import</span> org.springframework.boot.availability.LivenessState;
+<span class="hljs-keyword">import</span> org.springframework.context.ApplicationEventPublisher;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
+
+</span><span class="fold-block"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyLocalCacheVerifier</span> </span>{
+
+	<span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ApplicationEventPublisher eventPublisher;
+
+	<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-title">MyLocalCacheVerifier</span><span class="hljs-params">(ApplicationEventPublisher eventPublisher)</span> </span>{
+		<span class="hljs-keyword">this</span>.eventPublisher = eventPublisher;
+	}
+
+	<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">checkLocalCache</span><span class="hljs-params">()</span> </span>{
+		<span class="hljs-keyword">try</span> {
+			<span class="hljs-comment">// ...</span>
+		}
+		<span class="hljs-keyword">catch</span> (CacheCompletelyBrokenException ex) {
+			AvailabilityChangeEvent.publish(<span class="hljs-keyword">this</span>.eventPublisher, ex, LivenessState.BROKEN);
+		}
+	}
+
+}</span></code><div class="source-toolbox"><button class="fold-button" title="Expand foldable text"></button><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+<div class="paragraph">
+<p>Spring Boot provides <a href="https://docs.spring.io/spring-boot/reference/actuator/endpoints.html#actuator.endpoints.kubernetes-probes" class="xref page">Kubernetes HTTP probes for "Liveness" and "Readiness" with Actuator Health Endpoints</a>.
+You can get more guidance about <a href="https://docs.spring.io/spring-boot/how-to/deployment/cloud.html#howto.deployment.cloud.kubernetes" class="xref page">deploying Spring Boot applications on Kubernetes in the dedicated section</a>.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.application-events-and-listeners">Application Events and Listeners</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>In addition to the usual Spring Framework events, such as <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/event/ContextRefreshedEvent.html" class="apiref"><code>ContextRefreshedEvent</code></a>, a <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> sends some additional application events.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+<div class="paragraph">
+<p>Some events are actually triggered before the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationContext.html" class="apiref"><code>ApplicationContext</code></a> is created, so you cannot register a listener on those as a <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/annotation/Bean.html" class="apiref"><code>@Bean</code></a>.
+You can register them with the <code>SpringApplication.addListeners(…​)</code> method or the <code>SpringApplicationBuilder.listeners(…​)</code> method.</p>
+</div>
+<div class="paragraph">
+<p>If you want those listeners to be registered automatically, regardless of the way the application is created, you can add a <code>META-INF/spring.factories</code> file to your project and reference your listener(s) by using the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationListener.html" class="apiref"><code>ApplicationListener</code></a> key, as shown in the following example:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-none hljs">org.springframework.context.ApplicationListener=com.example.project.MyListener</code><div class="source-toolbox"><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</td>
+</tr>
+</tbody></table>
+</div>
+<div class="paragraph">
+<p>Application events are sent in the following order, as your application runs:</p>
+</div>
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>An <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/event/ApplicationStartingEvent.html" class="apiref"><code>ApplicationStartingEvent</code></a> is sent at the start of a run but before any processing, except for the registration of listeners and initializers.</p>
+</li>
+<li>
+<p>An <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/event/ApplicationEnvironmentPreparedEvent.html" class="apiref"><code>ApplicationEnvironmentPreparedEvent</code></a> is sent when the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/env/Environment.html" class="apiref"><code>Environment</code></a> to be used in the context is known but before the context is created.</p>
+</li>
+<li>
+<p>An <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/event/ApplicationContextInitializedEvent.html" class="apiref"><code>ApplicationContextInitializedEvent</code></a> is sent when the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationContext.html" class="apiref"><code>ApplicationContext</code></a> is prepared and ApplicationContextInitializers have been called but before any bean definitions are loaded.</p>
+</li>
+<li>
+<p>An <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/event/ApplicationPreparedEvent.html" class="apiref"><code>ApplicationPreparedEvent</code></a> is sent just before the refresh is started but after bean definitions have been loaded.</p>
+</li>
+<li>
+<p>An <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/event/ApplicationStartedEvent.html" class="apiref"><code>ApplicationStartedEvent</code></a> is sent after the context has been refreshed but before any application and command-line runners have been called.</p>
+</li>
+<li>
+<p>An <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/availability/AvailabilityChangeEvent.html" class="apiref"><code>AvailabilityChangeEvent</code></a> is sent right after with <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/availability/LivenessState.html#CORRECT" class="apiref"><code>LivenessState.CORRECT</code></a> to indicate that the application is considered as live.</p>
+</li>
+<li>
+<p>An <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/event/ApplicationReadyEvent.html" class="apiref"><code>ApplicationReadyEvent</code></a> is sent after any <a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.command-line-runner">application and command-line runners</a> have been called.</p>
+</li>
+<li>
+<p>An <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/availability/AvailabilityChangeEvent.html" class="apiref"><code>AvailabilityChangeEvent</code></a> is sent right after with <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/availability/ReadinessState.html#ACCEPTING_TRAFFIC" class="apiref"><code>ReadinessState.ACCEPTING_TRAFFIC</code></a> to indicate that the application is ready to service requests.</p>
+</li>
+<li>
+<p>An <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/event/ApplicationFailedEvent.html" class="apiref"><code>ApplicationFailedEvent</code></a> is sent if there is an exception on startup.</p>
+</li>
+</ol>
+</div>
+<div class="paragraph">
+<p>The above list only includes <code>SpringApplicationEvent</code>s that are tied to a <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a>.
+In addition to these, the following events are also published after <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/event/ApplicationPreparedEvent.html" class="apiref"><code>ApplicationPreparedEvent</code></a> and before <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/event/ApplicationStartedEvent.html" class="apiref"><code>ApplicationStartedEvent</code></a>:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>A <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/web/server/context/WebServerInitializedEvent.html" class="apiref"><code>WebServerInitializedEvent</code></a> is sent after the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/web/server/WebServer.html" class="apiref"><code>WebServer</code></a> is ready.
+<a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/web/server/servlet/context/ServletWebServerInitializedEvent.html" class="apiref"><code>ServletWebServerInitializedEvent</code></a> and <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/web/server/reactive/context/ReactiveWebServerInitializedEvent.html" class="apiref"><code>ReactiveWebServerInitializedEvent</code></a> are the servlet and reactive variants respectively.</p>
+</li>
+<li>
+<p>A <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/event/ContextRefreshedEvent.html" class="apiref"><code>ContextRefreshedEvent</code></a> is sent when an <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationContext.html" class="apiref"><code>ApplicationContext</code></a> is refreshed.</p>
+</li>
+</ul>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-tip" title="Tip"></i>
+</td>
+<td class="content">
+You often need not use application events, but it can be handy to know that they exist.
+Internally, Spring Boot uses events to handle a variety of tasks.
+</td>
+</tr>
+</tbody></table>
+</div>
+<div class="admonitionblock note">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+Event listeners should not run potentially lengthy tasks as they execute in the same thread by default.
+Consider using <a href="https://docs.spring.io/spring-boot/reference/features/spring-application.html#features.spring-application.command-line-runner">application and command-line runners</a> instead.
+</td>
+</tr>
+</tbody></table>
+</div>
+<div class="paragraph">
+<p>Application events are sent by using Spring Framework’s event publishing mechanism.
+Part of this mechanism ensures that an event published to the listeners in a child context is also published to the listeners in any ancestor contexts.
+As a result of this, if your application uses a hierarchy of <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> instances, a listener may receive multiple instances of the same type of application event.</p>
+</div>
+<div class="paragraph">
+<p>To allow your listener to distinguish between an event for its context and an event for a descendant context, it should request that its application context is injected and then compare the injected context with the context of the event.
+The context can be injected by implementing <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationContextAware.html" class="apiref"><code>ApplicationContextAware</code></a> or, if the listener is a bean, by using <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/beans/factory/annotation/Autowired.html" class="apiref"><code>@Autowired</code></a>.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.web-environment">Web Environment</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>A <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> attempts to create the right type of <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationContext.html" class="apiref"><code>ApplicationContext</code></a> on your behalf.
+The algorithm used to determine a <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/WebApplicationType.html" class="apiref"><code>WebApplicationType</code></a> is the following:</p>
+</div>
+<div class="ulist">
+<ul>
+<li>
+<p>If Spring MVC is present, an <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/web/server/servlet/context/AnnotationConfigServletWebServerApplicationContext.html" class="apiref"><code>AnnotationConfigServletWebServerApplicationContext</code></a> is used</p>
+</li>
+<li>
+<p>If Spring MVC is not present and Spring WebFlux is present, an <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/web/server/reactive/context/AnnotationConfigReactiveWebServerApplicationContext.html" class="apiref"><code>AnnotationConfigReactiveWebServerApplicationContext</code></a> is used</p>
+</li>
+<li>
+<p>Otherwise, <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/annotation/AnnotationConfigApplicationContext.html" class="apiref"><code>AnnotationConfigApplicationContext</code></a> is used</p>
+</li>
+</ul>
+</div>
+<div class="paragraph">
+<p>This means that if you are using Spring MVC and the new <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/web/reactive/function/client/WebClient.html" class="apiref"><code>WebClient</code></a> from Spring WebFlux in the same application, Spring MVC will be used by default.
+You can override that easily by calling <code>setWebApplicationType(WebApplicationType)</code>.</p>
+</div>
+<div class="paragraph">
+<p>It is also possible to take complete control of the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationContext.html" class="apiref"><code>ApplicationContext</code></a> type that is used by calling <code>setApplicationContextFactory(…​)</code>.</p>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-tip" title="Tip"></i>
+</td>
+<td class="content">
+It is often desirable to call <code>setWebApplicationType(WebApplicationType.NONE)</code> when using <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> within a JUnit test.
+</td>
+</tr>
+</tbody></table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.application-arguments">Accessing Application Arguments</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>If you need to access the application arguments that were passed to <code>SpringApplication.run(…​)</code>, you can inject a <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ApplicationArguments.html" class="apiref"><code>ApplicationArguments</code></a> bean.
+The <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ApplicationArguments.html" class="apiref"><code>ApplicationArguments</code></a> interface provides access to both the raw <code>String[]</code> arguments as well as parsed <code>option</code> and <code>non-option</code> arguments, as shown in the following example:</p>
+</div>
+<div id="_tabs_7" class="openblock tabs is-sync is-loaded">
+<div class="content">
+<div class="ulist tablist">
+<ul role="tablist">
+<li id="_tabs_7_java" class="tab is-selected" tabindex="0" role="tab" aria-controls="_tabs_7_java--panel" aria-selected="true">
+<p>Java</p>
+</li>
+<li id="_tabs_7_kotlin" class="tab" tabindex="-1" role="tab" aria-controls="_tabs_7_kotlin--panel">
+<p>Kotlin</p>
+</li>
+</ul>
+</div>
+<div id="_tabs_7_java--panel" class="tabpanel" aria-labelledby="_tabs_7_java" role="tabpanel">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-java hljs"><span class="fold-block is-hidden-folded"><span class="hljs-keyword">import</span> java.util.List;
+
+<span class="hljs-keyword">import</span> org.springframework.boot.ApplicationArguments;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
+
+</span><span class="fold-block"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyBean</span> </span>{
+
+	<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-title">MyBean</span><span class="hljs-params">(ApplicationArguments args)</span> </span>{
+		<span class="hljs-keyword">boolean</span> debug = args.containsOption(<span class="hljs-string">"debug"</span>);
+		List&lt;String&gt; files = args.getNonOptionArgs();
+		<span class="hljs-keyword">if</span> (debug) {
+			System.out.println(files);
+		}
+		<span class="hljs-comment">// if run with "--debug logfile.txt" prints ["logfile.txt"]</span>
+	}
+
+}</span></code><div class="source-toolbox"><button class="fold-button" title="Expand foldable text"></button><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-tip" title="Tip"></i>
+</td>
+<td class="content">
+Spring Boot also registers a <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/env/CommandLinePropertySource.html" class="apiref"><code>CommandLinePropertySource</code></a> with the Spring <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/env/Environment.html" class="apiref"><code>Environment</code></a>.
+This lets you also inject single application arguments by using the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/beans/factory/annotation/Value.html" class="apiref"><code>@Value</code></a> annotation.
+</td>
+</tr>
+</tbody></table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.command-line-runner">Using the ApplicationRunner or CommandLineRunner</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>If you need to run some specific code once the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> has started, you can implement the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ApplicationRunner.html" class="apiref"><code>ApplicationRunner</code></a> or <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/CommandLineRunner.html" class="apiref"><code>CommandLineRunner</code></a> interfaces.
+Both interfaces work in the same way and offer a single <code>run</code> method, which is called just before <code>SpringApplication.run(…​)</code> completes.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+This contract is well suited for tasks that should run after application startup but before it starts accepting traffic.
+</td>
+</tr>
+</tbody></table>
+</div>
+<div class="paragraph">
+<p>The <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/CommandLineRunner.html" class="apiref"><code>CommandLineRunner</code></a> interfaces provides access to application arguments as a string array, whereas the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ApplicationRunner.html" class="apiref"><code>ApplicationRunner</code></a> uses the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ApplicationArguments.html" class="apiref"><code>ApplicationArguments</code></a> interface discussed earlier.
+The following example shows a <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/CommandLineRunner.html" class="apiref"><code>CommandLineRunner</code></a> with a <code>run</code> method:</p>
+</div>
+<div id="_tabs_8" class="openblock tabs is-sync is-loaded">
+<div class="content">
+<div class="ulist tablist">
+<ul role="tablist">
+<li id="_tabs_8_java" class="tab is-selected" tabindex="0" role="tab" aria-controls="_tabs_8_java--panel" aria-selected="true">
+<p>Java</p>
+</li>
+<li id="_tabs_8_kotlin" class="tab" tabindex="-1" role="tab" aria-controls="_tabs_8_kotlin--panel">
+<p>Kotlin</p>
+</li>
+</ul>
+</div>
+<div id="_tabs_8_java--panel" class="tabpanel" aria-labelledby="_tabs_8_java" role="tabpanel">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-java hljs"><span class="fold-block is-hidden-folded"><span class="hljs-keyword">import</span> org.springframework.boot.CommandLineRunner;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
+
+</span><span class="fold-block"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyCommandLineRunner</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">CommandLineRunner</span> </span>{
+
+	<span class="hljs-meta">@Override</span>
+	<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">run</span><span class="hljs-params">(String... args)</span> </span>{
+		<span class="hljs-comment">// Do something...</span>
+	}
+
+}</span></code><div class="source-toolbox"><button class="fold-button" title="Expand foldable text"></button><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+<div class="paragraph">
+<p>If several <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/CommandLineRunner.html" class="apiref"><code>CommandLineRunner</code></a> or <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ApplicationRunner.html" class="apiref"><code>ApplicationRunner</code></a> beans are defined that must be called in a specific order, you can additionally implement the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/Ordered.html" class="apiref"><code>Ordered</code></a> interface or use the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/annotation/Order.html" class="apiref"><code>Order</code></a> annotation.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.application-exit">Application Exit</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Each <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> registers a shutdown hook with the JVM to ensure that the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationContext.html" class="apiref"><code>ApplicationContext</code></a> closes gracefully on exit.
+All the standard Spring lifecycle callbacks (such as the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/beans/factory/DisposableBean.html" class="apiref"><code>DisposableBean</code></a> interface or the <a href="https://jakarta.ee/specifications/annotations/3.0/apidocs/jakarta/annotation/PreDestroy.html" class="apiref external" target="_blank"><code>@PreDestroy</code></a> annotation) can be used.</p>
+</div>
+<div class="paragraph">
+<p>In addition, beans may implement the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ExitCodeGenerator.html" class="apiref"><code>ExitCodeGenerator</code></a> interface if they wish to return a specific exit code when <code>SpringApplication.exit()</code> is called.
+This exit code can then be passed to <code>System.exit()</code> to return it as a status code, as shown in the following example:</p>
+</div>
+<div id="_tabs_9" class="openblock tabs is-sync is-loaded">
+<div class="content">
+<div class="ulist tablist">
+<ul role="tablist">
+<li id="_tabs_9_java" class="tab is-selected" tabindex="0" role="tab" aria-controls="_tabs_9_java--panel" aria-selected="true">
+<p>Java</p>
+</li>
+<li id="_tabs_9_kotlin" class="tab" tabindex="-1" role="tab" aria-controls="_tabs_9_kotlin--panel">
+<p>Kotlin</p>
+</li>
+</ul>
+</div>
+<div id="_tabs_9_java--panel" class="tabpanel" aria-labelledby="_tabs_9_java" role="tabpanel">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-java hljs"><span class="fold-block is-hidden-folded"><span class="hljs-keyword">import</span> org.springframework.boot.ExitCodeGenerator;
+<span class="hljs-keyword">import</span> org.springframework.boot.SpringApplication;
+<span class="hljs-keyword">import</span> org.springframework.boot.autoconfigure.SpringBootApplication;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Bean;
+
+</span><span class="fold-block"><span class="hljs-meta">@SpringBootApplication</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyApplication</span> </span>{
+
+	<span class="hljs-meta">@Bean</span>
+	<span class="hljs-function"><span class="hljs-keyword">public</span> ExitCodeGenerator <span class="hljs-title">exitCodeGenerator</span><span class="hljs-params">()</span> </span>{
+		<span class="hljs-keyword">return</span> () -&gt; <span class="hljs-number">42</span>;
+	}
+
+	<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> </span>{
+		System.exit(SpringApplication.exit(SpringApplication.run(MyApplication<span class="hljs-class">.<span class="hljs-keyword">class</span>, <span class="hljs-title">args</span>)))</span>;
+	}
+
+}</span></code><div class="source-toolbox"><button class="fold-button" title="Expand foldable text"></button><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+<div class="paragraph">
+<p>Also, the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ExitCodeGenerator.html" class="apiref"><code>ExitCodeGenerator</code></a> interface may be implemented by exceptions.
+When such an exception is encountered, Spring Boot returns the exit code provided by the implemented <code>getExitCode()</code> method.</p>
+</div>
+<div class="paragraph">
+<p>If there is more than one <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/ExitCodeGenerator.html" class="apiref"><code>ExitCodeGenerator</code></a>, the first non-zero exit code that is generated is used.
+To control the order in which the generators are called, additionally implement the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/Ordered.html" class="apiref"><code>Ordered</code></a> interface or use the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/annotation/Order.html" class="apiref"><code>Order</code></a> annotation.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.admin">Admin Features</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>It is possible to enable admin-related features for the application by specifying the <code>spring.application.admin.enabled</code> property.
+This exposes the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/admin/SpringApplicationAdminMXBean.html" class="apiref"><code>SpringApplicationAdminMXBean</code></a> on the platform <a href="https://docs.oracle.com/en/java/javase/17/docs/api/java.management/javax/management/MBeanServer.html" class="apiref external" target="_blank"><code>MBeanServer</code></a>.
+You could use this feature to administer your Spring Boot application remotely.
+This feature could also be useful for any service wrapper implementation.</p>
+</div>
+<div class="admonitionblock tip">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-tip" title="Tip"></i>
+</td>
+<td class="content">
+If you want to know on which HTTP port the application is running, get the property with a key of <code>local.server.port</code>.
+</td>
+</tr>
+</tbody></table>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.startup-tracking">Application Startup tracking</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>During the application startup, the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> and the <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/context/ApplicationContext.html" class="apiref"><code>ApplicationContext</code></a> perform many tasks related to the application lifecycle,
+the beans lifecycle or even processing application events.
+With <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/metrics/ApplicationStartup.html" class="apiref"><code>ApplicationStartup</code></a>, Spring Framework <a href="https://docs.spring.io/spring-framework/reference/7.0/core/beans/context-introduction.html#context-functionality-startup">allows you to track the application startup sequence with </a><a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/metrics/StartupStep.html" class="apiref"><code>StartupStep</code></a> objects.
+This data can be collected for profiling purposes, or just to have a better understanding of an application startup process.</p>
+</div>
+<div class="paragraph">
+<p>You can choose an <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/metrics/ApplicationStartup.html" class="apiref"><code>ApplicationStartup</code></a> implementation when setting up the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/SpringApplication.html" class="apiref"><code>SpringApplication</code></a> instance.
+For example, to use the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/metrics/buffering/BufferingApplicationStartup.html" class="apiref"><code>BufferingApplicationStartup</code></a>, you could write:</p>
+</div>
+<div id="_tabs_10" class="openblock tabs is-sync is-loaded">
+<div class="content">
+<div class="ulist tablist">
+<ul role="tablist">
+<li id="_tabs_10_java" class="tab is-selected" tabindex="0" role="tab" aria-controls="_tabs_10_java--panel" aria-selected="true">
+<p>Java</p>
+</li>
+<li id="_tabs_10_kotlin" class="tab" tabindex="-1" role="tab" aria-controls="_tabs_10_kotlin--panel">
+<p>Kotlin</p>
+</li>
+</ul>
+</div>
+<div id="_tabs_10_java--panel" class="tabpanel" aria-labelledby="_tabs_10_java" role="tabpanel">
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-java hljs"><span class="fold-block is-hidden-folded"><span class="hljs-keyword">import</span> org.springframework.boot.SpringApplication;
+<span class="hljs-keyword">import</span> org.springframework.boot.autoconfigure.SpringBootApplication;
+<span class="hljs-keyword">import</span> org.springframework.boot.context.metrics.buffering.BufferingApplicationStartup;
+
+</span><span class="fold-block"><span class="hljs-meta">@SpringBootApplication</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyApplication</span> </span>{
+
+	<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> </span>{
+		SpringApplication application = <span class="hljs-keyword">new</span> SpringApplication(MyApplication<span class="hljs-class">.<span class="hljs-keyword">class</span>)</span>;
+		application.setApplicationStartup(<span class="hljs-keyword">new</span> BufferingApplicationStartup(<span class="hljs-number">2048</span>));
+		application.run(args);
+	}
+
+}</span></code><div class="source-toolbox"><button class="fold-button" title="Expand foldable text"></button><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+<div class="paragraph">
+<p>The first available implementation, <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/core/metrics/jfr/FlightRecorderApplicationStartup.html" class="apiref"><code>FlightRecorderApplicationStartup</code></a> is provided by Spring Framework.
+It adds Spring-specific startup events to a Java Flight Recorder session and is meant for profiling applications and correlating their Spring context lifecycle with JVM events (such as allocations, GCs, class loading…​).
+Once configured, you can record data by running the application with the Flight Recorder enabled:</p>
+</div>
+<div class="listingblock">
+<div class="content">
+<pre class="highlightjs highlight"><code class="language-shell hljs"><span class="hljs-meta">$</span><span class="bash"> java -XX:StartFlightRecording:filename=recording.jfr,duration=10s -jar demo.jar</span></code><div class="source-toolbox"><button class="copy-button" title="Copy to clipboard"><span class="copy-toast">Copied!</span></button></div></pre>
+</div>
+</div>
+<div class="paragraph">
+<p>Spring Boot ships with the <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/metrics/buffering/BufferingApplicationStartup.html" class="apiref"><code>BufferingApplicationStartup</code></a> variant; this implementation is meant for buffering the startup steps and draining them into an external metrics system.
+Applications can ask for the bean of type <a href="https://docs.spring.io/spring-boot/4.1.1/api/java/org/springframework/boot/context/metrics/buffering/BufferingApplicationStartup.html" class="apiref"><code>BufferingApplicationStartup</code></a> in any component.</p>
+</div>
+<div class="paragraph">
+<p>Spring Boot can also be configured to expose a <a href="https://docs.spring.io/spring-boot/api/rest/actuator/startup.html" class="xref page"><code>startup</code> endpoint</a> that provides this information as a JSON document.</p>
+</div>
+</div>
+</div>
+<div class="sect1">
+<h2 id="features.spring-application.virtual-threads">Virtual threads</h2>
+<div class="sectionbody">
+<div class="paragraph">
+<p>Virtual threads require Java 21 or later.
+For the best experience, Java 24 or later is strongly recommended.
+To enable virtual threads, set the <code>spring.threads.virtual.enabled</code> property to <code>true</code>.</p>
+</div>
+<div class="paragraph">
+<p>Before turning on this option for your application, you should consider <a href="https://docs.oracle.com/en/java/javase/24/core/virtual-threads.html" class="external" target="_blank">reading the official Java virtual threads documentation</a>.
+In some cases, applications can experience lower throughput because of "Pinned Virtual Threads"; this page also explains how to detect such cases with JDK Flight Recorder or the <code>jcmd</code> CLI.</p>
+</div>
+<div class="admonitionblock note">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-note" title="Note"></i>
+</td>
+<td class="content">
+If virtual threads are enabled, properties which configure thread pools don’t have an effect anymore.
+That’s because virtual threads are scheduled on a JVM wide platform thread pool and not on dedicated thread pools.
+</td>
+</tr>
+</tbody></table>
+</div>
+<div class="admonitionblock warning">
+<table>
+<tbody><tr>
+<td class="icon">
+<i class="fa icon-warning" title="Warning"></i>
+</td>
+<td class="content">
+One side effect of virtual threads is that they are daemon threads.
+A JVM will exit if all of its threads are daemon threads.
+This behavior can be a problem when you rely on <a href="https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/scheduling/annotation/Scheduled.html" class="apiref"><code>@Scheduled</code></a> beans, for example, to keep your application alive.
+If you use virtual threads, the scheduler thread is a virtual thread and therefore a daemon thread and won’t keep the JVM alive.
+This not only affects scheduling and can be the case with other technologies too.
+To keep the JVM running in all cases, it is recommended to set the property <code>spring.main.keep-alive</code> to <code>true</code>.
+This ensures that the JVM is kept alive, even if all threads are virtual threads.
+</td>
+</tr>
+</tbody></table>
+</div>
+</div>
+</div>
+<nav class="pagination"> <span class="prev"><a href="https://docs.spring.io/spring-boot/reference/features/index.html">Core Features</a></span> <span class="next"><a href="https://docs.spring.io/spring-boot/reference/features/external-config.html">Externalized Configuration</a></span>
+</nav>
+</article> </div>
+</main>
+ </div>
+<footer class="footer flex"> <div id="spring-links flex"> <div data-snap-placeholder="img" style="display:inline-block;width:175px;height:45px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div> <p class="smallest antialiased">Copyright © 2005 - 2026 Broadcom. All Rights Reserved. The term "Broadcom" refers to Broadcom Inc. and/or its subsidiaries.<br><a href="https://www.vmware.com/help/legal.html">Terms of Use</a> • <a href="https://www.vmware.com/help/privacy.html" rel="noopener noreferrer">Privacy</a> • <a href="https://spring.io/trademarks">Trademark Guidelines</a> <span id="thank-you-mobile">• <a href="https://spring.io/thank-you">Thank you</a></span> • <a href="https://www.vmware.com/help/privacy/california-privacy-rights.html">Your California Privacy Rights</a> • <a class="ot-sdk-show-settings">Cookies Settings</a> <span id="teconsent"></span></p> <p class="smallest antialiased has-gray-text">Apache®, Apache Tomcat®, Apache Kafka®, Apache Cassandra™, and Apache Geode™ are trademarks or registered trademarks of the Apache Software Foundation in the United States and/or other countries. Java™, Java™ SE, Java™ EE, and OpenJDK™ are trademarks of Oracle and/or its affiliates. Kubernetes® is a registered trademark of the Linux Foundation in the United States and other countries. Linux® is the registered trademark of Linus Torvalds in the United States and other countries. Windows® and Microsoft® Azure are registered trademarks of Microsoft Corporation. “AWS” and “Amazon Web Services” are trademarks or registered trademarks of Amazon.com Inc. or its affiliates. All other trademarks and copyrights are property of their respective owners and are only mentioned for informative purposes. Other names may be trademarks of their respective owners.</p> </div> <div id="social-icons" class="flex jc-between"> <a href="https://www.youtube.com/user/SpringSourceDev" title="Youtube"><svg id="youtube-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle class="cls-1" cx="20" cy="20" r="20"></circle><path class="cls-2" d="M30.91,14.53a2.89,2.89,0,0,0-2-2C27.12,12,20,12,20,12s-7.12,0-8.9.47a2.9,2.9,0,0,0-2,2A30.56,30.56,0,0,0,8.63,20a30.44,30.44,0,0,0,.46,5.47,2.89,2.89,0,0,0,2,2C12.9,28,20,28,20,28s7.12,0,8.9-.47a2.87,2.87,0,0,0,2-2A30.56,30.56,0,0,0,31.37,20,28.88,28.88,0,0,0,30.91,14.53ZM17.73,23.41V16.59L23.65,20Z"></path></svg></a> <a href="https://github.com/spring-projects" title="GitHub"><div data-snap-placeholder="svg" style="display:inline-block;width:40px;height:40px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></a> <a href="https://twitter.com/springcentral" title="Twitter"><div data-snap-placeholder="svg" style="display:inline-block;width:40px;height:40px;max-width:100%;background:#d9d9d9;vertical-align:middle"></div></a> </div>
+</footer>
+
+
+
+  
+
+
+  <div id="onetrust-consent-sdk"><div id="onetrust-banner-sdk" class="otFloatingFlat ot-bottom-right" tabindex="0"><div role="dialog" aria-label="Cookies"><div class="ot-sdk-container"><div class="banner-close-btn-container"><button class="onetrust-close-btn-handler ot-close-icon banner-close-button" style="background-image: url(&quot;https://cdn.cookielaw.org/logos/static/ot_close.svg&quot;);" aria-label="Close"></button></div><div class="ot-sdk-row"><div class="ot-sdk-eight ot-sdk-columns"><div id="onetrust-policy" class="policy"><h2 id="onetrust-policy-title">Cookies</h2><div id="onetrust-policy-text">Broadcom and our partners use technology, including cookies to, among other things, operate the site, analyze site usage, view and retain your site interactions, improve your experience and help us advertise. Click “Cookie Settings” to manage your privacy choices. By continuing to use our site, you agree to these data practices as described in our<a class="ot-cookie-policy-link" href="https://www.broadcom.com/company/legal/cookie-policy" aria-label="More information about your privacy, opens in a new tab" rel="noopener noreferrer" target="_blank"> Cookie Notice</a></div></div></div><div id="onetrust-button-group-parent" class="ot-sdk-four ot-sdk-columns"><div id="onetrust-button-group" class="ot-sdk-row"><div class="accept-btn-container"></div><div class="reject-btn-container"></div><div class="pc-btn-container"><button id="onetrust-pc-btn-handler" aria-label="Cookies Settings, Opens the preference center dialog" class="cookie-setting-link">Cookies Settings</button></div></div></div></div></div></div></div></div></body></html>

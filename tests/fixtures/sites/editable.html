@@ -1,0 +1,57 @@
+<!doctype html>
+<!-- 手工 fixture：可编辑区兼容性回归（textarea / input / contenteditable / 类 Gmail 撰写框）。
+     正文段落含考试词，应被正常标注；各可编辑区预填同样含考试词的英文，扩展不得在其中插入任何标记，也不得改写其内容。
+     run.mjs 的 typeTest 会在 #compose-body 末尾输入一句含考试词的英文，检查输入后仍无标记、文本完整。 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editable regions fixture</title>
+<style>
+  body { font: 16px/1.5 Arial, sans-serif; margin: 0; color: #202124; background: #fff; }
+  header { display: flex; align-items: center; gap: 12px; padding: 8px 16px; border-bottom: 1px solid #ddd; }
+  header input { flex: 1; max-width: 520px; padding: 8px 12px; border-radius: 20px; border: 1px solid #ccc; background: #f1f3f4; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  .compose { position: relative; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.15); margin: 16px 0; }
+  .compose .bar { background: #404040; color: #fff; padding: 8px 12px; border-radius: 8px 8px 0 0; font-size: 14px; }
+  .compose .row { display: flex; border-bottom: 1px solid #eee; padding: 6px 12px; font-size: 14px; }
+  .compose .row label { width: 64px; color: #5f6368; }
+  .compose .row input { flex: 1; border: 0; outline: none; font: inherit; }
+  #compose-body { min-height: 160px; padding: 12px; outline: none; white-space: pre-wrap; }
+  .compose .actions { padding: 8px 12px; }
+  .compose .actions button { background: #0b57d0; color: #fff; border: 0; border-radius: 16px; padding: 8px 20px; }
+  textarea { width: 100%; box-sizing: border-box; height: 120px; font: inherit; }
+  .chip { display: inline-block; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid #ccc; border-radius: 12px; padding: 0 8px; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Mail</strong>
+  <input type="search" value="comprehensive strategy" aria-label="Search mail" placeholder="Search mail">
+  <span class="chip">Inevitable consequences of the comprehensive reform</span>
+</header>
+<main>
+  <h1>Quarterly review</h1>
+  <p>The committee will scrutinize the preliminary findings and consolidate the comprehensive proposal before the deadline. Analysts anticipate that the inevitable fluctuation of demand will mitigate the adverse consequences.</p>
+
+  <div class="compose" role="dialog" aria-label="New message">
+    <div class="bar">New Message</div>
+    <div class="row"><label for="to">To</label><input id="to" value="reviewer@example.com"></div>
+    <div class="row"><label for="subject">Subject</label><input id="subject" name="subjectbox" value="Preliminary assessment of the comprehensive proposal"></div>
+    <div id="compose-body" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Message Body" g_editable="true">Hi team,<br><br>Please scrutinize the preliminary assessment and consolidate your feedback. We anticipate considerable fluctuation in the forthcoming quarter.<br><br>Regards</div>
+    <div class="actions"><button type="button">Send</button></div>
+  </div>
+
+  <h2>Notes</h2>
+  <textarea id="notes" aria-label="Notes">Remember to elaborate on the ambiguous paragraph and verify the hypothesis with substantial evidence.</textarea>
+
+  <h2>Rich editor</h2>
+  <div class="editor" contenteditable="true"><p>The prototype demonstrates a sophisticated mechanism that will facilitate collaboration.</p></div>
+
+  <h2>Read-only region</h2>
+  <div contenteditable="false"><p>This paragraph is explicitly not editable, so the vocabulary here such as <em>ambiguous</em> and <em>hypothesis</em> may be highlighted normally.</p></div>
+
+  <p>After the meeting, the board will evaluate the substantial evidence and determine whether the hypothesis is plausible.</p>
+</main>
+</body>
+</html>
