@@ -20,7 +20,7 @@ import {
   type HintSegment,
   type Notice,
 } from './word-actions';
-import { describeForm, dictLinks, formatPhonetic, parseDefinitions, surfaceOwnSenses } from './word-info';
+import { describeForm, dictLinks, formatPhonetic, parseDefinitions } from './word-info';
 
 /** 视口宽度不超过该值（或设备无悬停能力）时使用底部卡片布局 */
 const SHEET_MAX_VIEWPORT = 600;
@@ -51,7 +51,7 @@ interface WordContext {
   deleteStates?: Record<BookId, SourceBookState | undefined>;
   /** 打包词典的完整释义（不受用户生词本释义覆盖） */
   dict?: DictEntry;
-  /** 页面词形自己的打包词典词条（advanced 之于 advance），用于展示分词作形容词等独立义项，见 surfaceOwnSenses */
+  /** 页面词形自己的打包词典词条（advanced 之于 advance、carelessly 之于 careless）；有则卡片以它为主释义 */
   surfaceDict?: DictEntry;
 }
 
@@ -353,15 +353,21 @@ export class ShadowCardView implements CardView {
     const d = this.doc;
     const e = data.entry;
     const dict = this.ctx.dict;
-    // 释义始终以打包词典的完整义项为主：入口的组合词典在单词进入用户生词本后会用生词本里的一行释义覆盖它，
+    // 原形释义以打包词典的完整义项为主：入口的组合词典在单词进入用户生词本后会用生词本里的一行释义覆盖它，
     // 生词本释义与词典不同时作为附加信息单独显示
-    const main = dict?.full || dict?.short ? dict : e;
-    const userTrans = main !== e ? extraUserTrans(e, dict) : undefined;
+    const lemmaMain = dict?.full || dict?.short ? dict : e;
+    const userTrans = lemmaMain !== e ? extraUserTrans(e, dict) : undefined;
+    // 卡片以页面上的词形为准（标题、音标、释义）：词形有自己的词条（running、advanced、carelessly）时用它的释义，
+    // 原形只附一行简短释义；纯屈折变形（ran、studies）词典里没有词条，标出与原形的关系后显示原形释义，
+    // 此时不显示原形的音标（ran 不能标 run 的读音）
+    const surface = data.surface.toLowerCase();
+    const differs = surface !== data.lemma.toLowerCase();
+    const own = differs && (this.ctx.surfaceDict?.full || this.ctx.surfaceDict?.short) ? this.ctx.surfaceDict : undefined;
+    const main = own ?? lemmaMain;
     const loading = !main && this.awaitingEntry;
-    const phon = formatPhonetic(e?.phonetic ?? dict?.phonetic);
+    const phon = formatPhonetic(differs ? own?.phonetic : (e?.phonetic ?? dict?.phonetic));
     const form = describeForm(data.surface, data.lemma);
     const defs = parseDefinitions(main?.short, main?.full);
-    const surfaceSenses = surfaceOwnSenses(data.surface, data.lemma, this.ctx.surfaceDict);
     const clamp = !this.expanded && defs.length > DEF_CLAMP_LINES;
 
     let defsNode: Child[];
@@ -376,7 +382,7 @@ export class ShadowCardView implements CardView {
       defsNode = [h(d, 'div', { class: 'empty' }, '暂无释义，可在下方词典中查询')];
     }
 
-    this.card.setAttribute('aria-label', `单词 ${data.lemma}`);
+    this.card.setAttribute('aria-label', `单词 ${surface}`);
     const keep = ['dark', 'in', 'above', 'dragging'].filter((c) => this.card.classList.contains(c));
     // paneled：内联面板打开；手机底部卡片上面板占满卡片（隐藏释义与底栏），操作按钮不被遮挡
     this.card.className = ['card', this.sheet ? 'sheet' : 'popover', ...(this.panel !== 'none' ? ['paneled'] : []), ...keep].join(' ');
@@ -393,7 +399,7 @@ export class ShadowCardView implements CardView {
           d,
           'div',
           { class: 'title' },
-          h(d, 'span', { class: 'word', lang: 'en' }, data.lemma),
+          h(d, 'span', { class: 'word', lang: 'en' }, surface),
           h(d, 'button', { class: 'phon', 'data-act': 'speak', 'aria-label': '发音', title: '发音' }, icon(d, 'speak'), phon ? h(d, 'span', { lang: 'en' }, phon) : h(d, 'span', {}, '发音')),
         ),
         h(d, 'button', { class: 'icon', 'data-act': 'close', 'aria-label': '关闭', title: '关闭 (Esc)' }, icon(d, 'close')),
@@ -404,19 +410,10 @@ export class ShadowCardView implements CardView {
       d,
       'div',
       { class: 'body' },
-      form &&
-        h(d, 'div', { class: 'form' }, h(d, 'b', { lang: 'en' }, data.surface), h(d, 'span', { class: 'rel' }, form), h(d, 'span', {}, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma))),
-      // 页面词形自己的义项（advanced adj. 先进的）排在原形释义前，与行内注解一致
-      surfaceSenses.length > 0 &&
-        h(
-          d,
-          'div',
-          { class: 'surface-defs' },
-          h(d, 'div', { class: 'ut-label' }, '本页词形 ', h(d, 'b', { lang: 'en' }, data.surface.toLowerCase())),
-          h(d, 'ul', { class: 'defs' }, ...surfaceSenses.map((x) => h(d, 'li', {}, h(d, 'span', { class: 'pos' }, x.pos), x.text))),
-          h(d, 'div', { class: 'ut-label' }, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma)),
-        ),
+      form && h(d, 'div', { class: 'form' }, h(d, 'span', { class: 'rel' }, form), h(d, 'span', {}, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma))),
       ...defsNode,
+      // 主释义是词形自己的词条时，附一行原形的简短释义
+      own && lemmaMain?.short && h(d, 'div', { class: 'user-trans lemma-trans' }, h(d, 'span', { class: 'ut-label' }, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma)), h(d, 'span', {}, lemmaMain.short)),
       userTrans && h(d, 'div', { class: 'user-trans' }, h(d, 'span', { class: 'ut-label' }, '生词本释义'), h(d, 'span', {}, userTrans)),
       data.books.length > 0 && h(d, 'div', { class: 'tags' }, ...data.books.map((b) => bookTag(d, b))),
     );
@@ -593,7 +590,7 @@ export class ShadowCardView implements CardView {
       'div',
       { class: 'links' },
       h(d, 'span', {}, '词典'),
-      ...dictLinks(data.lemma).map((l) => h(d, 'a', { href: l.url, target: '_blank', rel: 'noopener noreferrer', 'data-dict': l.id }, l.name)),
+      ...dictLinks(data.surface.toLowerCase()).map((l) => h(d, 'a', { href: l.url, target: '_blank', rel: 'noopener noreferrer', 'data-dict': l.id }, l.name)),
     );
     const actions = h(d, 'div', { class: 'actions' }, knownBtn, split, deleteBtn);
     if (!this.sheet) return h(d, 'div', { class: 'foot' }, actions, hintsEl, links);

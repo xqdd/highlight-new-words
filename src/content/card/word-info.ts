@@ -129,25 +129,6 @@ export function parseDefinitions(short?: string, full?: string): DefinitionLine[
   return lines;
 }
 
-/** 页面词形是原形的这些屈折变化时，词形本身可能是独立的常用形容词/名词（advanced、limited、interesting、running） */
-const PARTICIPLE_FORMS = new Set(['过去式，过去分词', '过去分词', '过去式', '现在分词']);
-
-/**
- * 页面词形自己的非动词义项（卡片在原形释义之前单独展示）。
- *
- * 匹配命中的是原形词条（advanced -> advance），原形释义只有动词/名词义，而页面上这个分词常作形容词用
- * （an advanced civilization = 先进的）；行内注解取的是页面词形自己的短释义，卡片也要给出同一义项才一致。
- * 只取词典中页面词形自己词条里的非动词行（动词行就是“advance的过去式”，原形释义已覆盖），
- * 只对过去式/过去分词/现在分词生效；词典里没有该词形词条（walked）时返回空数组。
- */
-export function surfaceOwnSenses(surface: string, lemma: string, surfaceEntry: DictEntry | undefined): DefinitionLine[] {
-  if (!surfaceEntry || surfaceEntry.word.toLowerCase() !== surface.toLowerCase()) return [];
-  const form = describeForm(surface, lemma);
-  if (!form || !PARTICIPLE_FORMS.has(form)) return [];
-  // 词性可能连写（"vt.vi."），以 v/vt/vi 开头即视为动词行
-  return parseDefinitions(surfaceEntry.short, surfaceEntry.full).filter((x) => x.pos && !/^v[ti]?\./i.test(x.pos));
-}
-
 /** 单个音标去掉两端的 [] 或 //，ECDICT 中的西里尔字母 ә 替换为 IPA ə */
 function phoneticCore(p: string): string {
   return p.trim().replace(/^[[/]+|[\]/]+$/g, '').replace(/ә/g, 'ə').trim();
