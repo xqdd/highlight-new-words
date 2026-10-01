@@ -114,29 +114,36 @@ export function toggleTarget(list: BookId[], id: BookId, on: boolean): BookId[] 
 /**
  * 设置来源词书的角色（用户覆盖 provider 声明）：
  * - 与 provider 声明相同则删除覆盖项；
- * - 改为熟词本时从高亮词书中移除、加入 knownBooks.enabled；改回生词本时反之（保持“熟词本绝不进高亮词书”）。
+ * - 改为熟词本时从高亮词书中移除、加入 knownBooks.enabled；改回生词本时反之：移出熟词本、重新加入高亮词书（不重复）
+ *   （保持“熟词本绝不进高亮词书”，也避免改回后既不高亮也不算熟词）。
+ * - 另一角色才有意义的单词操作目标会被移除，返回被移除的目标名称（如“加入生词本时写入”），由界面在提示中说明，
+ *   不自动恢复：用户改回用途后按提示去“单词操作”重新勾选。
  */
-export function setSourceBookRole(settings: Settings, state: SourceBookState, role: BookRole) {
+export function setSourceBookRole(settings: Settings, state: SourceBookState, role: BookRole): { removedTargets: string[] } {
   const roles = { ...settings.knownBooks.roles };
   if ((state.role ?? 'new') === role) delete roles[state.id];
   else roles[state.id] = role;
   settings.knownBooks.roles = roles;
   // 角色变化后，从另一角色才有意义的单词操作目标中移除该书（如改为熟词本后不再作为“加入生词本”的目标）
   const wa = settings.wordActions;
-  const drop = (list: BookId[]) => list.filter((id) => id !== state.id);
+  const removedTargets: string[] = [];
+  const drop = (list: BookId[], label: string) => {
+    if (!list.includes(state.id)) return list;
+    removedTargets.push(label);
+    return list.filter((id) => id !== state.id);
+  };
   if (role === 'known') {
-    wa.addTargets = drop(wa.addTargets);
-    if (Array.isArray(wa.knownRemoveFrom)) wa.knownRemoveFrom = drop(wa.knownRemoveFrom);
-  } else {
-    wa.knownTargets = drop(wa.knownTargets);
-    wa.addRemoveFromKnown = drop(wa.addRemoveFromKnown);
-  }
-  if (role === 'known') {
+    wa.addTargets = drop(wa.addTargets, '加入生词本时写入');
+    if (Array.isArray(wa.knownRemoveFrom)) wa.knownRemoveFrom = drop(wa.knownRemoveFrom, '标记熟词时移除');
     settings.books.enabled = settings.books.enabled.filter((id) => id !== state.id);
     if (!settings.knownBooks.enabled.includes(state.id)) settings.knownBooks.enabled = [...settings.knownBooks.enabled, state.id];
   } else {
+    wa.knownTargets = drop(wa.knownTargets, '标记熟词时写入');
+    wa.addRemoveFromKnown = drop(wa.addRemoveFromKnown, '加入生词本时从熟词本移除');
     settings.knownBooks.enabled = settings.knownBooks.enabled.filter((id) => id !== state.id);
+    if (!settings.books.enabled.includes(state.id)) settings.books.enabled = [...settings.books.enabled, state.id];
   }
+  return { removedTargets };
 }
 
 /** 启用/停用来源熟词本 */

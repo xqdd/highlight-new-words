@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { listSyncCredentials, type SyncCredentialInfo } from '@/core/sync/credentials';
 import BottomSheet from '@/ui/components/BottomSheet.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
@@ -16,11 +16,34 @@ const creds = computed(() => listSyncCredentials(settings.value));
 
 const BACKEND_NAME: Record<string, string> = { 'storage-sync': '浏览器账号同步', webdav: 'WebDAV' };
 const pending = ref<SyncCredentialInfo | null>(null);
-const sheetOpen = computed({ get: () => !!pending.value, set: (v) => !v && (pending.value = null) });
+// 关闭弹层（点取消、遮罩或 Esc）都视为取消
+const sheetOpen = computed({ get: () => !!pending.value, set: (v) => !v && cancelUpload() });
+function cancelUpload() {
+  pending.value = null;
+  syncToggleDom();
+}
+
+const listEl = ref<HTMLElement | null>(null);
+
+/**
+ * 把开关的原生 checkbox 拉回到设置中的真实值。
+ * 打开前要先确认：点击时浏览器已把 checkbox 勾上，而设置未变、Vue 不会重渲染，开关会一直显示“开”，
+ * 所以弹层打开期间和取消后都要手动复位，确认后才由设置变化把它勾上。
+ */
+function syncToggleDom() {
+  void nextTick(() => {
+    for (const c of creds.value) {
+      const input = listEl.value?.querySelector<HTMLInputElement>(`[data-cred="${c.id}"] input[type=checkbox]`);
+      if (input) input.checked = c.upload;
+    }
+  });
+}
 
 function setUpload(c: SyncCredentialInfo, on: boolean) {
-  if (on) pending.value = c;
-  else settings.value.credentialSync = { ...settings.value.credentialSync, [c.id]: false };
+  if (on) {
+    pending.value = c;
+    syncToggleDom();
+  } else settings.value.credentialSync = { ...settings.value.credentialSync, [c.id]: false };
 }
 function confirmUpload() {
   if (!pending.value) return;
@@ -32,8 +55,8 @@ const excludedText = (c: SyncCredentialInfo) => c.excludedBackends.map((b) => BA
 
 <template>
   <SettingsSection id="credentials" title="凭据随同步上传" description="token、密码默认只保存在本机，换设备需要重新填写。打开后会随同步自动带到你的其他设备">
-    <div class="list">
-      <div v-for="c in creds" :key="c.id" class="item">
+    <div ref="listEl" class="list">
+      <div v-for="c in creds" :key="c.id" class="item" :data-cred="c.id">
         <ToggleSwitch :model-value="c.upload" :label="c.label" @update:model-value="(v: boolean) => setUpload(c, v)">
           <span v-if="!c.present" class="badge">本机未填写</span>
         </ToggleSwitch>
@@ -45,7 +68,7 @@ const excludedText = (c: SyncCredentialInfo) => c.excludedBackends.map((b) => BA
     <BottomSheet v-model:open="sheetOpen" title="确认上传凭据？" :description="pending?.label">
       <p class="risk">{{ pending?.risk }}</p>
       <template #footer>
-        <button type="button" class="btn" @click="pending = null">取消</button>
+        <button type="button" class="btn" @click="cancelUpload">取消</button>
         <button type="button" class="btn primary" @click="confirmUpload">我了解风险，打开</button>
       </template>
     </BottomSheet>

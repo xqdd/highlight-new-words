@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { browser } from 'wxt/browser';
 import { sendToBackground } from '@/core/messaging';
 import { requestAllSitesAccess, speakText } from '@/core/platform';
+import { INLINE_MODE_LABELS, INLINE_TRANSLATION_NAME, INLINE_TRANSLATION_SHORT_NAME } from '@/core/settings/inline-translation-labels';
 import type { BookId, InlineTranslationMode } from '@/core/settings/schema';
 import { isSiteDisabled } from '@/core/settings/store';
 import { SOURCE_PROVIDER_INFOS, getProviderInfo } from '@/core/source/providers';
@@ -25,6 +26,7 @@ import {
   LAST_INLINE_MODE_KEY,
   isScriptableUrl,
   OPTIONS_ROUTES,
+  buildPresetSections,
   buildSyncChannels,
   channelsFromStatusItems,
   filterWords,
@@ -54,7 +56,7 @@ import { createSyncAllRunner, syncAllOpenState } from './syncAllRunner';
 import { applyPreset, presetGroups } from '../options/lib/appearance';
 
 /**
- * 弹出页：总开关 / 本站开关、网站权限检测与授权、启用词书摘要与快速切换、样式预设快速切换、行内释义快速开关、
+ * 弹出页：总开关 / 本站开关、网站权限检测与授权、启用词书摘要与快速切换、样式预设快速切换、行内译文快速开关、
  * 本页生词与熟词本列表（详情 / 标为熟词 / 撤销）、总同步状态（各来源与同步方式的最近结果，出错时给处理入口）、进入设置。
  *
  * 布局：桌面 popup 固定 380px 宽；触屏（Edge Android 以整页/抽屉打开 popup）占满宽高，顶栏与底栏吸附。
@@ -177,19 +179,26 @@ function toggleBook(id: BookId, on: boolean) {
 
 // ---------------- 高亮样式预设 ----------------
 
-const { main: mainPresets } = presetGroups();
-/** 预设条：自定义样式在最前（当前正在用时），然后是全部非旧版预设；当前使用旧版配色时也把它放在最前 */
-const presetChips = computed(() => {
+const { combos: comboPresets, singles: singlePresets } = presetGroups();
+const toChip = (t: (typeof comboPresets)[number]) => ({ id: t.id, name: t.name, mark: t.mark });
+/**
+ * 预设分两组（与选项页“样式预设 / 单色样式”一致，顺序同悬浮球）：组合预设、单色。
+ * 当前用的是自定义样式或旧版配色时，把它放在组合预设最前，保证选中项可见。
+ */
+const presetSections = computed(() => {
   const s = settings.value;
   if (!s) return [];
-  const chips = mainPresets.map((t) => ({ id: t.id, name: t.name, mark: t.mark }));
-  if (s.style.themeId === CUSTOM_THEME_ID) chips.unshift({ id: CUSTOM_THEME_ID, name: '自定义', mark: s.style.custom.mark });
-  else if (!chips.some((c) => c.id === s.style.themeId)) chips.unshift({ id: s.style.themeId, name: '当前', mark: resolveMarkStyle(s) });
-  return chips;
+  const combos = comboPresets.map(toChip);
+  const singles = singlePresets.map(toChip);
+  let extra: (typeof combos)[number] | undefined;
+  if (s.style.themeId === CUSTOM_THEME_ID) extra = { id: CUSTOM_THEME_ID, name: '自定义', mark: s.style.custom.mark };
+  else if (![...combos, ...singles].some((c) => c.id === s.style.themeId)) extra = { id: s.style.themeId, name: '当前', mark: resolveMarkStyle(s) };
+  return buildPresetSections(combos, singles, extra);
 });
+const presetChips = computed(() => presetSections.value.flatMap((g) => g.items));
 const currentPreset = computed(() => presetChips.value.find((c) => c.id === settings.value?.style.themeId) ?? presetChips.value[0]);
 /**
- * 外观卡片默认收成一行（“样式 · 琥珀 ›” + 行内释义开关），把首屏让给本页生词；展开后显示全部预设与释义显示方式。
+ * 外观卡片默认收成一行（“样式 · 琥珀 ›” + 行内译文开关），把首屏让给本页生词；展开后显示全部预设与释义显示方式。
  * 展开状态是本机界面偏好，记在 localStorage。
  */
 const LOOK_OPEN_KEY = 'hnw:popup:lookOpen';
@@ -201,18 +210,19 @@ function choosePreset(id: string) {
   applyPreset(settings.value, id);
 }
 
-// ---------------- 行内释义 ----------------
+// ---------------- 行内译文 ----------------
 
 /** 开启时的显示方式（“关闭”由开关负责），需覆盖 InlineTranslationMode 的全部开启值，否则会把用户的选择显示错/恢复丢 */
+// 标签与选项页、引导、悬浮球同一组（core/settings/inline-translation-labels）
 const inlineShowOptions: { value: Exclude<InlineTranslationMode, 'off'>; label: string }[] = [
-  { value: 'after', label: '词后' },
-  { value: 'ruby', label: '词上方' },
-  { value: 'hover', label: '仅悬停' },
+  { value: 'after', label: INLINE_MODE_LABELS.after },
+  { value: 'ruby', label: INLINE_MODE_LABELS.ruby },
+  { value: 'hover', label: INLINE_MODE_LABELS.hover },
 ];
 type InlineShowMode = (typeof inlineShowOptions)[number]['value'];
 
 
-/** 行内释义快速开关：关闭时记住当前方式，再打开时恢复 */
+/** 行内译文快速开关：关闭时记住当前方式，再打开时恢复 */
 const inlineOn = computed({
   get: () => !!settings.value && settings.value.inlineTranslation.mode !== 'off',
   set: (on: boolean) => {
@@ -475,7 +485,8 @@ const syncOverall = computed<StatusText>(() => {
   const st = overallSyncStatus(syncChannels.value);
   const last = data.statusSummary.value?.lastSyncAt;
   // 带上最近同步时间（“2 项同步正常 · 3 小时前”“等待自动同步 · 上次 3 小时前”），底栏一行就能看出是否在工作
-  if (!last || st.tone === 'error' || st.tone === 'warn') return st;
+  // 未连接（muted）不带时间：否则“有道词典：未连接 · 上次 刚刚”读起来像有道刚同步过
+  if (!last || st.tone === 'error' || st.tone === 'warn' || st.tone === 'muted') return st;
   return { ...st, text: `${st.text} · ${st.tone === 'ok' ? '' : '上次 '}${formatAgo(last)}` };
 });
 /** 需要用户处理的第一项（出错优先，其次未登录等）：底栏同步行与同步面板的主操作直接给它的修复动作 */
@@ -748,7 +759,7 @@ onBeforeUnmount(() => {
         </button>
       </section>
 
-      <!-- 样式与行内释义：默认一行（当前预设 + 释义开关），展开后选预设与释义显示方式 -->
+      <!-- 样式与行内译文：默认一行（当前预设 + 译文开关），展开后选预设与译文显示方式 -->
       <section class="card look" :class="{ open: lookOpen }">
         <div class="look-row">
           <button type="button" class="look-toggle" :aria-expanded="lookOpen" aria-controls="look-panel" @click="lookOpen = !lookOpen">
@@ -760,32 +771,35 @@ onBeforeUnmount(() => {
             <PopupIcon name="chevron" :size="16" class="caret" />
           </button>
           <span class="divider" aria-hidden="true" />
-          <span class="inline-quick" title="在生词旁显示简短中文释义">
-            <span class="inline-title">释义</span>
+          <span class="inline-quick" :title="`${INLINE_TRANSLATION_NAME}：在生词旁显示简短中文`">
+            <span class="inline-title">{{ INLINE_TRANSLATION_SHORT_NAME }}</span>
             <span v-if="inlineOn" class="inline-mode">{{ inlineModeLabel }}</span>
           </span>
-          <ToggleSwitch v-model="inlineOn" class="inline-toggle" aria-label="行内释义" />
+          <ToggleSwitch v-model="inlineOn" class="inline-toggle" :aria-label="INLINE_TRANSLATION_NAME" />
         </div>
         <div v-if="lookOpen" id="look-panel" class="look-panel">
-          <div class="presets" role="radiogroup" aria-label="高亮样式预设">
-            <button
-              v-for="p in presetChips"
-              :key="p.id"
-              type="button"
-              role="radio"
-              class="preset"
-              :aria-checked="settings.style.themeId === p.id"
-              :title="p.name"
-              @click="choosePreset(p.id)"
-            >
-              <span class="preset-sample"><MarkPreview :mark="p.mark" word="Word" /></span>
-              <span class="preset-name">{{ p.name }}</span>
-            </button>
+          <div v-for="g in presetSections" :key="g.key" class="preset-group">
+            <h3 :id="`preset-group-${g.key}`" class="preset-group-title">{{ g.title }}</h3>
+            <div class="presets" role="radiogroup" :aria-labelledby="`preset-group-${g.key}`">
+              <button
+                v-for="p in g.items"
+                :key="p.id"
+                type="button"
+                role="radio"
+                class="preset"
+                :aria-checked="settings.style.themeId === p.id"
+                :title="p.name"
+                @click="choosePreset(p.id)"
+              >
+                <span class="preset-sample"><MarkPreview :mark="p.mark" word="Word" /></span>
+                <span class="preset-name">{{ p.name }}</span>
+              </button>
+            </div>
           </div>
           <div class="inline-row">
-            <span class="inline-label">行内释义</span>
+            <span class="inline-label">{{ INLINE_TRANSLATION_NAME }}</span>
             <SegmentedControl v-if="inlineOn" v-model="inlineShowMode" class="seg" :options="inlineShowOptions" />
-            <span v-else class="sub grow">已关闭：只高亮，点按或悬停看释义</span>
+            <span v-else class="sub grow">已关闭：只高亮，点按或悬停看释义卡片</span>
           </div>
           <button type="button" class="link as-link more-look" @click="openOptions(OPTIONS_ROUTES.appearance)">
             调整颜色与字号<PopupIcon name="chevron" :size="16" />
@@ -1046,7 +1060,7 @@ h2 { margin: 0; font-size: 14px; font-weight: 650; }
 .link-btn { border: 0; background: none; color: var(--accent); font-weight: 650; cursor: pointer; padding: 4px 2px; font-size: 12.5px; }
 .update .x { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--text-2); cursor: pointer; }
 
-/* 样式与行内释义：折叠时一行 */
+/* 样式与行内译文：折叠时一行 */
 .look { padding-top: 6px; padding-bottom: 6px; }
 .look-row { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .look-toggle {
@@ -1076,7 +1090,10 @@ h2 { margin: 0; font-size: 14px; font-weight: 650; }
 /* 样例词用固定的正文色与背景，与网页上看到的效果接近 */
 .preset-sample { font-size: 13.5px; line-height: 1.6; font-family: Georgia, 'Times New Roman', serif; color: var(--text); white-space: nowrap; }
 .preset-sample.mini { font-size: 13px; line-height: 1.4; }
-.preset-name { font-size: 11px; color: var(--text-2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 组合预设名较长（如“下划线 + 括号译文”“暗色模式友好”），允许折成两行显示全名，不再省略号截断 */
+.preset-name { font-size: 11px; line-height: 1.3; color: var(--text-2); max-width: 100%; text-align: center; white-space: normal; overflow-wrap: anywhere; }
+.preset-group + .preset-group { margin-top: 10px; }
+.preset-group-title { margin: 0 0 6px; font-size: 11.5px; font-weight: 600; color: var(--text-2); }
 .preset[aria-checked='true'] .preset-name { color: var(--accent); font-weight: 650; }
 .inline-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
 .inline-label { font-weight: 650; font-size: 13px; flex: none; }
@@ -1134,6 +1151,8 @@ h2 { margin: 0; font-size: 14px; font-weight: 650; }
 .btn.ghost:hover { background: var(--surface-2); color: var(--text); }
 .btn.fix { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); font-weight: 650; gap: 0; }
 .sync-warn .btn.fix { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--border)); }
+/* 总状态为中性（仅有“未连接”的来源）时修复按钮也是中性引导色，不用红色错误样式 */
+.sync-muted .btn.fix, .sync-ok .btn.fix { color: var(--text); border-color: var(--border); }
 .btn.small { min-height: 30px; padding: 3px 10px; font-size: 12.5px; gap: 4px; flex: none; }
 .spin { animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

@@ -15,7 +15,7 @@ export function prehideApplies(settings: Settings): boolean {
 
 /** 开关下方的辅助说明：注明生效条件，当前设置下不起作用时直接说明 */
 export function prehideNote(settings: Settings): string {
-  const cond = '只在行内译文为“词后括号”“词上方”，或生词样式含粗体/斜体时起作用';
+  const cond = '只在行内译文为“词后”“词上方”，或生词样式含粗体/斜体时起作用';
   return prehideApplies(settings) ? `${cond}；当前设置会起作用。` : `${cond}；当前设置下不会隐藏页面。`;
 }
 

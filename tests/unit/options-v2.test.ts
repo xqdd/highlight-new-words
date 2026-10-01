@@ -57,6 +57,20 @@ describe('options：单词操作目标', () => {
     expect(s.knownBooks.enabled).not.toContain(EU1.id);
     expect(s.wordActions.knownTargets).toEqual([LOCAL_KNOWN_BOOK_ID]);
   });
+
+  it('改回生词本时重新启用高亮（不重复），并返回被移除的单词操作目标供提示', () => {
+    const s = createDefaultSettings();
+    s.books.enabled = ['cet6', EU1.id];
+    s.wordActions.addTargets = [MY_WORDS_BOOK_ID, EU1.id];
+    s.wordActions.knownRemoveFrom = [EU1.id];
+    expect(setSourceBookRole(s, EU1, 'known').removedTargets).toEqual(['加入生词本时写入', '标记熟词时移除']);
+    expect(s.books.enabled).toEqual(['cet6']);
+    expect(setSourceBookRole(s, EU1, 'new').removedTargets).toEqual([]);
+    expect(s.books.enabled).toEqual(['cet6', EU1.id]);
+    setSourceBookRole(s, EU1, 'new');
+    expect(s.books.enabled.filter((id) => id === EU1.id)).toHaveLength(1);
+    expect(s.knownBooks.enabled).not.toContain(EU1.id);
+  });
 });
 
 describe('options：v5 样式', () => {

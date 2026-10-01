@@ -54,7 +54,9 @@ describe('O1 加载时先隐藏页面（performance.prehide）', () => {
   it('开关放在外观页“行内译文”的高级区', () => {
     const src = readFileSync('src/entrypoints/options/pages/AppearancePage.vue', 'utf8');
     const inline = src.slice(src.indexOf('<SettingsSection id="inline"'), src.indexOf('<SettingsSection id="card"'));
-    expect(inline).toContain('<summary>高级</summary>');
+    expect(inline.length).toBeGreaterThan(0);
+    expect(inline).toMatch(/<summary>高级<AppIcon/);
+    expect(inline).toContain('id="inline" :title="INLINE_TRANSLATION_NAME"');
     expect(inline).toContain('加载时先隐藏页面，避免译文插入造成跳动（会让页面稍晚显示）');
     expect(inline).toContain('setPrehide(settings, v)');
   });
@@ -98,7 +100,7 @@ describe('O2/O4 修饰键文案', () => {
 describe('O3 悬停延迟三档', () => {
   it('档位与 schema 一致，默认 250；点击方式不显示', () => {
     expect(HOVER_DELAY_OPTIONS.map((o) => o.value)).toEqual([...CARD_HOVER_DELAYS]);
-    expect(HOVER_DELAY_OPTIONS.map((o) => o.label)).toEqual(['快 100ms', '标准 250ms（默认）', '慢 400ms']);
+    expect(HOVER_DELAY_OPTIONS.map((o) => o.label)).toEqual(['快 100ms', '标准 250ms', '慢 400ms']);
     expect(createDefaultSettings().card.hoverDelay).toBe(250);
     expect(showsHoverDelay('hover')).toBe(true);
     expect(showsHoverDelay('modifier')).toBe(true);
@@ -152,9 +154,9 @@ describe('O6 来源关闭后的目标清单', () => {
 });
 
 describe('O7 补充说明', () => {
-  it('代码“上方小标注”注明会遮挡上一行；行内译文“悬停显示”注明触屏点按看卡片', () => {
+  it('代码“上方小标注”注明会遮挡上一行；行内译文“仅悬停”注明触屏点按看卡片', () => {
     expect(readFileSync('src/entrypoints/options/sections/CodeSection.vue', 'utf8')).toContain('会遮挡上一行代码');
-    expect(readFileSync('src/entrypoints/options/pages/AppearancePage.vue', 'utf8')).toMatch(/value: 'hover', label: '悬停显示', desc: '[^']*触屏设备上没有悬停，请点按单词查看卡片'/);
+    expect(readFileSync('src/entrypoints/options/pages/AppearancePage.vue', 'utf8')).toMatch(/hover: '[^']*触屏设备上没有悬停，请点按单词查看卡片'/);
   });
 });
 

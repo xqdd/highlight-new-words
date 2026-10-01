@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { INLINE_MODE_LABELS, INLINE_MODE_ORDER, INLINE_TRANSLATION_NAME } from '@/core/settings/inline-translation-labels';
 import type { InlineTranslationMode } from '@/core/settings/schema';
 import AppIcon, { type IconName } from '@/ui/components/AppIcon.vue';
 import SegmentedControl from '@/ui/components/SegmentedControl.vue';
@@ -11,7 +12,7 @@ import { formatCount, isBookEnabled, toggleBook } from '../lib/books';
 import { useOptions } from '../lib/context';
 
 /**
- * 首次使用引导（#welcome）：① 选词书（多选组合）→ ② 选样式（预设 + 行内释义，带实时预览）→ ③ 接入生词本 / 导入熟词。
+ * 首次使用引导（#welcome）：① 选词书（多选组合）→ ② 选样式（预设 + 行内译文，带实时预览）→ ③ 接入生词本 / 导入熟词。
  * 对标 Relingo 三步引导，但手机 390 宽可用（Relingo 引导页在移动端两栏不折叠、横向溢出）。
  * 每一步的修改立即保存，随时可跳过。
  */
@@ -22,15 +23,11 @@ const STEPS = ['选择词书', '高亮样式', '生词本与熟词'];
 const builtin = computed(() => books.value.filter((b) => b.kind === 'builtin').sort((a, b) => (a.category === b.category ? a.level - b.level : a.category.localeCompare(b.category))));
 const presets = presetGroups().combos.slice(0, 8);
 
-const INLINE: { value: InlineTranslationMode; label: string }[] = [
-  { value: 'off', label: '不显示释义' },
-  { value: 'after', label: '词后释义' },
-  { value: 'ruby', label: '词上方释义' },
-  { value: 'hover', label: '悬停显示' },
-];
+// 行内译文模式：与外观页、popup、悬浮球同一组短标签
+const INLINE: { value: InlineTranslationMode; label: string }[] = INLINE_MODE_ORDER.map((value) => ({ value, label: INLINE_MODE_LABELS[value] }));
 
 const NEXT_ACTIONS: { icon: IconName; title: string; desc: string; page: string; anchor?: string }[] = [
-  { icon: 'cloud', title: '同步有道 / 欧路生词本', desc: '登录网页版后一键同步，可多个生词本分别启用', page: 'sources', anchor: 'providers' },
+  { icon: 'cloud', title: '同步有道 / 欧路生词本', desc: '有道登录网页版、欧路填写授权 token 后一键同步，可多个生词本分别启用', page: 'sources', anchor: 'providers' },
   { icon: 'upload', title: '导入单词表', desc: 'TXT、CSV、Anki、有道 XML、欧路导出均可', page: 'sources', anchor: 'import' },
   { icon: 'known', title: '导入已掌握的词', desc: '熟词不再高亮，减少干扰', page: 'known', anchor: 'known-import' },
 ];
@@ -97,7 +94,8 @@ function finish(page = 'books', anchor?: string) {
           @click="applyPreset(settings, t.id)"
         />
       </div>
-      <SegmentedControl v-model="settings.inlineTranslation.mode" :options="INLINE" />
+      <p class="seg-label">{{ INLINE_TRANSLATION_NAME }}<span class="muted">（在生词旁显示简短中文）</span></p>
+      <SegmentedControl v-model="settings.inlineTranslation.mode" :options="INLINE" :aria-label="INLINE_TRANSLATION_NAME" />
       <button type="button" class="link" @click="finish('appearance')">更多配色与取色 →</button>
     </section>
 
@@ -125,6 +123,8 @@ function finish(page = 'books', anchor?: string) {
 
 <style scoped>
 .guide { max-width: 680px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; padding: 20px 16px calc(88px + env(safe-area-inset-bottom)); gap: 16px; }
+.seg-label { margin: 4px 0 -8px; font-weight: 600; font-size: 14px; }
+.seg-label .muted { font-weight: 400; font-size: 12px; }
 .head { display: flex; align-items: center; gap: 12px; }
 .titles { flex: 1; display: flex; flex-direction: column; line-height: 1.35; }
 .titles strong { font-size: 18px; }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { browser } from 'wxt/browser';
 import { effectiveBookRole } from '@/core/known/sources';
 import { sendToBackground } from '@/core/messaging';
@@ -11,8 +11,9 @@ import type { BookMeta, SourceSyncStatus } from '@/core/wordbook/types';
 import AppIcon from '@/ui/components/AppIcon.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
 import ToggleSwitch from '@/ui/components/ToggleSwitch.vue';
-import { formatCount, isBookEnabled, relativeTime, toggleBook } from '../lib/books';
+import { formatCount, isBookEnabled, toggleBook } from '../lib/books';
 import { useOptions } from '../lib/context';
+import { bookSyncLine, sourceCardSummary } from '../lib/source-card';
 import { useSourceIndex } from '../lib/source-index';
 import { canAddSourceBook, canDeleteSourceBook, setSourceBookRole, toggleSourceKnownBook } from '../lib/word-actions';
 import { errorText, showToast } from '../lib/toast';
@@ -41,15 +42,20 @@ function setBusy(key: string, on: boolean) {
 const providers = computed(() =>
   SOURCE_PROVIDER_INFOS.map((info) => {
     const list = books.value.filter((b) => b.kind === 'source' && b.providerId === info.id);
-    const lastSync = Math.max(0, ...list.map((b) => b.sync?.lastSyncAt ?? 0));
+    // settings.sources[id] 的响应式引用，模板中直接 v-model；normalizeSettings 已按默认值补齐已知来源
+    const cfg = settings.value.sources[info.id] ?? createDefaultSourceSettings();
     return {
       info,
-      // settings.sources[id] 的响应式引用，模板中直接 v-model；normalizeSettings 已按默认值补齐已知来源
-      cfg: settings.value.sources[info.id] ?? createDefaultSourceSettings(),
+      cfg,
       books: list,
-      words: list.reduce((n, b) => n + b.size, 0),
-      lastSync,
-      listError: index.value.providers[info.id]?.error,
+      // 摘要（未连接 / 按用途计数 / 主按钮），口径与 popup、悬浮球一致，见 lib/source-card
+      card: sourceCardSummary({
+        name: info.name,
+        books: list,
+        roleOf,
+        listError: index.value.providers[info.id]?.error,
+        hasToken: info.capabilities.apiToken && !!cfg.apiToken?.trim(),
+      }),
     };
   }),
 );
@@ -89,7 +95,8 @@ const STATUS: Record<SourceSyncStatus, { label: string; tone: string }> = {
   never: { label: '未同步', tone: 'muted' },
   syncing: { label: '同步中', tone: 'info' },
   ok: { label: '已同步', tone: 'ok' },
-  empty: { label: '为空', tone: 'warn' },
+  // 同步成功但远端为空：正常状态，不用警示色
+  empty: { label: '为空', tone: 'muted' },
   error: { label: '失败', tone: 'err' },
 };
 function bookStatus(b: BookMeta) {
@@ -112,8 +119,11 @@ function setOn(b: BookMeta, on: boolean) {
 }
 function changeRole(b: BookMeta, role: BookRole) {
   if (!b.sync) return;
-  setSourceBookRole(settings.value, b.sync, role);
-  showToast(role === 'known' ? `“${b.sync.name}”改为熟词本：其中的词不再高亮` : `“${b.sync.name}”改为生词本：已从熟词中移出，可在词书页启用高亮`);
+  const { removedTargets } = setSourceBookRole(settings.value, b.sync, role);
+  const base = role === 'known' ? `“${b.sync.name}”改为熟词本：其中的词不再高亮` : `“${b.sync.name}”改为生词本：已从熟词中移出并重新启用高亮`;
+  // 被移除的单词操作目标不会在改回用途时自动恢复，提示里说清楚
+  const removed = removedTargets.length ? `；已从单词操作的“${removedTargets.join('”“')}”目标中去掉，需要时请到“单词操作”重新勾选` : '';
+  showToast(base + removed);
 }
 
 /** 书名下的一行能力说明：不能加词/删词的原因（欧路“已掌握”只读、有道非默认分组不能加词等） */
@@ -143,6 +153,24 @@ function setProviderEnabled(cfg: { enabled: boolean }, on: boolean) {
   });
 }
 
+/**
+ * 填写 / 修改 token 后自动刷新一次分组列表（不用再回到卡片上方点“刷新列表”）。
+ * 等设置防抖保存（useSettings 150ms）落盘后再请求：background 从 storage 读取 token。
+ */
+const tokenTimers = new Map<string, ReturnType<typeof setTimeout>>();
+watch(
+  () => SOURCE_PROVIDER_INFOS.map((info) => [info.id, settings.value.sources[info.id]?.enabled ? settings.value.sources[info.id]?.apiToken?.trim() ?? '' : ''] as const),
+  (next, prev) => {
+    for (const [id, token] of next) {
+      const old = prev?.find(([pid]) => pid === id)?.[1] ?? '';
+      if (!token || token === old) continue;
+      clearTimeout(tokenTimers.get(id));
+      tokenTimers.set(id, setTimeout(() => void refreshList(id), 1000));
+    }
+  },
+);
+onBeforeUnmount(() => tokenTimers.forEach((t) => clearTimeout(t)));
+
 const showTokenGuide = ref(false);
 </script>
 
@@ -157,24 +185,28 @@ const showTokenGuide = ref(false);
         <span class="logo" :class="p.info.id">{{ initial(p.info.name) }}</span>
         <div class="sum-text">
           <template v-if="p.cfg.enabled">
-            <strong>{{ p.books.length ? `${p.books.length} 个生词本 · ${formatCount(p.words)} 词` : '尚未同步' }}</strong>
-            <span class="muted">{{ p.lastSync ? '上次同步 ' + relativeTime(p.lastSync) : '登录网页版后点击“同步”' }}</span>
+            <strong :class="{ 'muted-title': p.card.tone === 'neutral' && !p.books.length }">{{ p.card.title }}</strong>
+            <span class="muted">{{ p.card.subtitle }}</span>
           </template>
           <span v-else class="muted">已关闭：不自动同步，已同步的生词本仍可在词书页启用</span>
         </div>
       </div>
 
       <template v-if="p.cfg.enabled">
+        <!-- 主按钮随状态变化：未连接时是“登录网页版”（填了 token 时是“刷新列表”），连上之后是“全部同步” -->
         <div class="actions">
-          <button type="button" class="btn primary" :disabled="busy.has(p.info.id)" @click="syncProvider(p.info.id)">
+          <button v-if="p.card.showLogin" type="button" class="btn" :class="{ primary: p.card.primary === 'login' }" @click="open(p.info.loginUrl)">
+            <AppIcon name="link" :size="16" />登录网页版
+          </button>
+          <button type="button" class="btn" :class="{ primary: p.card.primary === 'sync' }" :disabled="busy.has(p.info.id)" @click="syncProvider(p.info.id)">
             <AppIcon name="sync" :size="16" :class="{ spin: busy.has(p.info.id) }" />{{ busy.has(p.info.id) ? '同步中…' : '全部同步' }}
           </button>
-          <button v-if="p.info.capabilities.multiBook" type="button" class="btn" :disabled="busy.has(p.info.id)" @click="refreshList(p.info.id)">
+          <button v-if="p.info.capabilities.multiBook" type="button" class="btn" :class="{ primary: p.card.primary === 'refresh' }" :disabled="busy.has(p.info.id)" @click="refreshList(p.info.id)">
             <AppIcon name="refresh" :size="16" />刷新列表
           </button>
-          <button type="button" class="btn" @click="open(p.info.loginUrl)"><AppIcon name="link" :size="16" />登录网页版</button>
         </div>
-        <p v-if="p.listError" class="err">{{ p.listError }}</p>
+        <p v-if="p.card.error" class="err">{{ p.card.error }}</p>
+        <p v-else-if="p.card.hint" class="hint muted">最近一次：{{ p.card.hint }}</p>
         <ul v-if="p.info.capabilities.notes?.length" class="notes muted">
           <li v-for="n in p.info.capabilities.notes" :key="n">{{ n }}</li>
         </ul>
@@ -192,9 +224,7 @@ const showTokenGuide = ref(false);
                 <span class="badge" :class="bookStatus(b).tone">{{ bookStatus(b).label }}</span>
                 <span v-if="b.sync?.orphaned" class="badge warn">远端已删除</span>
               </div>
-              <span class="muted">
-                {{ formatCount(b.size) }} 词 · {{ b.sync?.lastSyncAt ? relativeTime(b.sync.lastSyncAt) : '从未同步' }}
-              </span>
+              <span class="muted">{{ bookSyncLine(b) }}</span>
               <label class="role">
                 <span class="muted">用作</span>
                 <select :value="roleOf(b)" :aria-label="'用途：' + (b.sync?.name ?? b.name)" @change="changeRole(b, ($event.target as HTMLSelectElement).value as BookRole)">
@@ -203,7 +233,9 @@ const showTokenGuide = ref(false);
                 </select>
               </label>
               <span v-if="capabilityNote(b)" class="cap muted">{{ capabilityNote(b) }}</span>
-              <span v-if="(b.sync?.status === 'error' || b.sync?.status === 'empty') && b.sync.error" class="err small">{{ b.sync.error }}</span>
+              <span v-if="b.sync?.status === 'error' && b.sync.error" class="err small">{{ b.sync.error }}</span>
+              <!-- 为空是正常结果（同步成功、远端没有单词），用灰色辅助文字 -->
+              <span v-else-if="b.sync?.status === 'empty' && b.sync.error" class="cap muted">{{ b.sync.error }}</span>
             </div>
             <button type="button" class="icon-btn" :disabled="busy.has(b.id) || busy.has(p.info.id)" :aria-label="'同步 ' + b.name" title="同步这一本" @click="syncProvider(p.info.id, [b.id])">
               <AppIcon name="sync" :size="18" :class="{ spin: busy.has(b.id) }" />
@@ -230,7 +262,9 @@ const showTokenGuide = ref(false);
             <div class="token-row">
               <input :id="'token-' + p.info.id" v-model.trim="p.cfg.apiToken" type="password" autocomplete="off" placeholder="NIS xxxxxxxx" />
               <a v-if="p.info.tokenUrl" class="btn" :href="p.info.tokenUrl" target="_blank" rel="noopener">获取</a>
+              <button v-if="p.cfg.apiToken" type="button" class="btn" :disabled="busy.has(p.info.id)" @click="refreshList(p.info.id)">刷新列表</button>
             </div>
+            <span v-if="p.cfg.apiToken" class="muted small-note">填写后会自动刷新一次分组列表</span>
             <button type="button" class="link" :aria-expanded="showTokenGuide" @click="showTokenGuide = !showTokenGuide">
               {{ showTokenGuide ? '收起获取步骤' : '如何获取？为什么改用 token？' }}
             </button>
@@ -292,13 +326,16 @@ const showTokenGuide = ref(false);
 .guide p { margin: 8px 0 0; font-size: 12px; }
 .guide code { font-size: 12px; padding: 0 4px; border-radius: 4px; background: var(--surface); }
 .err.small { margin: 0; font-size: 12px; }
+.hint { margin: 0 18px 10px; font-size: 12px; }
+.small-note { font-size: 12px; }
+.muted-title { color: var(--text-2); }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 480px) {
   .summary, .actions { padding-left: 14px; padding-right: 14px; }
   .books li { padding-left: 14px; padding-right: 8px; }
   .settings { padding: 8px 14px 12px; }
-  .notes { margin: 0 14px 12px; }
+  .notes, .hint { margin: 0 14px 12px; }
   .actions .btn { flex: 1 1 auto; }
 }
 </style>

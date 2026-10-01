@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue';
-import { ATTR_BOOK, ATTR_BOOKS, ATTR_IN_LINK, ATTR_LEMMA, ATTR_ON_DARK, ATTR_TR_MODE } from '@/content/engine/dom';
+import { ATTR_BOOK, ATTR_BOOKS, ATTR_IN_LINK, ATTR_LEMMA, ATTR_ON_DARK } from '@/content/engine/dom';
 import { highlightTextNode, setMarkTranslation } from '@/content/engine/highlighter';
-import { buildPageCss } from '@/content/engine/style';
 import type { InlineTranslationMode, Settings } from '@/core/settings/schema';
 import { resolveMarkStyle } from '@/core/theme/resolve';
 import type { BookMeta } from '@/core/wordbook/types';
 import { markPrimaryColor } from '@/ui/components/palette';
+import { acquirePreviewCss, releasePreviewCss, setPreviewCss } from '../lib/preview-css';
 
 /**
- * 实时预览：直接复用内容脚本的高亮实现（highlightTextNode + setMarkTranslation 生成 DOM，buildPageCss 生成样式），
+ * 实时预览：直接复用内容脚本的高亮实现（highlightTextNode + setMarkTranslation 生成 DOM，buildPageCss 生成样式，见 lib/preview-css），
  * 所见即网页上的实际效果，engine 调整 DOM 结构或样式时预览自动一致。
- * buildPageCss 用 `html[data-hnw-tr=…]` 控制行内释义，这里替换为容器属性选择器，
- * 使同一页面中多个预览（外观页顶部、行内释义各选项、引导页）可以使用不同模式。
+ * 预览容器用 data-pv-tr 指定行内译文模式，同一页面中多个预览可以使用不同模式。
  * 示例生词按启用顺序轮流分配给各词书，以展示“按词书分色”。
  */
 const props = defineProps<{ settings: Settings; books: BookMeta[]; mode?: InlineTranslationMode; text?: 'full' | 'short' }>();
@@ -77,31 +76,10 @@ const legend = computed(() =>
   }),
 );
 
+// 样式注入（全页共享一份，见 lib/preview-css）
 acquirePreviewCss();
-watchEffect(() => setPreviewCss(buildPageCss(props.settings).replaceAll(`html[${ATTR_TR_MODE}=`, '[data-pv-tr=')));
+watchEffect(() => setPreviewCss(props.settings));
 onUnmounted(releasePreviewCss);
-</script>
-
-<script lang="ts">
-// 全页只注入一份预览样式：多个预览实例共享，按引用计数移除
-const STYLE_ID = 'hnw-options-preview';
-let previewUsers = 0;
-function acquirePreviewCss() {
-  previewUsers++;
-}
-function setPreviewCss(css: string) {
-  let el = document.getElementById(STYLE_ID);
-  if (!el) {
-    el = document.createElement('style');
-    el.id = STYLE_ID;
-    document.head.appendChild(el);
-  }
-  if (el.textContent !== css) el.textContent = css;
-}
-function releasePreviewCss() {
-  previewUsers--;
-  if (previewUsers <= 0) document.getElementById(STYLE_ID)?.remove();
-}
 </script>
 
 <template>
@@ -111,6 +89,8 @@ function releasePreviewCss() {
       <span v-if="!settings.enabled" class="off">高亮已关闭</span>
       <span v-for="l in legend.length > 1 ? legend : []" :key="l.id" class="legend"><i :style="{ background: l.color }" />{{ l.name }}</span>
       <span class="spacer" />
+      <!-- 页面附加的操作（如外观页手机上的“收起预览”） -->
+      <slot name="actions" />
       <button
         type="button"
         class="tone"
@@ -128,7 +108,7 @@ function releasePreviewCss() {
 .preview.light { background: #ffffff; color: #1f2328; }
 .preview.dark { background: #16181d; color: #e6e6e6; }
 .sample { margin: 0; padding: 14px 16px; font: 17px/1.9 Georgia, 'Times New Roman', serif; }
-/* 词上方释义需要更大行距，避免注解压到上一行（预览容器固定了行高） */
+/* 词上方译文需要更大行距，避免注解压到上一行（预览容器固定了行高） */
 .preview[data-pv-tr='ruby'] .sample { line-height: 2.4; }
 /* 手机：预览吸顶，压缩字号与行距，给下方设置留出空间 */
 @media (max-width: 560px) {

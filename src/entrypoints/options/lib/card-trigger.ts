@@ -18,10 +18,10 @@ export const CARD_TRIGGER_MODES: readonly { value: DesktopMode; label: string; d
   { value: 'click', label: '点击', desc: '点一下生词才弹出，适合不想被悬停打断的场景' },
 ];
 
-/** 悬停延迟三档（settings.card.hoverDelay，档位与 schema 的 CARD_HOVER_DELAYS 一致） */
-export const HOVER_DELAY_OPTIONS: readonly { value: CardHoverDelay; label: string }[] = [
+/** 悬停延迟三档（settings.card.hoverDelay，档位与 schema 的 CARD_HOVER_DELAYS 一致）；标签短，390 宽的分段控件里一行放下，“默认”写在说明里 */
+export const HOVER_DELAY_OPTIONS: { value: CardHoverDelay; label: string }[] = [
   { value: 100, label: '快 100ms' },
-  { value: 250, label: '标准 250ms（默认）' },
+  { value: 250, label: '标准 250ms' },
   { value: 400, label: '慢 400ms' },
 ];
 

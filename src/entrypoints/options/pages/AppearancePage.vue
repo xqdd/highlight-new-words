@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { INLINE_MODE_LABELS, INLINE_MODE_ORDER, INLINE_TRANSLATION_NAME } from '@/core/settings/inline-translation-labels';
 import type { InlineTranslationMode } from '@/core/settings/schema';
 import { resolveCardStyle, resolveMarkStyle, resolveTranslationStyle } from '@/core/theme/resolve';
 import { CUSTOM_THEME_ID, type MarkStyle } from '@/core/theme/themes';
@@ -100,12 +101,14 @@ function setBookMode(mode: BookStyleMode) {
 
 // ---------- 行内译文 ----------
 const tr = computed(() => resolveTranslationStyle(settings.value));
-const INLINE_MODES: { value: InlineTranslationMode; label: string; desc: string }[] = [
-  { value: 'off', label: '不显示', desc: '只标记生词，点按或悬停看释义' },
-  { value: 'after', label: '词后括号', desc: '生词后附简短中文' },
-  { value: 'ruby', label: '词上方', desc: '小字释义在生词上方' },
-  { value: 'hover', label: '悬停显示', desc: '指到生词时浮出，不占位置；触屏设备上没有悬停，请点按单词查看卡片' },
-];
+// 模式名统一用 core/settings/inline-translation-labels（与引导、popup、悬浮球一致），这里只补说明
+const INLINE_MODE_DESC: Record<InlineTranslationMode, string> = {
+  off: '只标记生词，点按或悬停看释义卡片',
+  after: '生词后括号附简短中文',
+  ruby: '小字译文在生词上方',
+  hover: '指到生词时浮出，不占位置；触屏设备上没有悬停，请点按单词查看卡片',
+};
+const INLINE_MODES = INLINE_MODE_ORDER.map((value) => ({ value, label: INLINE_MODE_LABELS[value], desc: INLINE_MODE_DESC[value] }));
 function patchTr(p: Partial<{ blur: boolean; color: string; opacity: number; fontScale: number }>) {
   settings.value.inlineTranslation = { ...settings.value.inlineTranslation, ...p };
 }
@@ -125,18 +128,47 @@ function updateAnchorOffset() {
   const stickyTop = parseFloat(getComputedStyle(el).top) || 0;
   dockParent.style.setProperty('--anchor-offset', `${Math.ceil(stickyTop + el.offsetHeight + 12)}px`);
 }
+// ---------- 手机上吸顶预览可收缩 ----------
+/**
+ * 手机宽度（≤560px）下吸顶预览占屏 35%–40%：往下滚动（编辑预设、取色、卡片设置）时自动收成一行短句预览（吸顶高度 ≤120px），
+ * 点“展开”恢复完整预览（多本词书 + 行内译文 + 链接）；滚回顶部恢复自动。桌面不收缩。
+ */
+const narrowQuery = matchMedia('(max-width: 560px)');
+const narrow = ref(narrowQuery.matches);
+const scrolledDown = ref(false);
+/** 用户手动展开 / 收起（null = 跟随滚动自动） */
+const manualCollapsed = ref<boolean | null>(null);
+const previewCollapsed = computed(() => narrow.value && (manualCollapsed.value ?? scrolledDown.value));
+function onScroll() {
+  const y = window.scrollY;
+  // 收起与展开用不同阈值，避免在临界处来回跳
+  if (y > 240) scrolledDown.value = true;
+  else if (y < 60) {
+    scrolledDown.value = false;
+    manualCollapsed.value = null;
+  }
+}
+const onNarrowChange = () => (narrow.value = narrowQuery.matches);
+
 onMounted(() => {
   dockParent = dock.value?.parentElement ?? null;
   updateAnchorOffset();
   dockObserver = new ResizeObserver(updateAnchorOffset);
   if (dock.value) dockObserver.observe(dock.value);
   window.addEventListener('resize', updateAnchorOffset);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  narrowQuery.addEventListener('change', onNarrowChange);
 });
 onUnmounted(() => {
   dockObserver?.disconnect();
   window.removeEventListener('resize', updateAnchorOffset);
+  window.removeEventListener('scroll', onScroll);
+  narrowQuery.removeEventListener('change', onNarrowChange);
   dockParent?.style.removeProperty('--anchor-offset');
 });
+
+// ---------- 折叠项（高级 / 卡片颜色）的展开状态：summary 用 flex 后浏览器默认三角消失，自己画上下箭头 ----------
+const advOpen = ref({ prehide: settings.value.performance.prehide, card: false });
 
 // ---------- 卡片颜色（高级） ----------
 type CardField = 'background' | 'color' | 'accent';
@@ -155,8 +187,17 @@ const cardColor = computed({
 </script>
 
 <template>
-  <div ref="dock" class="preview-dock">
-    <LivePreview :settings="settings" :books="books" />
+  <div ref="dock" class="preview-dock" :class="{ collapsed: previewCollapsed }">
+    <LivePreview :settings="settings" :books="books" :text="previewCollapsed ? 'short' : 'full'">
+      <template #actions>
+        <button v-if="narrow" type="button" class="dock-toggle" aria-expanded="true" @click="manualCollapsed = true">
+          收起<AppIcon name="up" :size="14" />
+        </button>
+      </template>
+    </LivePreview>
+    <button v-if="previewCollapsed" type="button" class="dock-toggle floating" aria-expanded="false" @click="manualCollapsed = false">
+      展开预览<AppIcon name="down" :size="14" />
+    </button>
   </div>
 
   <SettingsSection id="presets" title="样式预设" :description="`当前：${currentStyleName(settings)}。点选即生效，可在下方继续微调`">
@@ -231,7 +272,7 @@ const cardColor = computed({
     <p v-else class="empty muted">还没有启用词书。</p>
   </SettingsSection>
 
-  <SettingsSection id="inline" title="行内译文" description="在生词旁直接显示简短中文，读长文不必逐个点开；与生词样式相互独立">
+  <SettingsSection id="inline" :title="INLINE_TRANSLATION_NAME" description="在生词旁直接显示简短中文，读长文不必逐个点开；与生词样式相互独立">
     <div class="modes" role="radiogroup" aria-label="行内译文位置">
       <button
         v-for="mo in INLINE_MODES"
@@ -266,8 +307,8 @@ const cardColor = computed({
       <p class="muted small">单行标题、按钮、导航等放不下的位置，译文会自动改为悬停显示，不会撑破排版。</p>
     </template>
     <!-- 高级：首屏预隐藏（settings.performance.prehide，默认关）。不只与译文有关（粗体/斜体样式同样会改变排版），所以不随译文模式隐藏 -->
-    <details class="advanced" :open="settings.performance.prehide">
-      <summary>高级</summary>
+    <details class="advanced" :open="settings.performance.prehide" @toggle="advOpen.prehide = ($event.target as HTMLDetailsElement).open">
+      <summary>高级<AppIcon :name="advOpen.prehide ? 'up' : 'down'" :size="16" /></summary>
       <ToggleSwitch
         :model-value="settings.performance.prehide"
         label="加载时先隐藏页面，避免译文插入造成跳动（会让页面稍晚显示）"
@@ -279,8 +320,8 @@ const cardColor = computed({
 
   <SettingsSection id="card" title="释义卡片" description="生词的释义卡片怎样打开；手机、平板上始终点按生词打开">
     <CardTriggerSection />
-    <details class="advanced">
-      <summary>卡片颜色</summary>
+    <details class="advanced" @toggle="advOpen.card = ($event.target as HTMLDetailsElement).open">
+      <summary>卡片颜色<AppIcon :name="advOpen.card ? 'up' : 'down'" :size="16" /></summary>
       <div class="fields">
         <button type="button" class="field" @click="cardTarget = { field: 'background', title: '卡片背景' }">
           <span>背景</span><i class="chip" :style="{ background: cardStyle.background }" />
@@ -352,6 +393,12 @@ section.section { scroll-margin-top: var(--anchor-offset, 72px); }
 .preview-dock { position: sticky; top: 0; z-index: 5; padding: 0 0 4px; background: var(--bg); }
 @media (max-width: 899px) { .preview-dock { top: 56px; margin: 0 -12px; padding: 0 12px 6px; } }
 @media (min-width: 900px) { .preview-dock { padding-top: 8px; margin-top: -8px; } }
+/* 手机：吸顶区不透明（不透出下方内容），收起时只剩一行短句预览 */
+.dock-toggle { display: inline-flex; align-items: center; gap: 2px; border: 1px solid rgba(127, 127, 127, .35);
+  background: var(--surface); color: var(--text-2); border-radius: 999px; padding: 2px 8px; min-height: 26px; font-size: 12px; cursor: pointer; }
+.dock-toggle.floating { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); }
+.preview-dock.collapsed .dock-toggle.floating { top: calc(50% - 2px); }
+.preview-dock.collapsed :deep(.sample) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 96px; }
 
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
 .gallery.small-grid, .gallery.mine { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
@@ -396,7 +443,11 @@ section.section { scroll-margin-top: var(--anchor-offset, 72px); }
 .slider { display: grid; grid-template-columns: 7.5em 1fr; align-items: center; gap: 10px; min-height: var(--tap); font-size: 13px; }
 .slider input { width: 100%; accent-color: var(--accent); }
 
-.advanced summary { cursor: pointer; color: var(--text-2); font-size: 13px; min-height: 36px; display: flex; align-items: center; }
+.advanced summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; min-height: 36px; display: inline-flex; align-items: center; gap: 4px;
+  list-style: none; border-radius: 6px; }
+.advanced summary::-webkit-details-marker { display: none; }
+.advanced summary:hover { text-decoration: underline; }
+.advanced summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0; }
 @media (max-width: 480px) { .fields { grid-template-columns: 1fr; } }
 .field { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: var(--tap); padding: 6px 10px 6px 12px;

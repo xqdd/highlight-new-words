@@ -39,9 +39,7 @@ const now = Date.now();
                   <span class="sep">·</span>
                   <span :class="`tone-${sourceBookStatus(b, now)!.tone}`">{{ sourceBookStatus(b, now)!.text }}</span>
                 </template>
-                <template v-else-if="b.description && b.kind === 'builtin'">
-                  <span class="sep">·</span><span class="desc">{{ b.nameEn }}</span>
-                </template>
+                <!-- 内置词书不再显示英文名（“Zhongkao”是拼音，对用户没有信息量） -->
               </span>
             </span>
             <span v-if="enabled.includes(b.id)" class="prio" :title="`优先级第 ${enabled.indexOf(b.id) + 1}`">

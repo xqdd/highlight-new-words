@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { resolveMarkStyle } from '@/core/theme/resolve';
+import { createExtensionLoaders, DefaultWordBookRegistry } from '@/core/wordbook/registry';
 import type { BookMeta } from '@/core/wordbook/types';
 import AppIcon from '@/ui/components/AppIcon.vue';
 import MarkPreview from '@/ui/components/MarkPreview.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
-import { CATEGORY_GROUPS, bookKindLabel, formatCount, isBookEnabled, isKnownRoleBook, moveBook, toggleBook } from '../lib/books';
+import { CATEGORY_GROUPS, bookKindLabel, deltaCoveredBy, formatCount, isBookEnabled, isKnownRoleBook, moveBook, orderCategoryBooks, selectAllIds, toggleBook, unionWordCount } from '../lib/books';
 import { useOptions } from '../lib/context';
 import BookRow from '../components/BookRow.vue';
 
@@ -25,18 +26,40 @@ const groups = computed(() => {
   const known = new Set(CATEGORY_GROUPS.map((g) => g.category));
   return CATEGORY_GROUPS.map((g) => ({
     ...g,
-    books: books.value
-      .filter((b) => b.kind === 'builtin' && (b.category === g.category || (g.category === 'other' && !known.has(b.category))))
-      .sort((a, b) => a.level - b.level),
+    // 增量书紧跟其全量书（见 orderCategoryBooks）
+    books: orderCategoryBooks(books.value.filter((b) => b.kind === 'builtin' && (b.category === g.category || (g.category === 'other' && !known.has(b.category))))),
   })).filter((g) => g.books.length > 0);
 });
 
-/** 已启用词书词数合计（未去重，仅作量级参考） */
-const totalWords = computed(() => enabled.value.reduce((n, e) => n + (e.meta?.size ?? 0), 0));
+/**
+ * 已启用词书的去重词数：各本词表求并集（增量书与全量书、各考试书之间大量重叠，直接相加会严重高估）。
+ * 结果异步算出；算出前先显示按本相加的上限。
+ */
+const union = ref<{ key: string; count: number; exact: boolean }>();
+const enabledKey = computed(() => enabled.value.map((e) => `${e.id}:${e.meta?.size ?? 0}`).join(','));
+watch(
+  enabledKey,
+  async (key) => {
+    const ids = enabled.value.map((e) => e.id);
+    // 每次新建注册表：用户词书同步后内容会变，注册表内部按 id 缓存（内置词书文件有浏览器缓存，重复加载开销小）
+    const registry = new DefaultWordBookRegistry(createExtensionLoaders());
+    const r = await unionWordCount(ids, (id) => registry.load(id), (id) => byId.value.get(id)?.size ?? 0);
+    if (key === enabledKey.value) union.value = { key, ...r };
+  },
+  { immediate: true },
+);
+const totalText = computed(() => {
+  const u = union.value;
+  if (u && u.key === enabledKey.value) return `约 ${formatCount(u.count)} 词（去重后）`;
+  return '正在计算词数…';
+});
 
+/** 全选只选全量书（增量书完全包含在全量书中）；全不选则全部取消 */
 function groupAll(list: BookMeta[], on: boolean) {
-  for (const b of list) toggleBook(settings.value, b.id, on);
+  if (on) for (const id of selectAllIds(list)) toggleBook(settings.value, id, true);
+  else for (const b of list) toggleBook(settings.value, b.id, false);
 }
+const allSelected = (list: BookMeta[]) => selectAllIds(list).every((id) => isBookEnabled(settings.value, id));
 
 /**
  * 难度分级（level）是包含体系（选 B2 = B2+C1+C2，见 BookCategory 注释），同时启用多档没有意义，
@@ -52,7 +75,7 @@ function toggleInGroup(b: BookMeta, group: BookMeta[]) {
 <template>
   <SettingsSection id="enabled" title="已启用" flush>
     <template #actions>
-      <span class="muted total">{{ enabled.length }} 本 · 约 {{ formatCount(totalWords) }} 词</span>
+      <span class="muted total">{{ enabled.length }} 本 · {{ totalText }}</span>
     </template>
     <p class="hint muted">一个词同时出现在多本书中时，排在前面的词书决定它的颜色。</p>
     <ol v-if="enabled.length" class="enabled">
@@ -81,7 +104,7 @@ function toggleInGroup(b: BookMeta, group: BookMeta[]) {
     </div>
   </SettingsSection>
 
-  <SettingsSection id="mine" title="我的生词本" description="云端同步与文件导入的生词本，可与内置词书组合启用" flush>
+  <SettingsSection id="mine" title="云端与本地生词本" description="有道 / 欧路同步的生词本、文件导入和卡片加词的本地生词本，可与内置词书组合启用" flush>
     <template #actions>
       <button type="button" class="btn" @click="navigate('sources')"><AppIcon name="plus" :size="16" />添加</button>
     </template>
@@ -98,15 +121,13 @@ function toggleInGroup(b: BookMeta, group: BookMeta[]) {
   </SettingsSection>
 
   <SettingsSection v-for="g in groups" :id="'cat-' + g.category" :key="g.category" :title="g.title" :description="g.hint" flush>
-    <template v-if="g.category !== 'level'" #actions>
-      <button
-        type="button"
-        class="btn small"
-        @click="groupAll(g.books, !g.books.every((b) => isBookEnabled(settings, b.id)))"
-      >
-        {{ g.books.every((b) => isBookEnabled(settings, b.id)) ? '全不选' : '全选' }}
+    <!-- 难度分级、词频分级是包含关系（选高一档已包含更难的词），不提供全选 -->
+    <template v-if="g.category !== 'level' && g.category !== 'frequency'" #actions>
+      <button type="button" class="btn small" @click="groupAll(g.books, !allSelected(g.books))">
+        {{ allSelected(g.books) ? '全不选' : '全选' }}
       </button>
     </template>
+    <p v-if="g.category === 'frequency'" class="hint-inc muted">各档是包含关系：“3000 之外”已包含 5000、8000、12000 之外的词，选一档即可。</p>
     <ul class="list">
       <BookRow
         v-for="b in g.books"
@@ -114,6 +135,7 @@ function toggleInGroup(b: BookMeta, group: BookMeta[]) {
         :book="b"
         :on="isBookEnabled(settings, b.id)"
         :radio="g.category === 'level'"
+        :covered-by="deltaCoveredBy(settings, b, byId)"
         @toggle="toggleInGroup(b, g.books)"
       />
     </ul>
@@ -123,6 +145,7 @@ function toggleInGroup(b: BookMeta, group: BookMeta[]) {
 <style scoped>
 .hint { margin: -4px 18px 8px 30px; }
 .total { white-space: nowrap; }
+.hint-inc { margin: -4px 18px 8px; font-size: 12px; }
 .enabled { list-style: none; margin: 0; padding: 0; }
 .enabled li { display: flex; align-items: center; gap: 10px; padding: 8px 18px; min-height: 56px; border-top: 1px solid var(--border); }
 .rank { width: 20px; text-align: center; color: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums; }

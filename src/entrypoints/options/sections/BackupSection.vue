@@ -9,6 +9,7 @@ import SegmentedControl from '@/ui/components/SegmentedControl.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
 import ToggleSwitch from '@/ui/components/ToggleSwitch.vue';
 import FileDrop from '../components/FileDrop.vue';
+import { formatDateTime } from '../lib/books';
 import { downloadFile, readBackupFile } from '../lib/download';
 import { errorText, showToast } from '../lib/toast';
 
@@ -108,9 +109,11 @@ const rows = computed(() => {
     { label: '导入的词书', c: p.localBooks },
   ];
   if (p.sourceBooks) list.push({ label: '来源生词本', c: p.sourceBooks });
+  // 设置也参与冲突计数（汇总里的“冲突 N 处”可能来自设置），单列一行，表格与汇总对得上
+  if (p.settings.changed || p.settings.willApply || p.settings.conflict) list.push({ label: '设置', c: { added: 0, removed: 0, updated: p.settings.willApply ? 1 : 0, conflicts: p.mode === 'merge' && p.settings.conflict ? 1 : 0 } });
   return list;
 });
-const exportedAt = computed(() => (preview.value?.exportedAt ? new Date(preview.value.exportedAt).toLocaleString() : ''));
+const exportedAt = computed(() => (preview.value?.exportedAt ? formatDateTime(preview.value.exportedAt) : ''));
 </script>
 
 <template>

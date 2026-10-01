@@ -71,7 +71,7 @@ const customRemove = computed({
         <p class="muted small">
           {{
             autoTargets.length
-              ? '当前会移除：' + autoTargets.map((o) => o.name).join('、')
+              ? '当前会移除：' + autoTargets.map((o) => `${o.group} · ${o.name}`).join('、')
               : '当前不会从任何生词本移除。可在上方各来源打开“标记熟词时删除”，或改为自定义'
           }}
         </p>

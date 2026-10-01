@@ -34,7 +34,7 @@ function toggleDetail(id: string) {
             </button>
           </span>
         </span>
-        <button v-if="c.action === 'fix'" type="button" class="btn small fix" :class="{ warn: c.status.tone === 'warn' }" @click="emit('fix', c)">
+        <button v-if="c.action === 'fix'" type="button" class="btn small fix" :class="{ warn: c.status.tone === 'warn', muted: c.status.tone === 'muted' }" @click="emit('fix', c)">
           {{ syncFixVerb(c) }}<PopupIcon name="chevron" :size="14" />
         </button>
         <button
@@ -78,6 +78,8 @@ function toggleDetail(id: string) {
 .btn.fix { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); font-weight: 650; gap: 0; }
 /* 未登录等“待处理”（非故障）用警示色，不和真正的出错混在一起 */
 .btn.fix.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--border)); }
+/* 从未连接（新装默认启用有道但没登录）：中性引导，不是故障，用普通按钮的中性色而非红/橙 */
+.btn.fix.muted { color: var(--text); border-color: var(--border); }
 /* 上次成功时间：次要信息 */
 .since { color: var(--text-2); }
 .spin { animation: spin 0.9s linear infinite; }

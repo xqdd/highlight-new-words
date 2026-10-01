@@ -1,6 +1,7 @@
 import type { BookCategory, BookMeta } from '@/core/wordbook/types';
 import type { KnownWordsData } from '@/core/known/types';
 import type { StatusItem, StatusLevel } from '@/core/messaging/protocol';
+import { SOURCE_NOT_CONNECTED_TEXT } from '@/core/source/connect-status';
 import type { BackendSyncStatus, SyncStatus } from '@/core/sync/types';
 import type { BookId } from '@/core/settings/schema';
 
@@ -287,7 +288,7 @@ export function summarizeSourceChannels(
     if (!sources[p.id]?.enabled) continue;
     const base = { id: `source:${p.id}`, kind: 'source' as const, label: p.name, providerId: p.id, route: `${OPTIONS_ROUTES.sources}/provider-${p.id}` };
     if (!own.length) {
-      out.push({ ...base, status: { text: '尚未连接生词本', tone: 'warn' }, action: 'fix' });
+      out.push({ ...base, status: { text: SOURCE_NOT_CONNECTED_TEXT, tone: 'muted' }, action: 'fix' });
       continue;
     }
     if (own.some((b) => b.sync!.status === 'syncing')) {
@@ -298,6 +299,11 @@ export function summarizeSourceChannels(
     if (failed.length) {
       const prefix = own.length > 1 ? `${failed.length}/${own.length} 本失败：` : '同步失败：';
       const lastOk = Math.max(...own.map((b) => b.sync!.lastSyncAt));
+      // 从没成功过：未连接（中性），与后台 sourceItem 口径一致
+      if (!lastOk) {
+        out.push({ ...base, status: { text: SOURCE_NOT_CONNECTED_TEXT, tone: 'muted' }, action: 'fix', detail: failed[0]!.sync!.error, lastSyncAt: 0 });
+        continue;
+      }
       out.push({
         ...base,
         status: { text: prefix + (failed[0]!.sync!.error || '未知错误'), tone: 'error' },
@@ -401,8 +407,11 @@ export function buildSyncChannels(input: {
   return rows;
 }
 
-/** background 总状态级别 → popup 色调（pending 退避中会自动重试，按“进行中”显示；never 需要用户先同步一次） */
-const LEVEL_TONE: Record<StatusLevel, Tone> = { error: 'error', busy: 'busy', pending: 'busy', never: 'warn', ok: 'ok', off: 'muted' };
+/**
+ * background 总状态级别 → popup 色调（pending 退避中会自动重试，按“进行中”显示）。
+ * never（从未同步成功：未连接 / 尚未同步）是中性状态，用灰色，不当作警告（口径见 core/source/connect-status）。
+ */
+const LEVEL_TONE: Record<StatusLevel, Tone> = { error: 'error', busy: 'busy', pending: 'busy', never: 'muted', ok: 'ok', off: 'muted' };
 
 /**
  * background `getStatusSummary` 的条目 → popup 行（background 统一计算文案，与选项页一致；本文件的
@@ -414,8 +423,8 @@ export function channelsFromStatusItems(items: StatusItem[], now = Date.now()): 
     .map((it) => {
       const kind: SyncChannel['kind'] = it.kind === 'source' ? 'source' : it.id === 'webdav' ? 'webdav' : 'storage-sync';
       const providerId = kind === 'source' ? it.id.replace(/^source:/, '') : undefined;
-      // 从未成功过的来源失败时后台给 level=never + 失败原因（如“未登录有道…”），这种需要用户先去连接 / 登录；
-      // 只是“尚未同步”（没试过）的先试一次同步
+      // 从未成功过的来源（后台给 level=never + “未连接”，原因在 detail）需要用户先去连接 / 登录；
+      // 只是“尚未同步”（已列出生词本但没同步过）的先试一次同步
       const neverFailed = it.level === 'never' && !/^尚未同步/.test(it.text);
       // 正常行带上次同步时间（后台文案不含时间）；出错 / 待处理行把上次成功时间放进 since
       const text = it.level === 'ok' && it.lastSyncAt ? `${it.text} · ${formatAgo(it.lastSyncAt, now)}` : it.text;
@@ -428,6 +437,7 @@ export function channelsFromStatusItems(items: StatusItem[], now = Date.now()): 
         action: it.level === 'error' || neverFailed ? 'fix' : 'sync',
         lastSyncAt: it.lastSyncAt,
         since: showSince ? `上次成功 ${formatAgo(it.lastSyncAt, now)}` : undefined,
+        ...(it.detail ? { detail: it.detail } : {}),
         running: it.level === 'busy',
         // 同步后端直接定位到同步页对应小节（比 href 更精确）；来源用后台给的位置
         route: kind === 'webdav' ? OPTIONS_ROUTES.webdav : kind === 'storage-sync' ? OPTIONS_ROUTES.sync : it.href || OPTIONS_ROUTES.sources,
@@ -450,17 +460,21 @@ export function overallSyncStatus(channels: SyncChannel[]): StatusText {
     case 'busy':
       // 只有排队 / 退避等待（pending）的项时不说“正在同步”、也不用强调色，避免看起来一直卡在同步中
       return channels.some((c) => c.running) ? { text: '正在同步…', tone: 'busy' } : { text: '等待自动同步', tone: 'muted' };
-    default:
+    default: {
+      // 未连接的来源（新装默认启用有道但没登录）：中性灰色说明，不算告警
+      const idle = channels.find((c) => c.status.text === SOURCE_NOT_CONNECTED_TEXT);
+      if (idle) return { text: `${idle.label}：${SOURCE_NOT_CONNECTED_TEXT}`, tone: 'muted' };
       return { text: channels.length > 1 ? `${channels.length} 项同步正常` : '同步正常', tone: 'ok' };
+    }
   }
 }
 
-// ---------------- 行内释义 ----------------
+// ---------------- 行内译文 ----------------
 
-/** popup 本地记住上次使用的行内释义模式（快速开关重新打开时恢复），只是本机界面偏好，不进 settings */
+/** popup 本地记住上次使用的行内译文模式（快速开关重新打开时恢复），只是本机界面偏好，不进 settings */
 export const LAST_INLINE_MODE_KEY = 'hnw:popup:lastInlineMode';
 
-/** 行内释义快速开关：关闭 → 恢复上次的显示方式（无记录或记录无效时用第一个，即“词后”）；modes 需包含全部开启方式（含 hover） */
+/** 行内译文快速开关：关闭 → 恢复上次的显示方式（无记录或记录无效时用第一个，即“词后”）；modes 需包含全部开启方式（含 hover） */
 export function nextInlineMode<M extends string>(current: M | 'off', last: string | null, modes: readonly M[]): M | 'off' {
   if (current !== 'off') return 'off';
   return (modes as readonly string[]).includes(last ?? '') ? (last as M) : modes[0]!;
@@ -474,6 +488,8 @@ export function nextInlineMode<M extends string>(current: M | 'off', last: strin
  */
 export function syncFixVerb(c: Pick<SyncChannel, 'kind' | 'status' | 'detail'>): string {
   const t = c.detail ?? c.status.text;
+  // 未连接（从没同步成功过）：去选项页连接（登录网页版或填写 token），与选项页来源卡片的主按钮一致
+  if (c.status.text === SOURCE_NOT_CONNECTED_TEXT) return '去连接';
   // 从没登录过（短句已判定为“未登录”）是“去登录”，不是“重新登录”
   if (/^未登录/.test(c.status.text)) return '去登录';
   if (/登录|cookie|会话|过期/i.test(t)) return '重新登录';
@@ -609,4 +625,33 @@ export function presetScrollLeft(input: {
   const target = Math.max(0, Math.min(max, itemLeft + itemWidth + peek - viewport));
   const snapped = snaps?.find((x) => x >= target);
   return snapped === undefined ? target : Math.min(max, snapped);
+}
+
+/** popup 样式面板中的一个预设选项（mark 由调用方决定类型，这里只做分组排序） */
+export interface PresetChip<M> {
+  id: string;
+  name: string;
+  mark: M;
+}
+
+/** popup 样式面板的一组预设：带小标题，与选项页“样式预设 / 单色样式”的分组保持一致 */
+export interface PresetSection<M> {
+  key: 'combo' | 'single';
+  title: string;
+  items: PresetChip<M>[];
+}
+
+/**
+ * 把预设拆成“组合预设”和“单色”两组（顺序与选项页、悬浮球一致：都来自 presetGroups，组合在前、单色在后）。
+ * extra 是当前正在用但不在列表中的样式（自定义 / 旧版配色），放在组合预设最前，保证当前选中项总能看到。
+ */
+export function buildPresetSections<M>(
+  combos: PresetChip<M>[],
+  singles: PresetChip<M>[],
+  extra?: PresetChip<M>,
+): PresetSection<M>[] {
+  return [
+    { key: 'combo', title: '组合预设', items: extra ? [extra, ...combos] : combos },
+    { key: 'single', title: `单色（${singles.length}）`, items: singles },
+  ];
 }

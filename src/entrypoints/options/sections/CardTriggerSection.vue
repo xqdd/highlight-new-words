@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { CardHoverDelay, CardModifierKey } from '@/core/settings/schema';
-import { resolveMarkStyle } from '@/core/theme/resolve';
-import MarkPreview from '@/ui/components/MarkPreview.vue';
+import AppIcon from '@/ui/components/AppIcon.vue';
+import SegmentedControl from '@/ui/components/SegmentedControl.vue';
+import EngineWord from '../components/EngineWord.vue';
 // 修饰键选项、显示名与平台换算复用 card 的纯函数（与卡片首次提示同一套文案）
 import { effectiveModifier, isMacPlatform, modifierChoices, modifierLabel, modifierShort } from '@/content/card/trigger-config';
 import { CARD_TRIGGER_MODES, HOVER_DELAY_OPTIONS, delaySeconds, modifierKeyNote, showsHoverDelay, type DesktopMode } from '../lib/card-trigger';
@@ -17,10 +18,13 @@ import { useOptions } from '../lib/context';
  */
 const { settings } = useOptions();
 const mac = isMacPlatform();
-/** 与 floatball 相同的触屏判断：没有悬停能力的粗指针设备；随媒体特性变化更新（平板接上/拔下鼠标键盘） */
-const touchQuery = matchMedia('(hover: none) and (pointer: coarse)');
+/** 触屏判断：没有悬停能力或主指针是粗指针（手指）；随媒体特性变化更新（平板接上/拔下鼠标键盘） */
+const touchQuery = matchMedia('(hover: none), (pointer: coarse)');
 const touchOnly = ref(touchQuery.matches);
 const onTouchChange = () => (touchOnly.value = touchQuery.matches);
+/** 触屏上电脑端选项默认收成一行（“电脑上的打开方式：鼠标悬停 ›”），点开再改 */
+const desktopOpen = ref(false);
+const showDesktopOptions = computed(() => !touchOnly.value || desktopOpen.value);
 
 /** auto 是旧默认值，行为与 hover 相同，界面上合并为“鼠标悬停” */
 const mode = computed<DesktopMode>({
@@ -46,6 +50,12 @@ const hoverDelay = computed<CardHoverDelay>({
   get: () => settings.value.card.hoverDelay,
   set: (v) => (settings.value.card.hoverDelay = v),
 });
+/** SegmentedControl 只接受字符串值：档位转成字符串展示，写回时转回数字 */
+const DELAY_SEG = HOVER_DELAY_OPTIONS.map((o) => ({ value: String(o.value), label: o.label }));
+const hoverDelayKey = computed({
+  get: () => String(hoverDelay.value),
+  set: (v: string) => (hoverDelay.value = Number(v) as CardHoverDelay),
+});
 /** 演示里“指针已在单词上再按修饰键”的延迟，与 card trigger 的 KEY_SHOW_DELAY 一致 */
 const KEY_SHOW_DELAY = 180;
 
@@ -59,8 +69,7 @@ const summary = computed(() => {
 /** 修饰键与浏览器常用操作的关系：查词只需“按住 + 悬停”，不必点击，所以不会触发这些操作 */
 const keyNote = computed(() => modifierKeyNote(modifier.value, mac));
 
-// ---------- 试一试：按当前方式就地演示 ----------
-const demoMark = computed(() => resolveMarkStyle(settings.value));
+// ---------- 试一试：按当前方式就地演示（生词用 engine 真实渲染，链接内的词保留链接色，见 EngineWord） ----------
 /** 当前打开演示卡片的词（null 为关闭） */
 const demoOpen = ref<'serendipity' | 'exhibition' | null>(null);
 const demoHover = ref<'serendipity' | 'exhibition' | null>(null);
@@ -156,11 +165,18 @@ const demoHint = computed(() => {
 
 <template>
   <div class="trigger">
-    <div class="head">
+    <!-- 触屏：收成一行，点开才显示电脑端选项 -->
+    <button v-if="touchOnly" type="button" class="collapsed" :aria-expanded="desktopOpen" @click="desktopOpen = !desktopOpen">
+      <span class="lbl">电脑上的打开方式：</span><strong>{{ MODES.find((m) => m.value === mode)?.label }}</strong>
+      <span class="badge">仅电脑端</span>
+      <AppIcon :name="desktopOpen ? 'up' : 'down'" :size="16" class="chev" />
+    </button>
+    <div v-else class="head">
       <span class="lbl">电脑上的打开方式</span>
       <span class="badge">仅电脑端</span>
     </div>
-    <p v-if="touchOnly" class="touch-note muted">本机是触屏设备，始终点按生词查看释义，不受此设置影响；这里的选择会随同步应用到你的电脑。</p>
+    <p v-if="touchOnly && desktopOpen" class="touch-note muted">本机是触屏设备，始终点按生词查看释义，不受此设置影响；这里的选择会随同步应用到你的电脑。</p>
+    <template v-if="showDesktopOptions">
     <div class="modes" role="radiogroup" aria-label="电脑上的卡片打开方式">
       <button
         v-for="mo in MODES"
@@ -196,34 +212,23 @@ const demoHint = computed(() => {
 
     <div v-if="showsHoverDelay(mode)" class="delay">
       <span class="lbl">悬停延迟</span>
-      <div class="delays" role="radiogroup" aria-label="悬停延迟">
-        <button
-          v-for="d in HOVER_DELAY_OPTIONS"
-          :key="d.value"
-          type="button"
-          role="radio"
-          class="keycap"
-          :aria-checked="hoverDelay === d.value"
-          @click="hoverDelay = d.value"
-        >
-          {{ d.label }}
-        </button>
-      </div>
-      <p class="note">指针在生词上停留多久才弹出。越慢越不容易误触，扫过段落时不会接连弹出卡片。</p>
+      <SegmentedControl v-model="hoverDelayKey" class="delays" :options="DELAY_SEG" aria-label="悬停延迟" />
+      <p class="note">指针在生词上停留多久才弹出（默认 250ms）。越慢越不容易误触，扫过段落时不会接连弹出卡片。</p>
     </div>
 
     <p class="summary">{{ summary }}</p>
+    </template>
 
-    <div class="demo">
+    <div class="demo" data-pv-tr="off">
       <span class="demo-hint muted">试一试 · {{ demoHint }}</span>
       <p class="demo-text">
         It was pure
         <span class="w" @pointerenter="onEnter('serendipity', $event)" @pointerleave="onLeave" @click="onClick('serendipity', $event, false)">
-          <MarkPreview :mark="demoMark" word="serendipity" />
+          <EngineWord :settings="settings" word="serendipity" />
         </span>
         that we met at the
         <a href="#" class="w link" @pointerenter="onEnter('exhibition', $event)" @pointerleave="onLeave" @click="onClick('exhibition', $event, true)">
-          <MarkPreview :mark="demoMark" word="exhibition" />
+          <EngineWord :settings="settings" word="exhibition" />
         </a>.
       </p>
       <div v-if="demoOpen" class="pop" role="status">
@@ -259,7 +264,10 @@ kbd { font-family: inherit; font-size: 13px; font-weight: 600; padding: 2px 8px;
   border: 1px solid var(--border); border-bottom-width: 2px; white-space: nowrap; }
 .note { margin: 0; font-size: 12px; color: var(--text-2); }
 .delay { display: flex; flex-direction: column; gap: 8px; }
-.delays { display: flex; flex-wrap: wrap; gap: 8px; }
+.delays { white-space: nowrap; max-width: 420px; }
+.collapsed { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: var(--tap); padding: 6px 12px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; text-align: left; font: inherit; font-size: 14px; }
+.collapsed .chev { margin-left: auto; color: var(--text-2); }
 .summary { margin: 0; font-size: 13px; }
 .demo { position: relative; padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--border); background: var(--bg); }
 .demo-hint { font-size: 12px; }

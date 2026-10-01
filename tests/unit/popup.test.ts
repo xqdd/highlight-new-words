@@ -138,7 +138,7 @@ describe('popup model', () => {
     const books = [
       sourceBook('src:youdao:0', { lastSyncAt: NOW - 60_000, wordCount: 1200 }),
       sourceBook('src:youdao:5', { lastSyncAt: NOW - 3_600_000, wordCount: 30 }),
-      { ...sourceBook('src:eudic:1', { providerId: 'eudic', status: 'error', error: '授权失效' }), providerId: 'eudic' },
+      { ...sourceBook('src:eudic:1', { providerId: 'eudic', status: 'error', error: '授权失效', lastSyncAt: NOW - 3600e3 }), providerId: 'eudic' },
     ].map((b) => ({ ...b, providerId: b.providerId ?? b.sync!.providerId }));
     const storageSync: SyncStatus = { enabled: true, phase: 'idle', deviceId: 'd', lastPushAt: NOW - 120_000, lastPullAt: 0 };
     const webdav: BackendSyncStatus = { backend: 'webdav', enabled: true, phase: 'syncing', lastSyncAt: 0, lastPullAt: 0, lastPushAt: 0 };
@@ -156,9 +156,12 @@ describe('popup model', () => {
     expect(rows[2]).toMatchObject({ action: 'sync', status: { text: '2 分钟前同步', tone: 'ok' } });
     expect(rows[3]).toMatchObject({ running: true, status: { tone: 'busy' } });
     expect(overallSyncStatus(rows)).toEqual({ text: '欧路同步出错', tone: 'error' });
-    // 来源启用但还没有任何生词本：提示去连接
+    // 来源启用但还没有任何生词本：中性“未连接”，给去连接入口（与后台 sourceItem 同口径）
     const none = buildSyncChannels({ books: [], sources: { youdao: { enabled: true } }, providers, now: NOW });
-    expect(none[0]).toMatchObject({ action: 'fix', status: { tone: 'warn' } });
+    expect(none[0]).toMatchObject({ action: 'fix', status: { text: '未连接', tone: 'muted' } });
+    // 从没成功过的书同步失败：同样是未连接，不是红色错误
+    const fresh = buildSyncChannels({ books: [{ ...sourceBook('src:youdao:0', { status: 'error', error: '未登录有道' }), providerId: 'youdao' }], sources: { youdao: { enabled: true } }, providers, now: NOW });
+    expect(fresh[0]).toMatchObject({ action: 'fix', status: { text: '未连接', tone: 'muted' }, detail: '未登录有道' });
     expect(overallSyncStatus([])).toEqual({ text: '未开启任何同步', tone: 'muted' });
   });
 
@@ -266,7 +269,7 @@ describe('popup 顶部状态位与提示', () => {
     expect(syncFixVerb(c!)).toBe('检查服务器');
   });
 
-  it('新装未登录有道：显示“未登录 / 去登录”，成功过再失败才是“登录已过期 / 重新登录”', () => {
+  it('新装未登录有道：中性“未连接 / 去连接”，不计入告警；成功过再失败才是“登录已过期 / 重新登录”', () => {
     const NOW = 1_800_000_000_000;
     const item = (level: StatusItem['level'], lastSyncAt: number): StatusItem => ({
       id: 'source:youdao',
@@ -277,11 +280,14 @@ describe('popup 顶部状态位与提示', () => {
       lastSyncAt,
       href: '#sources',
     });
-    const [fresh] = friendlyChannels(channelsFromStatusItems([item('never', 0)], NOW));
-    expect(fresh).toMatchObject({ action: 'fix', status: { text: '未登录', tone: 'warn' } });
+    // 后台口径（core/source/connect-status）：从没成功过 → level=never、text=未连接、原因在 detail
+    const neverItem: StatusItem = { ...item('never', 0), text: '未连接', detail: '未登录有道或登录已失效，请先登录有道单词本网页版' };
+    const [fresh] = friendlyChannels(channelsFromStatusItems([neverItem], NOW));
+    expect(fresh).toMatchObject({ action: 'fix', status: { text: '未连接', tone: 'muted' }, detail: neverItem.detail });
     expect(fresh!.since).toBeUndefined();
-    expect(syncFixVerb(fresh!)).toBe('去登录');
-    expect(overallSyncStatus([fresh!])).toEqual({ text: '有道词典：未登录', tone: 'warn' });
+    expect(syncFixVerb(fresh!)).toBe('去连接');
+    expect(overallSyncStatus([fresh!])).toEqual({ text: '有道词典：未连接', tone: 'muted' });
+    expect(resolveStatusAlert({ online: true, channels: [fresh!] })).toBeUndefined();
     expect(primaryFixChannel([fresh!])?.id).toBe('source:youdao');
     // 只是没试过同步：先试一次，不给修复入口
     const untried = channelsFromStatusItems([{ ...item('never', 0), text: '尚未同步，点“立即同步”拉取生词本' }], NOW)[0]!;
@@ -292,6 +298,7 @@ describe('popup 顶部状态位与提示', () => {
     expect(syncFixVerb(expired!)).toBe('重新登录');
     // 出错优先作为主修复动作
     expect(primaryFixChannel([fresh!, expired!])?.status.text).toBe('登录已过期');
+    expect(overallSyncStatus([fresh!, expired!]).tone).toBe('error');
     // 正常行带上次同步时间
     const ok = channelsFromStatusItems([{ ...item('ok', NOW - 120_000), id: 'storage-sync', kind: 'backend', text: '已同步 · 已用 1.0 KB / 100 KB' }], NOW)[0]!;
     expect(ok.status.text).toBe('已同步 · 已用 1.0 KB / 100 KB · 2 分钟前');
@@ -322,5 +329,28 @@ describe('popup 顶部状态位与提示', () => {
     // 对齐到某一项的左缘：最左边那张完整显示
     const snaps = Array.from({ length: 12 }, (_, i) => i * 80);
     expect(presetScrollLeft({ itemLeft: 494, itemWidth: 74, viewport: 366, peek: 37, max: 900, snaps })).toBe(240);
+  });
+});
+
+describe('buildPresetSections', () => {
+  it('组合预设与单色分组，顺序与 presetGroups 一致（选项页/悬浮球同源）', async () => {
+    const { presetGroups } = await import('@/entrypoints/options/lib/appearance');
+    const { buildPresetSections } = await import('@/entrypoints/popup/model');
+    const { combos, singles, main } = presetGroups();
+    const chip = (t: (typeof combos)[number]) => ({ id: t.id, name: t.name, mark: t.mark });
+    const sections = buildPresetSections(combos.map(chip), singles.map(chip));
+    expect(sections.map((s) => s.key)).toEqual(['combo', 'single']);
+    expect(sections[0]!.title).toBe('组合预设');
+    expect(sections[1]!.title).toBe(`单色（${singles.length}）`);
+    // 拼接后的顺序和悬浮球使用的 main 完全一致
+    expect(sections.flatMap((s) => s.items.map((i) => i.id))).toEqual(main.map((t) => t.id));
+    expect(sections[0]!.items.some((i) => i.name === '下划线 + 括号译文')).toBe(combos.some((t) => t.name === '下划线 + 括号译文'));
+  });
+
+  it('自定义/旧版等列表外的当前样式放在组合预设最前', async () => {
+    const { buildPresetSections } = await import('@/entrypoints/popup/model');
+    const sections = buildPresetSections([{ id: 'a', name: 'A', mark: 1 }], [{ id: 'b', name: 'B', mark: 2 }], { id: 'custom', name: '自定义', mark: 0 });
+    expect(sections[0]!.items.map((i) => i.id)).toEqual(['custom', 'a']);
+    expect(sections[1]!.items.map((i) => i.id)).toEqual(['b']);
   });
 });

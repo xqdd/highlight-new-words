@@ -16,7 +16,7 @@ import { IMPORT_FORMATS } from '@/core/import/types';
 
 /**
  * 熟词本管理：搜索、按时间/字母排序、逐个或批量移除（可撤销）、手动添加、文件导入（带预览，可撤销）、导出 TXT/CSV。
- * 熟词永不高亮；卡片上“认识了”与其他设备同步过来的熟词会实时出现在这里（监听 storage）。
+ * 熟词永不高亮；卡片上“认识”与其他设备同步过来的熟词会实时出现在这里（监听 storage）。
  * 所有写入走 core/known/store（带锁读改写 + 删除墓碑，保证跨设备合并正确）。
  */
 const entries = ref<{ word: string; at: number }[]>([]);
@@ -172,7 +172,7 @@ const ACCEPT = IMPORT_FORMATS[0]!.accept;
         <button v-if="!selecting" type="button" class="x" :aria-label="'移除 ' + e.word" @click="remove([e.word])"><AppIcon name="close" :size="16" /></button>
       </li>
     </ul>
-    <p v-else class="empty muted">{{ query ? '没有匹配的熟词' : '还没有熟词。在网页上点生词卡片里的“认识了”，或从下方导入。' }}</p>
+    <p v-else class="empty muted">{{ query ? '没有匹配的熟词' : '还没有熟词。在网页上点生词卡片里的“认识”，或从下方导入。' }}</p>
     <button v-if="filtered.length > limit" type="button" class="more" @click="limit += PAGE * 3">显示更多（还有 {{ filtered.length - limit }} 个）</button>
   </SettingsSection>
 
