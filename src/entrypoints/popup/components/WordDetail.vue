@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { DictEntry } from '@/core/dict/types';
 import type { BookMeta } from '@/core/wordbook/types';
+import { formatPhonetic } from '@/content/card/word-info';
 import PopupIcon from './PopupIcon.vue';
 
 /**
@@ -10,6 +11,9 @@ import PopupIcon from './PopupIcon.vue';
  */
 const props = defineProps<{ word: string; entry?: DictEntry; books: BookMeta[]; known: boolean }>();
 const emit = defineEmits<{ speak: [] }>();
+
+/** 音标与卡片同一套规范化：来源生词本（如欧路）的音标可能是 HTML */
+const phonetic = computed(() => formatPhonetic(props.entry?.phonetic));
 
 /** 完整释义按行拆分；每行“词性. 释义”拆出词性标签 */
 const senses = computed(() =>
@@ -27,7 +31,7 @@ const senses = computed(() =>
 <template>
   <div class="detail">
     <div class="pron">
-      <span v-if="entry?.phonetic" class="phon">/{{ entry.phonetic }}/</span>
+      <span v-if="phonetic" class="phon">{{ phonetic }}</span>
       <button type="button" class="speak" :aria-label="`朗读 ${word}`" @click="emit('speak')">
         <PopupIcon name="volume" :size="16" /> 发音
       </button>

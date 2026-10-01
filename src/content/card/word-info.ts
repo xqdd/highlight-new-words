@@ -148,10 +148,35 @@ export function surfaceOwnSenses(surface: string, lemma: string, surfaceEntry: D
   return parseDefinitions(surfaceEntry.short, surfaceEntry.full).filter((x) => x.pos && !/^v[ti]?\./i.test(x.pos));
 }
 
-/** 音标规范化：去掉两端的 [] 或 //，ECDICT 中的西里尔字母 ә 替换为 IPA ə */
+/** 单个音标去掉两端的 [] 或 //，ECDICT 中的西里尔字母 ә 替换为 IPA ə */
+function phoneticCore(p: string): string {
+  return p.trim().replace(/^[[/]+|[\]/]+$/g, '').replace(/ә/g, 'ə').trim();
+}
+
+/** 音标里可能出现的少量 HTML 实体（欧路接口会转义撇号等） */
+function decodeEntities(s: string): string {
+  return s.replace(/&(#39|apos|quot|lt|gt|amp);/g, (_, e: string) => ({ '#39': "'", apos: "'", quot: '"', lt: '<', gt: '>', amp: '&' })[e]!);
+}
+
+/**
+ * 音标规范化，统一输出 `/.../`。
+ * 来源生词本的音标原样保存（见 background/sources/eudic.ts#toUserWord），欧路接口返回的是带真人发音链接的 HTML：
+ * `<a ...><span class="phontype">英</span><span class="Phonitic">/x/</span></a><br/><a ...>美...</a>`，
+ * 这里取出英/美音标纯文本：两者相同只显示一个，不同则显示 `英 /x/ 美 /y/`；认不出结构时退化为去掉标签。
+ */
 export function formatPhonetic(p?: string): string {
   if (!p) return '';
-  const core = p.trim().replace(/^[[/]+|[\]/]+$/g, '').replace(/ә/g, 'ə').trim();
+  if (!p.includes('<')) {
+    const core = phoneticCore(p);
+    return core ? `/${core}/` : '';
+  }
+  const parts = [...p.matchAll(/(?:class="phontype">([^<]*)<\/span>\s*)?<span class="Phonitic">([^<]*)</g)]
+    .map((m) => ({ label: decodeEntities(m[1] ?? '').trim(), core: phoneticCore(decodeEntities(m[2]!)) }))
+    .filter((x) => x.core);
+  const cores = [...new Set(parts.map((x) => x.core))];
+  if (cores.length > 1) return parts.map((x) => `${x.label} /${x.core}/`.trim()).join(' ');
+  if (cores.length === 1) return `/${cores[0]}/`;
+  const core = phoneticCore(decodeEntities(p.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' '));
   return core ? `/${core}/` : '';
 }
 
@@ -166,6 +191,7 @@ export function dictLinks(word: string): DictLink[] {
   const w = encodeURIComponent(word);
   return [
     { id: 'youdao', name: '有道', url: `https://dict.youdao.com/result?word=${w}&lang=en` },
+    { id: 'eudic', name: '欧路', url: `https://dict.eudic.net/dicts/en/${w}` },
     { id: 'cambridge', name: '剑桥', url: `https://dictionary.cambridge.org/dictionary/english-chinese-simplified/${w}` },
     { id: 'oxford', name: '牛津', url: `https://www.oxfordlearnersdictionaries.com/search/english/?q=${w}` },
     { id: 'mw', name: '韦氏', url: `https://www.merriam-webster.com/dictionary/${w}` },

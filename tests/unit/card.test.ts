@@ -74,6 +74,18 @@ describe('word-info', () => {
     expect(formatPhonetic('')).toBe('');
   });
 
+  it('formatPhonetic：欧路生词本的 HTML 音标取纯文本', () => {
+    const a = (type: string, phon: string) =>
+      `<a href="#" title="真人发音" class="voice-js voice-button voice-button-en" data-rel="langid=en&amp;voicename=en_uk_male&amp;txt=x"><span class="phontype">${type}</span><span class="Phonitic">${phon}</span></a>`;
+    // 英美相同只显示一个
+    expect(formatPhonetic(`${a('英', "/ˌɪmplɪmen'teɪʃn/")}<br/>${a('美', "/ˌɪmplɪmen'teɪʃn/")}`)).toBe("/ˌɪmplɪmen'teɪʃn/");
+    // 英美不同分别标注
+    expect(formatPhonetic(`${a('英', "/'ɪnfərəns/")}<br/>${a('美', '/ˈɪnfərəns/')}`)).toBe("英 /'ɪnfərəns/ 美 /ˈɪnfərəns/");
+    // 实体解码；认不出结构时退化为去标签
+    expect(formatPhonetic(`${a('英', '/ri&#39;d/')}`)).toBe("/ri'd/");
+    expect(formatPhonetic('<b>/ri:d/</b>')).toBe('/ri:d/');
+  });
+
   it('dictLinks：URL 编码', () => {
     expect(dictLinks('ice cream')[0]!.url).toContain('ice%20cream');
   });
