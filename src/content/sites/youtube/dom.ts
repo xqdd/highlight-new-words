@@ -23,8 +23,11 @@ export const CHROME_BOTTOM_CLASS = 'ytp-chrome-bottom';
 export const ATTR_YT_HINT = 'data-hnw-yt-hint';
 /** 我们加在字幕内 hnw-mark 上的单词上方注解文本（CSS ::after 渲染，不进入 textContent） */
 export const ATTR_YT_GLOSS = 'data-hnw-yt-gloss';
-/** <html> 上的字幕内译文模式：above 时显示上方注解 */
-export const ATTR_YT_TR = 'data-hnw-yt-tr';
+/**
+ * 我们加在字幕窗口上的译文模式：above（上方注解）/ after（词后小字）；不设置 = 只高亮。
+ * 按窗口设置：自动生成字幕窗口与提示窗口不设置；after 放不下（超出播放器宽度）的窗口单独改成 above
+ */
+export const ATTR_YT_GM = 'data-hnw-yt-gm';
 export const YT_STYLE_ID = 'hnw-yt-style';
 
 /** YouTube 站点（含 m. 与 www.；YouTube Music 的播放器结构不同，不处理） */

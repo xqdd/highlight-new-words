@@ -10,6 +10,7 @@ import { getSettings, isSiteDisabled } from '@/core/settings/store';
 import { getProviderInfo } from '@/core/source/providers';
 import { LOCAL_BOOK_KEY_PREFIX, SOURCE_BOOK_KEY_PREFIX, STORAGE_KEYS } from '@/core/storage/keys';
 import { resolveCardStyle } from '@/core/theme/resolve';
+import { bookKindOf } from '@/core/wordbook/ids';
 import { DefaultWordBookRegistry, createExtensionLoaders } from '@/core/wordbook/registry';
 import type { BookMeta, WordBook } from '@/core/wordbook/types';
 import { UserBooksDictionary } from '@/core/wordbook/user-book';
@@ -19,7 +20,9 @@ import type { CardData, CardView } from './card/types';
 import { ATTR_BOOKS, ATTR_LEMMA } from './engine/dom';
 import { HighlightEngine } from './engine/engine';
 import { markSurface } from './engine/highlighter';
+import { layoutAffectingSettings } from './engine/prehide';
 import { applyPageStyle, removePageStyle } from './engine/style';
+import { startPageExtras } from './sites/context';
 
 /**
  * 内容脚本应用：组装 设置 / 词书 / 词形还原 / 匹配 / 引擎 / 卡片，并响应存储变化。
@@ -29,7 +32,16 @@ import { applyPageStyle, removePageStyle } from './engine/style';
  * - 启用词书 / 熟词本 / 用户词书（来源、本地导入）变化 -> 重建 matcher 并重扫
  * - 样式 / 行内翻译模式变化 -> 只更新样式与翻译，不重扫
  */
-export async function startContentApp(): Promise<void> {
+/** 每个短释义分片取一个探针词（分片按首字母划分），lookupMany 会加载全部分片 */
+const DICT_SHARD_PROBES = 'abcdefghijklmnopqrstuvwxyz'.split('');
+
+export interface ContentAppOptions {
+  /** 释放首屏预隐藏（content 入口在 document_start 同步设置，见 engine/prehide.ts）；幂等 */
+  releasePrehide?: () => void;
+}
+
+export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<void> {
+  const releasePrehide = appOpts.releasePrehide ?? (() => {});
   const doc = document;
   const lemmatizer = createLemmatizer();
   // 内容脚本在 document_start 注入：词形数据、设置、词书与页面解析并行加载，DOM 就绪时尽快处理首屏，
@@ -49,12 +61,23 @@ export async function startContentApp(): Promise<void> {
   const isTop = window.top === window;
 
   const active = () => settings.enabled && !isSiteDisabled(settings, location.hostname);
+  // 不标注、或标注不改变排版时不需要预隐藏：设置读到后立即显示页面（通常早于首次绘制）
+  if (!active() || !layoutAffectingSettings(settings)) releasePrehide();
+  else if (settings.inlineTranslation.mode === 'after' || settings.inlineTranslation.mode === 'ruby') {
+    // 首屏要在显示前写好译文：读到设置后立即预载全部短释义分片（按首字母，共约 2MB），与词书、词形数据并行。
+    // 页面解析繁忙后扩展资源请求会明显变慢（维基大页面首屏查释义要多等 200–300ms），趁解析刚开始时发出
+    void packagedDict.lookupMany(DICT_SHARD_PROBES);
+  }
 
   /** 加载启用的词书与熟词本，构造 matcher 与组合词典 */
   async function buildMatcher(): Promise<WordMatcher> {
-    registry = new DefaultWordBookRegistry(createExtensionLoaders());
+    const loaders = createExtensionLoaders();
+    // 内置词书文件与词书目录并行请求（registry 默认先等目录再取文件；页面解析繁忙时每次往返要几十毫秒，首屏要等它）
+    const bookFiles = new Map(settings.books.enabled.filter((id) => bookKindOf(id) === 'builtin').map((id) => [id, loaders.book(id)]));
+    registry = new DefaultWordBookRegistry({ ...loaders, book: (id) => bookFiles.get(id) ?? loaders.book(id) });
+    const booksReady = Promise.all(settings.books.enabled.map((id) => registry.load(id)));
     const [books, known] = await Promise.all([
-      Promise.all(settings.books.enabled.map((id) => registry.load(id))),
+      booksReady,
       getKnownWords(),
       lemmaReady,
     ]);
@@ -75,9 +98,8 @@ export async function startContentApp(): Promise<void> {
         engine?.removeLemma(lemma);
         return sendToBackground('markKnown', { word: surface, lemma });
       },
-      unmarkKnown: async (lemma) => {
-        await sendToBackground('unmarkKnown', { lemma });
-      },
+      // 返回 background 结果：卡片用其中的 message 显示“已加回 …/无法加回 …”
+      unmarkKnown: (lemma) => sendToBackground('unmarkKnown', { lemma }),
       deleteFromSources: async (lemma, bookIds) => {
         const res = await sendToBackground('deleteSourceWords', { word: lemma, bookIds });
         engine?.removeLemma(lemma);
@@ -115,9 +137,12 @@ export async function startContentApp(): Promise<void> {
 
   async function startEngine(): Promise<void> {
     const matcher = await buildMatcher();
-    await domReady(doc);
+    await firstScreenParsed(doc);
     // frameset 等没有 body 的文档不处理
-    if (!doc.body) return;
+    if (!doc.body) {
+      releasePrehide();
+      return;
+    }
     applyPageStyle(doc, settings);
     ensureCard();
     if (engine) {
@@ -135,6 +160,12 @@ export async function startContentApp(): Promise<void> {
       onLemmasChanged: (lemmas) => void sendToBackground('reportPageWords', { lemmas }).catch(() => {}),
     });
     engine.start();
+    // 首屏：同步标注视口内文本、写入视口内译文后再显示页面（预隐藏期间的排版变化不计入 CLS）
+    try {
+      await engine.primeFirstScreen();
+    } finally {
+      releasePrehide();
+    }
   }
 
   function stopEngine(): void {
@@ -144,8 +175,30 @@ export async function startContentApp(): Promise<void> {
     removePageStyle(doc);
   }
 
+  // 站点适配层（YouTube 等）与悬浮球（floatball 模块）：须在首次扫描前启动，站点跳过规则才对首屏生效
+  const extras = startPageExtras({
+    doc,
+    getSettings: () => settings,
+    isActive: active,
+    getCard: () => card,
+    openCard: (anchor) => void openCard(anchor),
+    getDictionary: () => dictionary,
+    lemmatizer,
+    getLoadedBooks: () => loadedBooks,
+    getKnown: () => knownSnapshot,
+    getPageLemmas: () => engine?.matchedLemmas ?? [],
+    removeLemma: (lemma) => engine?.removeLemma(lemma),
+    isTop,
+  });
+
   // 首次启动
-  if (active()) await startEngine();
+  if (active()) {
+    try {
+      await startEngine();
+    } finally {
+      releasePrehide();
+    }
+  }
 
   // 存储变化：设置 / 熟词本 / 用户词书
   browser.storage.onChanged.addListener(async (changes, area) => {
@@ -156,7 +209,10 @@ export async function startContentApp(): Promise<void> {
     );
     if (!relevant) return;
     const prev = settings;
-    if (changes[STORAGE_KEYS.settings]) settings = await getSettings();
+    if (changes[STORAGE_KEYS.settings]) {
+      settings = await getSettings();
+      extras.settingsChanged();
+    }
     const wasActive = prev.enabled && !isSiteDisabled(prev, location.hostname);
     if (!active()) {
       if (wasActive) stopEngine();
@@ -203,8 +259,56 @@ export async function startContentApp(): Promise<void> {
   (globalThis as Record<string, unknown>).__hnw = { get engine() { return engine; }, get settings(): Settings { return settings; } };
 }
 
-/** 等待 DOM 解析完成（document_start 注入时 body 尚不存在） */
-function domReady(doc: Document): Promise<void> {
-  if (doc.readyState !== 'loading') return Promise.resolve();
-  return new Promise((resolve) => doc.addEventListener('DOMContentLoaded', () => resolve(), { once: true }));
+/** 判断“首屏已就绪”的轮询间隔（ms） */
+const PARSE_POLL_MS = 25;
+/** 最长等待（ms）：样式表一直加载不完等异常情况下也会启动（预隐藏有自己的兜底，见 prehide.ts） */
+const FIRST_SCREEN_MAX_WAIT_MS = 1500;
+/** 不参与布局的元素：判断解析进度时跳过 */
+const NON_LAYOUT_TAGS = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'TEMPLATE', 'NOSCRIPT']);
+
+/**
+ * 等到首屏内容就绪（document_start 注入时 body 尚不存在）：
+ * 1. 页面样式表都已加载：样式表到达前的布局是无样式布局，按它判断“视口内”的单词会判错，
+ *    首屏真正可见的单词拿不到译文，样式到达后再懒插入就会推移（冷缓存的维基即如此）；
+ * 2. DOMContentLoaded，或解析器当前所在位置（body 中最深的最后一个可布局元素）已经越过视口底部——
+ *    此时首屏内容都已在 DOM 中，可以先处理首屏，不必等整页解析完（大页面 DOMContentLoaded 可能晚于首次绘制数百毫秒），
+ *    之后解析出来的内容由 engine 的 MutationObserver 增量处理。
+ * 页面处于预隐藏中时，这里的位置读取不会造成可见影响。
+ */
+function firstScreenParsed(doc: Document): Promise<void> {
+  const startedAt = performance.now();
+  const ready = () => {
+    if (doc.readyState === 'complete' || performance.now() - startedAt > FIRST_SCREEN_MAX_WAIT_MS) return true;
+    if (hasPendingStylesheet(doc)) return false;
+    if (doc.readyState !== 'loading') return true;
+    let el: Element | null = doc.body?.lastElementChild ?? null;
+    let last: Element | null = null;
+    while (el) {
+      if (NON_LAYOUT_TAGS.has(el.tagName)) {
+        el = el.previousElementSibling;
+        continue;
+      }
+      last = el;
+      el = el.lastElementChild;
+    }
+    return !!last && last.getBoundingClientRect().top > (doc.defaultView?.innerHeight ?? 0);
+  };
+  if (ready()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setInterval(() => {
+      if (!ready()) return;
+      clearInterval(timer);
+      resolve();
+    }, PARSE_POLL_MS);
+  });
+}
+
+/** 是否还有生效中的样式表没加载完（`<link rel=stylesheet>` 加载完成前 sheet 为 null） */
+function hasPendingStylesheet(doc: Document): boolean {
+  for (const link of doc.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"]')) {
+    if (link.sheet || link.disabled) continue;
+    if (link.media && doc.defaultView && !doc.defaultView.matchMedia(link.media).matches) continue;
+    return true;
+  }
+  return false;
 }

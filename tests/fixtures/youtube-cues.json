@@ -1,0 +1,17 @@
+{
+  "videoId": "fixture1",
+  "cues": [
+    { "start": 0, "end": 2400, "text": "So in college, I was a government major," },
+    { "start": 2400, "end": 4800, "text": "which means I had to write a lot of papers." },
+    { "start": 4800, "end": 7600, "text": "Now, when a normal student writes a paper," },
+    { "start": 7600, "end": 10400, "text": "they might spread the work out a little like this." },
+    { "start": 10400, "end": 13600, "text": "But that is not how my procrastination worked, unfortunately." },
+    { "start": 13600, "end": 16800, "text": "The deadline was looming and the consequences were inevitable." },
+    { "start": 16800, "end": 20000, "text": "I had an instant gratification monkey living in my brain." },
+    { "start": 20000, "end": 23600, "text": "He makes the rational decision maker abandon the plan entirely." },
+    { "start": 23600, "end": 27200, "text": "Then the panic monster wakes up and everything changes." },
+    { "start": 27200, "end": 30800, "text": "It is the only thing the monkey is terrified of." },
+    { "start": 30800, "end": 34400, "text": "Suddenly the deadline seems remarkably close and tangible." },
+    { "start": 34400, "end": 38000, "text": "We are all procrastinators to some extent, and that's okay." }
+  ]
+}

@@ -25,6 +25,8 @@ export const STORAGE_KEYS = {
   syncCredStamps: 'syncCredStamps',
   /** 选项页已读的“更新说明”版本（字符串，见 options/lib/release-notes.ts）；仅 options 写（options 第二阶段新增） */
   uiNotesSeen: 'uiNotesSeen',
+  /** 悬浮球位置 `FloatBallPos { side: 'left'|'right', y: 视口高度比例 0–1 }`（按设备记忆、不参与同步）；仅内容脚本悬浮球写（floatball 模块新增） */
+  floatBallPos: 'floatBallPos',
 } as const;
 
 /** 单本来源词书数据键前缀：`srcBook:<bookId>` -> SourceBookData */

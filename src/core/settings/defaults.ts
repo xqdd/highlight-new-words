@@ -44,7 +44,8 @@ export function createDefaultSettings(): Settings {
     },
     inlineTranslation: { mode: 'off', blur: false, color: '' },
     code: { enabled: false, scope: 'comments', display: 'hover' },
-    youtube: { captions: true, autoPause: true, captionTranslation: 'off' },
+    youtube: { captions: true, hoverPause: false, captionTranslation: 'above' },
+    floatBall: { enabled: true, hiddenSites: [] },
     card: { trigger: 'auto' },
     tts: { enabled: true, voice: { lang: 'en' }, rate: 1 },
     // 旧版默认来源为有道

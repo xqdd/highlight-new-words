@@ -4,8 +4,8 @@ import { markSurface } from '../../engine/highlighter';
 import type { SiteContext } from '../types';
 import {
   ATTR_YT_GLOSS,
+  ATTR_YT_GM,
   ATTR_YT_HINT,
-  ATTR_YT_TR,
   CAPTION_CONTAINER_CLASS,
   CAPTION_SEGMENT_CLASS,
   PLAYER_ID,
@@ -14,31 +14,42 @@ import {
   isAutoCaptionHint,
 } from './dom';
 
+/** 窗口标记：after 放不下已退回 above */
+const ATTR_FIT_FALLBACK = 'data-hnw-yt-fit';
 const CAP = `#${PLAYER_ID}>.${CAPTION_CONTAINER_CLASS}`;
 const MARK_IN_CAP = `${CAP} ${TAG_MARK}`;
+/** 注解颜色：字幕底色固定为近黑半透明，用暖黄与白字区分（≥ 7:1） */
+const GLOSS_COLOR = '#ffe08a';
 
 /**
  * 字幕专用样式（注入一次，与 engine 的页面样式相互独立）：
- * - 字幕内一律不显示 engine 的行内译文（词后括注会撑破 YouTube 按像素计算的字幕宽度；ruby 会撑高 roll-up 固定高度的窗口），
- *   mark 也强制回到普通行内，保持 YouTube 的折行结果
+ * - 字幕内一律不显示 engine 的行内译文（hnw-tr），mark 强制回到普通行内，保持 YouTube 的折行结果；
+ *   字幕内译文由本模块按窗口模式（ATTR_YT_GM）用 mark::after 渲染，文本放在属性里，不进入 textContent
  * - 自动字幕提示窗口里若已有标注（engine 先于我们处理的极端时序），去掉高亮外观
- * - above 模式：单词上方注解用 mark::after 绝对定位，宽度限制在单词宽度附近（不与相邻注解重叠，过长省略），
- *   所在字幕段加 padding-top 留出注解高度：字幕窗贴底定位，只会向上长高，不改变宽度、不折行、不裁切；
- *   roll-up（自动生成字幕）窗口高度固定，不加注解
+ * - above：单词上方注解绝对定位，宽度限制在单词附近（过长省略），所在字幕段加 padding-top 留出注解高度。
+ *   字幕窗贴底定位，只会向上长高：不改变宽度、不折行、不裁切，文字本身不移动
+ * - after：词后小字（0.62em）。字幕段改为不折行（white-space:pre），字幕行改为居中的 flex，超出 YouTube 测量的窗口宽度时
+ *   向两侧对称溢出（仍居中，背景随字幕段延伸）；超出播放器宽度的窗口由脚本改回 above
+ * - 自动生成字幕（roll-up）窗口高度固定、逐词追加，不设置模式（只高亮）
  */
 export function buildCaptionCss(): string {
-  const gloss = `html[${ATTR_YT_TR}="above"] ${CAP} .caption-window:not(.${ROLLUP_CLASS})`;
+  const win = (mode: string) => `${CAP} .caption-window[${ATTR_YT_GM}="${mode}"]`;
   // 无释义的词写的是空注解，不占位
   const G = `${TAG_MARK}[${ATTR_YT_GLOSS}]:not([${ATTR_YT_GLOSS}=""])`;
+  const glossFont = 'font-weight:400;font-style:normal;text-decoration:none;letter-spacing:0;text-shadow:none;pointer-events:none';
   return [
     `${MARK_IN_CAP} ${TAG_TRANSLATION}{display:none!important}`,
     `${MARK_IN_CAP},${MARK_IN_CAP}>${TAG_WORD}{display:inline!important}`,
     `${CAP} [${ATTR_YT_HINT}] ${TAG_WORD}{background:none!important;color:inherit!important;text-decoration:none!important;border:0!important;box-shadow:none!important;font-weight:inherit!important}`,
-    `${gloss} .${CAPTION_SEGMENT_CLASS}:has(${G}){padding-top:calc(max(.56em,10px) * 1.25 + 2px)!important}`,
-    `${gloss} ${G}{position:relative!important}`,
-    `${gloss} ${G}::after{content:attr(${ATTR_YT_GLOSS});position:absolute;left:-.35em;right:-.35em;bottom:100%;margin-bottom:1px;` +
-      `display:block;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:max(.56em,10px);line-height:1.25;` +
-      `font-weight:400;font-style:normal;text-decoration:none;letter-spacing:0;color:#ffe08a;pointer-events:none}`,
+    // above
+    `${win('above')} .${CAPTION_SEGMENT_CLASS}:has(${G}){padding-top:calc(max(.56em,10px) * 1.25 + 2px)!important}`,
+    `${win('above')} ${G}{position:relative!important}`,
+    `${win('above')} ${G}::after{content:attr(${ATTR_YT_GLOSS});position:absolute;left:-.35em;right:-.35em;bottom:100%;margin-bottom:1px;` +
+      `display:block;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:max(.56em,10px);line-height:1.25;color:${GLOSS_COLOR};${glossFont}}`,
+    // after
+    `${win('after')} .caption-visual-line{display:flex!important;justify-content:center!important}`,
+    `${win('after')} .${CAPTION_SEGMENT_CLASS}{white-space:pre!important;flex:none!important}`,
+    `${win('after')} ${G}::after{content:attr(${ATTR_YT_GLOSS});font-size:.62em;margin-left:.18em;color:${GLOSS_COLOR};${glossFont}}`,
   ].join('\n');
 }
 
@@ -70,7 +81,11 @@ export class CaptionDecorator {
   /** 短释义缓存：查词键 -> 注解（null 表示无释义） */
   private readonly glossCache = new Map<string, string | null>();
 
-  constructor(private readonly ctx: SiteContext) {}
+  constructor(
+    private readonly ctx: SiteContext,
+    /** 每次字幕变化后回调当前显示的字幕文本（不含自动字幕提示），用于没有字幕数据时的历史记录 */
+    private readonly onText?: (text: string) => void,
+  ) {}
 
   /** 绑定（或换绑）字幕容器；容器不变时不做事 */
   attach(container: Element | null): void {
@@ -84,18 +99,15 @@ export class CaptionDecorator {
     this.schedule();
   }
 
-  /** 设置变化：同步 <html> 上的注解模式，并补写注解 */
+  /** 设置变化：重新计算各窗口的译文模式，并补写注解 */
   refresh(): void {
-    this.syncMode();
     this.schedule();
   }
 
-  private syncMode(): void {
+  /** 当前设置下字幕内译文模式（off = 只高亮） */
+  private mode(): 'off' | 'above' | 'after' {
     const s = this.ctx.getSettings();
-    const on = this.ctx.isActive() && s.youtube.captions && s.youtube.captionTranslation === 'above';
-    const root = this.ctx.doc.documentElement;
-    if (on) root.setAttribute(ATTR_YT_TR, 'above');
-    else root.removeAttribute(ATTR_YT_TR);
+    return this.ctx.isActive() && s.youtube.captions ? s.youtube.captionTranslation : 'off';
   }
 
   private schedule(): void {
@@ -111,14 +123,49 @@ export class CaptionDecorator {
   process(): void {
     const c = this.container;
     if (!c) return;
-    for (const w of c.querySelectorAll('.caption-window')) {
-      const hint = isAutoCaptionHint(w.textContent ?? '');
+    const mode = this.mode();
+    const texts: string[] = [];
+    for (const w of c.querySelectorAll<HTMLElement>('.caption-window')) {
+      const text = w.textContent ?? '';
+      const hint = isAutoCaptionHint(text);
       if (hint !== w.hasAttribute(ATTR_YT_HINT)) w.toggleAttribute(ATTR_YT_HINT, hint);
+      if (!hint) texts.push(text);
+      // 窗口模式：自动生成字幕、提示窗口只高亮；after 已因放不下改成 above 的窗口保持 above（窗口每条字幕重建，不会一直沿用）
+      const want = mode === 'off' || hint || w.classList.contains(ROLLUP_CLASS) ? null : mode;
+      const cur = w.getAttribute(ATTR_YT_GM);
+      if (want === null) {
+        if (cur !== null) w.removeAttribute(ATTR_YT_GM);
+      } else if (cur !== want && !(want === 'after' && cur === 'above' && w.hasAttribute(ATTR_FIT_FALLBACK))) {
+        w.setAttribute(ATTR_YT_GM, want);
+      }
     }
-    this.syncMode();
-    if (this.ctx.doc.documentElement.getAttribute(ATTR_YT_TR) !== 'above') return;
-    const marks = [...c.querySelectorAll<HTMLElement>(`.caption-window:not(.${ROLLUP_CLASS}):not([${ATTR_YT_HINT}]) ${TAG_MARK}:not([${ATTR_YT_GLOSS}])`)];
+    this.onText?.(texts.join(' '));
+    if (mode === 'off') return;
+    const marks = [...c.querySelectorAll<HTMLElement>(`.caption-window[${ATTR_YT_GM}] ${TAG_MARK}:not([${ATTR_YT_GLOSS}])`)];
     if (marks.length > 0) void this.fillGloss(marks);
+  }
+
+  /**
+   * after 模式的放不下检查：字幕段超出播放器左右边界（被裁切）时，该窗口改用 above。
+   * 只在写入注解后检查一次（读布局，放在 rAF 中与 YouTube 的样式写入错开）。
+   */
+  private checkFit(windows: Set<HTMLElement>): void {
+    const player = this.container?.parentElement;
+    if (!player) return;
+    requestAnimationFrame(() => {
+      const pr = player.getBoundingClientRect();
+      for (const w of windows) {
+        if (!w.isConnected || w.getAttribute(ATTR_YT_GM) !== 'after') continue;
+        const overflow = [...w.querySelectorAll(`.${CAPTION_SEGMENT_CLASS}`)].some((seg) => {
+          const r = seg.getBoundingClientRect();
+          return r.left < pr.left + 2 || r.right > pr.right - 2;
+        });
+        if (overflow) {
+          w.setAttribute(ATTR_FIT_FALLBACK, '');
+          w.setAttribute(ATTR_YT_GM, 'above');
+        }
+      }
+    });
   }
 
   private async fillGloss(marks: HTMLElement[]): Promise<void> {
@@ -137,13 +184,15 @@ export class CaptionDecorator {
       // 无释义也写空值，避免下一次变化时重复查询
       m.setAttribute(ATTR_YT_GLOSS, gloss ?? '');
     }
+    const afterWindows = new Set(marks.map((m) => m.closest<HTMLElement>(`.caption-window[${ATTR_YT_GM}="after"]`)).filter((w): w is HTMLElement => !!w));
+    if (afterWindows.size > 0) this.checkFit(afterWindows);
   }
 
   destroy(): void {
     this.observer?.disconnect();
     this.observer = null;
+    this.container?.querySelectorAll(`[${ATTR_YT_GM}]`).forEach((w) => w.removeAttribute(ATTR_YT_GM));
     this.container = null;
-    this.ctx.doc.documentElement.removeAttribute(ATTR_YT_TR);
     this.ctx.doc.getElementById(YT_STYLE_ID)?.remove();
   }
 }

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inside the mind of a master procrastinator (fixture) - YouTube</title>
+<!--
+  YouTube 观看页的离线 fixture（floatball 模块）：按 /tmp/gauntlet/bench/youtube/FEASIBILITY.md 记录的真实 DOM 结构模拟主播放器与字幕。
+  - #movie_player.html5-video-player > .ytp-caption-window-container > .caption-window > .captions-text > .caption-visual-line > .ytp-caption-segment
+  - 人工字幕（pop-on）：每条字幕整窗重建，窗口宽度按文本测量写成像素值，贴底定位；鼠标在播放器内（控件显示）时字幕上移 54px
+  - #asr：自动生成字幕（roll-up）：窗口带 ytp-caption-window-rollup、高度固定两行、overflow:hidden，逐词原位追加；开头有 “English (auto-generated)” 提示窗口
+  - 字幕时间轴来自同目录的 youtube-cues.json；页面加载后像播放器一样请求一次 /api/timedtext（带 pot），QA 脚本用路由返回 json3
+  - 点击播放器空白处切换播放/暂停，点击进度条按比例跳转（用于验证字幕上的点击不会被播放器当成切换/跳转）
+  使用：QA 脚本把 https://www.youtube.com/watch?v=fixture1 路由到本文件，视频 /yt-fixture.webm 由脚本用 ffmpeg 生成。
+-->
+<style>
+  html, body { margin: 0; background: #0f0f0f; color: #f1f1f1; font: 14px/1.5 Roboto, Arial, sans-serif; }
+  #masthead { height: 56px; display: flex; align-items: center; padding: 0 16px; font-weight: 700; font-size: 18px; }
+  #columns { display: flex; gap: 24px; padding: 0 24px; }
+  #primary { flex: 1; min-width: 0; max-width: 960px; }
+  #secondary { width: 360px; flex: none; }
+  #movie_player { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; overflow: hidden; border-radius: 12px; }
+  .html5-video-container, video { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .ytp-caption-window-container { position: absolute; inset: 0; pointer-events: none; }
+  .caption-window { position: absolute; pointer-events: auto; line-height: normal; text-align: center; }
+  .caption-window.ytp-caption-window-rollup { overflow: hidden; }
+  .ytp-caption-segment { display: inline-block; white-space: pre-wrap; background: rgba(8, 8, 8, .75); color: #fff;
+    font-family: "YouTube Noto", Roboto, Arial, Helvetica, Verdana, "PT Sans Caption", sans-serif; }
+  .ytp-chrome-top { position: absolute; top: 0; left: 0; right: 0; padding: 12px 16px; font-size: 18px; background: linear-gradient(rgba(0,0,0,.5), transparent); transition: opacity .1s; }
+  .ytp-chrome-bottom { position: absolute; left: 12px; right: 12px; bottom: 0; height: 48px; transition: opacity .1s; }
+  .ytp-progress-bar-container { height: 10px; cursor: pointer; display: flex; align-items: center; }
+  .ytp-progress-bar { height: 3px; width: 100%; background: rgba(255,255,255,.3); position: relative; }
+  .ytp-play-progress { position: absolute; left: 0; top: 0; bottom: 0; background: #f00; }
+  .ytp-chrome-controls { display: flex; align-items: center; gap: 12px; height: 38px; font-size: 13px; }
+  #movie_player.ytp-autohide .ytp-chrome-bottom, #movie_player.ytp-autohide .ytp-chrome-top { opacity: 0; }
+  h1 { font-size: 20px; margin: 12px 0 8px; }
+  #description { background: #272727; border-radius: 12px; padding: 12px; margin-top: 12px; }
+  .rec { display: flex; gap: 8px; margin-bottom: 8px; }
+  .rec .thumb { width: 168px; height: 94px; border-radius: 8px; background: #333; flex: none; }
+  @media (max-width: 700px) {
+    #masthead { height: 48px; }
+    #columns { display: block; padding: 0; }
+    #movie_player { border-radius: 0; }
+    #primary { padding: 0; }
+    #below { padding: 0 12px; }
+    #secondary { width: auto; padding: 0 12px; }
+  }
+</style>
+</head>
+<body>
+<div id="masthead">YouTube</div>
+<div id="columns">
+  <div id="primary">
+    <div id="movie_player" class="html5-video-player ytp-autohide" tabindex="-1">
+      <div class="html5-video-container"><video class="video-stream html5-main-video" muted playsinline loop src="/yt-fixture.webm"></video></div>
+      <div class="ytp-caption-window-container" id="ytp-caption-window-container" data-layer="4"></div>
+      <div class="ytp-chrome-top"><div class="ytp-title">Inside the mind of a master procrastinator</div></div>
+      <div class="ytp-chrome-bottom">
+        <div class="ytp-progress-bar-container"><div class="ytp-progress-bar"><div class="ytp-play-progress"></div></div></div>
+        <div class="ytp-chrome-controls"><span class="ytp-time-display">0:00</span><span class="ytp-chapter-title-content">My procrastination</span></div>
+      </div>
+    </div>
+    <div id="below">
+      <h1>Inside the mind of a master procrastinator | Tim Urban</h1>
+      <div id="description">Tim Urban knows that procrastination doesn't make sense, but he's never been able to shake his habit of waiting until the last minute to get things done. In this hilarious and insightful talk, Urban takes us on a journey through YouTube binges and encourages us to think harder about what we're really procrastinating on.</div>
+    </div>
+  </div>
+  <div id="secondary">
+    <div class="rec"><div class="thumb"></div><div>The surprising habits of original thinkers</div></div>
+    <div class="rec"><div class="thumb"></div><div>How to make stress your friend</div></div>
+  </div>
+</div>
+<script>
+(async () => {
+  const asr = location.hash.includes('asr');
+  const player = document.getElementById('movie_player');
+  const video = player.querySelector('video');
+  const container = document.getElementById('ytp-caption-window-container');
+  const data = await (await fetch('/youtube-cues.json')).json();
+  const cues = data.cues;
+  window.__fixture = { cues, asr };
+
+  // 像播放器一样请求一次字幕轨（带 pot）；响应由 QA 脚本的路由提供，页面本身不使用
+  setTimeout(() => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', `/api/timedtext?v=${data.videoId}&lang=en${asr ? '&kind=asr' : ''}&fmt=json3&pot=FIXTUREPOT&c=WEB`);
+    xhr.send();
+  }, 300);
+
+  // 控件显隐：鼠标在播放器内或暂停时显示控件，字幕随之上移
+  let hideTimer;
+  const showControls = () => { player.classList.remove('ytp-autohide'); clearTimeout(hideTimer); hideTimer = setTimeout(() => { if (!video.paused) player.classList.add('ytp-autohide'); layout(); }, 2500); layout(); };
+  player.addEventListener('mousemove', showControls);
+  player.addEventListener('mouseleave', () => { if (!video.paused) { player.classList.add('ytp-autohide'); layout(); } });
+  video.addEventListener('pause', () => { player.classList.remove('ytp-autohide'); layout(); });
+  video.addEventListener('play', () => { hideTimer = setTimeout(() => { player.classList.add('ytp-autohide'); layout(); }, 1500); });
+  // 播放器点击：进度条跳转，其余切换播放（记录到 window.__fixture.clicks 便于断言）
+  window.__fixture.clicks = [];
+  player.addEventListener('click', (e) => {
+    const bar = e.target.closest('.ytp-progress-bar-container');
+    if (bar) {
+      const r = bar.getBoundingClientRect();
+      video.currentTime = ((e.clientX - r.left) / r.width) * (video.duration || 40);
+      window.__fixture.clicks.push('seek');
+      return;
+    }
+    if (e.target.closest('.ytp-chrome-bottom, .ytp-chrome-top')) return;
+    window.__fixture.clicks.push('toggle');
+    if (video.paused) video.play(); else video.pause();
+  });
+
+  const fontSize = () => Math.max(14.6, Math.min(32, player.clientWidth * 0.0245));
+  const ctx2d = document.createElement('canvas').getContext('2d');
+  const measure = (text, fs) => { ctx2d.font = `${fs}px Roboto, Arial, sans-serif`; return ctx2d.measureText(text).width; };
+  /** 按播放器宽度 80% 贪心折行（YouTube 自己折行后再写像素宽度） */
+  function wrap(text, fs) {
+    const max = player.clientWidth * 0.8;
+    const lines = [];
+    let cur = '';
+    for (const w of text.split(' ')) {
+      const next = cur ? `${cur} ${w}` : w;
+      if (cur && measure(next, fs) > max) { lines.push(cur); cur = w; } else cur = next;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+  function bottomOffset() { return player.classList.contains('ytp-autohide') ? '2%' : `calc(2% + 54px)`; }
+  function makeWindow(lines, cls) {
+    const fs = fontSize();
+    const width = Math.ceil(Math.max(...lines.map((l) => measure(l, fs)))) + 4;
+    const win = document.createElement('div');
+    win.className = `caption-window ytp-caption-window-bottom ${cls || ''}`;
+    win.id = `caption-window-_${Math.floor(Math.random() * 1000)}`;
+    win.dir = 'ltr'; win.tabIndex = 0; win.draggable = true;
+    win.setAttribute('style', `touch-action:none;text-align:center;left:50%;width:${width}px;margin-left:-${width / 2}px;bottom:${bottomOffset()};${cls ? `height:${Math.ceil(fs * 1.25 * 2)}px;width:${Math.round(player.clientWidth * 0.9)}px;margin-left:-${Math.round(player.clientWidth * 0.45)}px;` : ''}`);
+    const ct = document.createElement('span');
+    ct.className = 'captions-text';
+    ct.setAttribute('style', 'overflow-wrap:normal;display:block;');
+    for (const l of lines) {
+      const vl = document.createElement('span');
+      vl.className = 'caption-visual-line';
+      vl.setAttribute('style', 'display:block;');
+      const seg = document.createElement('span');
+      seg.className = 'ytp-caption-segment';
+      seg.setAttribute('style', `display:inline-block;white-space:pre-wrap;background:rgba(8,8,8,.75);font-size:${fs}px;color:#fff;fill:#fff;`);
+      seg.textContent = l;
+      vl.appendChild(seg);
+      ct.appendChild(vl);
+    }
+    win.appendChild(ct);
+    return win;
+  }
+  function layout() {
+    for (const w of container.querySelectorAll('.caption-window.ytp-caption-window-bottom')) w.style.bottom = bottomOffset();
+  }
+
+  let shown = null;
+  let asrWords = [];
+  function tick() {
+    const t = video.currentTime * 1000;
+    player.querySelector('.ytp-play-progress').style.width = `${(video.currentTime / (video.duration || 40)) * 100}%`;
+    player.querySelector('.ytp-time-display').textContent = `0:${String(Math.floor(video.currentTime)).padStart(2, '0')}`;
+    const cue = cues.find((c) => t >= c.start && t < c.end) || null;
+    if (!asr) {
+      if (cue !== shown) {
+        container.replaceChildren();
+        if (cue) container.appendChild(makeWindow(wrap(cue.text, fontSize())));
+        shown = cue;
+      }
+    } else {
+      // 开头的提示窗口（3 秒）
+      const hint = container.querySelector('.ytp-caption-window-top');
+      if (t < 3000 && !hint) {
+        const hw = makeWindow(['English (auto-generated)', 'Click ⚙ for settings']);
+        hw.className = 'caption-window ytp-caption-window-top';
+        hw.style.bottom = ''; hw.style.top = '2%';
+        container.appendChild(hw);
+      } else if (t >= 3000 && hint) hint.remove();
+      // 逐词出现：按 cue 内时间均分
+      const words = cue ? cue.text.split(' ') : [];
+      const n = cue ? Math.min(words.length, Math.floor(((t - cue.start) / (cue.end - cue.start)) * words.length) + 1) : 0;
+      const want = cue ? words.slice(0, n) : [];
+      const key = cue ? `${cue.start}:${n}` : '';
+      if (key !== shown) {
+        shown = key;
+        let win = container.querySelector('.ytp-caption-window-rollup');
+        const fresh = !win || !cue || win.dataset.cue !== String(cue.start);
+        if (fresh) {
+          win?.remove();
+          if (!cue) return;
+          const prev = cues[cues.indexOf(cue) - 1];
+          win = makeWindow([prev ? prev.text : ' ', want.join(' ')], 'ytp-caption-window-rollup');
+          win.dataset.cue = String(cue.start);
+          container.appendChild(win);
+        } else {
+          // 原位追加：同一个字幕段节点重写文本（段节点复用，内容变长）
+          const segs = win.querySelectorAll('.ytp-caption-segment');
+          segs[segs.length - 1].textContent = want.join(' ');
+        }
+      }
+    }
+  }
+  video.addEventListener('timeupdate', tick);
+  (function loop() { tick(); requestAnimationFrame(loop); })();
+  video.play().catch(() => {});
+})();
+</script>
+</body>
+</html>

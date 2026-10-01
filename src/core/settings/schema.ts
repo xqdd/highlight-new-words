@@ -128,19 +128,34 @@ export interface CodeBlockSettings {
 }
 
 /**
- * YouTube 字幕（v9，youtube 模块新增）：只作用于主播放器 #movie_player 内的字幕，控件文字、章节标题、自动字幕提示不标注。
+ * YouTube 字幕（v9，floatball 模块负责）：只作用于主播放器 #movie_player 内的字幕，控件文字、章节标题、自动字幕提示不标注。
  * 旧数据由 normalizeSettings 按默认值补齐。
  */
 export interface YouTubeSettings {
   /** 字幕中标注生词（默认开）；关闭后字幕保持原样，页面其他文字照常标注 */
   captions: boolean;
-  /** 查词时自动暂停（默认开）：桌面鼠标进入字幕即暂停、离开字幕与卡片 300ms 后继续；手机点按生词暂停、关卡片继续。只恢复由扩展发起的暂停 */
-  autoPause: boolean;
   /**
-   * 字幕内译文：off=不显示（默认；词后括注会撑破 YouTube 按像素计算的字幕宽度，字幕内一律不用）；
-   * above=单词上方小注解（不改变字幕宽度，字幕行向上留出注解高度）。自动生成字幕始终不显示译文。
+   * 悬停字幕自动暂停（仅桌面鼠标，默认关，由用户自行开启）：鼠标进入字幕即暂停，离开字幕与卡片 300ms 后继续；
+   * 只恢复由扩展发起的暂停。手机端改用悬浮球打开“当前字幕面板”（见 FloatBallSettings）
    */
-  captionTranslation: 'off' | 'above';
+  hoverPause: boolean;
+  /**
+   * 字幕内生词译文：above=单词上方小注解（默认，字幕窗向上长高，不改变宽度）；after=词后小字（字幕行不折行、居中，
+   * 放不下时该条字幕自动改用上方注解）；off=只高亮。自动生成字幕（逐词滚动、窗口高度固定）始终只高亮
+   */
+  captionTranslation: 'off' | 'above' | 'after';
+}
+
+/**
+ * 通用悬浮球（v10，floatball 模块新增）：只在触屏/手机端显示（(hover: none) and (pointer: coarse)），PC 端不显示。
+ * 点按展开底部抽屉（取词模式、本页生词、快捷设置、同步状态、完整设置）；YouTube 视频页点按直接打开“当前字幕面板”。
+ * 位置按设备记在 storage.local `floatBallPos`，不参与同步
+ */
+export interface FloatBallSettings {
+  /** 全局开关（默认开） */
+  enabled: boolean;
+  /** 隐藏悬浮球的站点（规则同 sites.disabled：含子域名） */
+  hiddenSites: string[];
 }
 
 /** 扩展页面（popup/options）界面配色：auto 跟随系统 */
@@ -192,8 +207,10 @@ export interface Settings {
   } & TranslationStyle;
   /** 代码块中标注生词（v8，engine 新增） */
   code: CodeBlockSettings;
-  /** YouTube 字幕标注与自动暂停（v9，youtube 模块新增） */
+  /** YouTube 字幕标注、字幕内译文与悬停暂停（v9，floatball 模块负责） */
   youtube: YouTubeSettings;
+  /** 通用悬浮球（v10，floatball 模块新增） */
+  floatBall: FloatBallSettings;
   card: {
     trigger: CardTrigger;
   };
