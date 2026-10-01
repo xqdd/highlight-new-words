@@ -1,0 +1,9 @@
+内置词书与词典数据来源（由 scripts/data/build-data.mjs 生成）
+
+- ECDICT, Copyright (c) 2017 Linwei (skywind3000), MIT License. https://github.com/skywind3000/ECDICT
+  音标、中英释义、考试标签（中考/高考/四级/六级/考研/雅思/托福/GRE）、COCA/BNC 词频、词形变化。
+- The CEFR-J Wordlist Version 1.5. Compiled by Yukio Tono, Tokyo University of Foreign Studies.
+  Retrieved from http://www.cefr-j.org/download.html (via https://github.com/openlanguageprofiles/olp-en-cefrj).
+  A1–B2 分级。按其使用条款免费用于商业用途，需注明出处。
+- KyleBing/english-vocabulary, BSD-3-Clause. https://github.com/KyleBing/english-vocabulary
+  仅使用 SAT、英语专业四级/八级的单词列表（不含释义）。

@@ -1,0 +1,362 @@
+{
+ "version": 2,
+ "books": [
+  {
+   "id": "cefr-a2",
+   "name": "A2 初级",
+   "nameEn": "CEFR A2+",
+   "short": "A2+",
+   "category": "level",
+   "level": 2,
+   "source": "CEFR-J Wordlist 1.5 + ECDICT 词频",
+   "description": "高亮 A2 及以上的词。已掌握 A1 入门词，能应对熟悉话题的简单交流",
+   "size": 20327
+  },
+  {
+   "id": "cefr-b1",
+   "name": "B1 中级",
+   "nameEn": "CEFR B1+",
+   "short": "B1+",
+   "category": "level",
+   "level": 3,
+   "source": "CEFR-J Wordlist 1.5 + ECDICT 词频",
+   "description": "高亮 B1 及以上的词。已掌握 A1–A2，能理解熟悉主题的要点（约初中毕业）",
+   "size": 18866
+  },
+  {
+   "id": "cefr-b2",
+   "name": "B2 中高级",
+   "nameEn": "CEFR B2+",
+   "short": "B2+",
+   "category": "level",
+   "level": 4,
+   "source": "CEFR-J Wordlist 1.5 + ECDICT 词频",
+   "description": "高亮 B2 及以上的词。已掌握 A1–B1，能就多种话题流利交流（约高考/四级）",
+   "size": 16951
+  },
+  {
+   "id": "cefr-c1",
+   "name": "C1 高级",
+   "nameEn": "CEFR C1+",
+   "short": "C1+",
+   "category": "level",
+   "level": 5,
+   "source": "CEFR-J Wordlist 1.5 + ECDICT 词频",
+   "description": "高亮 C1 及以上的词。已掌握 A1–B2，能读懂复杂长文（约六级/考研）",
+   "size": 14572
+  },
+  {
+   "id": "cefr-c2",
+   "name": "C2 精通",
+   "nameEn": "CEFR C2+",
+   "short": "C2+",
+   "category": "level",
+   "level": 6,
+   "source": "CEFR-J Wordlist 1.5 + ECDICT 词频",
+   "description": "高亮 C2 及以上的词。已掌握 C1 及以下，只标出低频、专业或文学词（约 GRE）",
+   "size": 9011
+  },
+  {
+   "id": "zk",
+   "name": "中考",
+   "nameEn": "Zhongkao",
+   "short": "中考",
+   "category": "exam",
+   "level": 1,
+   "source": "ECDICT (MIT)",
+   "description": "中考词汇",
+   "size": 1575
+  },
+  {
+   "id": "gk",
+   "name": "高考",
+   "nameEn": "Gaokao",
+   "short": "高考",
+   "category": "exam",
+   "level": 2,
+   "source": "ECDICT (MIT)",
+   "description": "高考词汇，已去掉 943 个 A1 及以下的基础词",
+   "size": 2644
+  },
+  {
+   "id": "gk-new",
+   "name": "高考新增",
+   "nameEn": "Gaokao only",
+   "short": "高考+",
+   "category": "exam",
+   "level": 2,
+   "source": "ECDICT (MIT)",
+   "delta": {
+    "of": "gk",
+    "minus": [
+     "zk"
+    ]
+   },
+   "description": "高考中不属于中考的词，适合已过中考的读者",
+   "size": 1960
+  },
+  {
+   "id": "cet4",
+   "name": "大学英语四级",
+   "nameEn": "CET-4",
+   "short": "四级",
+   "category": "exam",
+   "level": 3,
+   "source": "ECDICT (MIT)",
+   "description": "大学英语四级词汇，已去掉 1330 个 A2 及以下的基础词",
+   "size": 2479
+  },
+  {
+   "id": "cet4-new",
+   "name": "四级新增",
+   "nameEn": "CET-4 only",
+   "short": "四级+",
+   "category": "exam",
+   "level": 3,
+   "source": "ECDICT (MIT)",
+   "delta": {
+    "of": "cet4",
+    "minus": [
+     "zk",
+     "gk"
+    ]
+   },
+   "description": "大学英语四级中不属于中考/高考的词，适合已过高考的读者",
+   "size": 1434
+  },
+  {
+   "id": "cet6",
+   "name": "大学英语六级",
+   "nameEn": "CET-6",
+   "short": "六级",
+   "category": "exam",
+   "level": 4,
+   "source": "ECDICT (MIT)",
+   "description": "大学英语六级词汇，已去掉 2462 个 B1 及以下的基础词",
+   "size": 2871
+  },
+  {
+   "id": "cet6-new",
+   "name": "六级新增",
+   "nameEn": "CET-6 only",
+   "short": "六级+",
+   "category": "exam",
+   "level": 4,
+   "source": "ECDICT (MIT)",
+   "delta": {
+    "of": "cet6",
+    "minus": [
+     "zk",
+     "gk",
+     "cet4"
+    ]
+   },
+   "description": "大学英语六级中不属于中考/高考/四级的词，适合已过四级的读者",
+   "size": 1511
+  },
+  {
+   "id": "kaoyan",
+   "name": "考研",
+   "nameEn": "Postgraduate Exam",
+   "short": "考研",
+   "category": "exam",
+   "level": 5,
+   "source": "ECDICT (MIT)",
+   "description": "考研词汇，已去掉 2553 个 B1 及以下的基础词",
+   "size": 2221
+  },
+  {
+   "id": "tem4",
+   "name": "英语专业四级",
+   "nameEn": "TEM-4",
+   "short": "专四",
+   "category": "exam",
+   "level": 5,
+   "source": "KyleBing/english-vocabulary (BSD-3) 词表",
+   "description": "英语专业四级词汇，已去掉 1309 个 B1 及以下的基础词",
+   "size": 2958
+  },
+  {
+   "id": "kaoyan-new",
+   "name": "考研新增",
+   "nameEn": "Postgraduate Exam only",
+   "short": "考研+",
+   "category": "exam",
+   "level": 5,
+   "source": "ECDICT (MIT)",
+   "delta": {
+    "of": "kaoyan",
+    "minus": [
+     "zk",
+     "gk",
+     "cet4",
+     "cet6"
+    ]
+   },
+   "description": "考研中不属于中考/高考/四级/六级的词，适合已过六级的读者",
+   "size": 255
+  },
+  {
+   "id": "ielts",
+   "name": "雅思",
+   "nameEn": "IELTS",
+   "short": "雅思",
+   "category": "exam",
+   "level": 6,
+   "source": "ECDICT (MIT)",
+   "description": "雅思词汇，已去掉 2031 个 B1 及以下的基础词",
+   "size": 2695
+  },
+  {
+   "id": "ielts-new",
+   "name": "雅思新增",
+   "nameEn": "IELTS only",
+   "short": "雅思+",
+   "category": "exam",
+   "level": 6,
+   "source": "ECDICT (MIT)",
+   "delta": {
+    "of": "ielts",
+    "minus": [
+     "zk",
+     "gk",
+     "cet4",
+     "cet6"
+    ]
+   },
+   "description": "雅思中不属于中考/高考/四级/六级的词，适合已过六级的读者",
+   "size": 936
+  },
+  {
+   "id": "toefl",
+   "name": "托福",
+   "nameEn": "TOEFL",
+   "short": "托福",
+   "category": "exam",
+   "level": 7,
+   "source": "ECDICT (MIT)",
+   "description": "托福词汇，已去掉 1785 个 B1 及以下的基础词",
+   "size": 4955
+  },
+  {
+   "id": "toefl-new",
+   "name": "托福新增",
+   "nameEn": "TOEFL only",
+   "short": "托福+",
+   "category": "exam",
+   "level": 7,
+   "source": "ECDICT (MIT)",
+   "delta": {
+    "of": "toefl",
+    "minus": [
+     "zk",
+     "gk",
+     "cet4",
+     "cet6"
+    ]
+   },
+   "description": "托福中不属于中考/高考/四级/六级的词，适合已过六级的读者",
+   "size": 3033
+  },
+  {
+   "id": "sat",
+   "name": "SAT",
+   "nameEn": "SAT",
+   "short": "SAT",
+   "category": "exam",
+   "level": 8,
+   "source": "KyleBing/english-vocabulary (BSD-3) 词表",
+   "description": "SAT词汇，已去掉 1063 个 B2 及以下的基础词",
+   "size": 3336
+  },
+  {
+   "id": "tem8",
+   "name": "英语专业八级",
+   "nameEn": "TEM-8",
+   "short": "专八",
+   "category": "exam",
+   "level": 8,
+   "source": "KyleBing/english-vocabulary (BSD-3) 词表",
+   "description": "英语专业八级词汇，已去掉 5609 个 B2 及以下的基础词",
+   "size": 6477
+  },
+  {
+   "id": "gre",
+   "name": "GRE",
+   "nameEn": "GRE",
+   "short": "GRE",
+   "category": "exam",
+   "level": 9,
+   "source": "ECDICT (MIT)",
+   "description": "GRE词汇，已去掉 1511 个 B2 及以下的基础词",
+   "size": 5814
+  },
+  {
+   "id": "gre-new",
+   "name": "GRE 新增",
+   "nameEn": "GRE only",
+   "short": "GRE+",
+   "category": "exam",
+   "level": 9,
+   "source": "ECDICT (MIT)",
+   "delta": {
+    "of": "gre",
+    "minus": [
+     "zk",
+     "gk",
+     "cet4",
+     "cet6",
+     "kaoyan",
+     "ielts",
+     "toefl"
+    ]
+   },
+   "description": "GRE中不属于中考/高考/四级/六级/考研/雅思/托福的词，适合已过托福的读者",
+   "size": 3183
+  },
+  {
+   "id": "coca-3k",
+   "name": "常用 3000 词之外",
+   "nameEn": "Beyond COCA top 3000",
+   "short": "3k+",
+   "category": "frequency",
+   "level": 3,
+   "source": "ECDICT COCA/BNC 词频排名",
+   "description": "高亮词频排名 3000 之后的词（视前 3000 个常用词为已会）",
+   "size": 17899
+  },
+  {
+   "id": "coca-5k",
+   "name": "常用 5000 词之外",
+   "nameEn": "Beyond COCA top 5000",
+   "short": "5k+",
+   "category": "frequency",
+   "level": 5,
+   "source": "ECDICT COCA/BNC 词频排名",
+   "description": "高亮词频排名 5000 之后的词（视前 5000 个常用词为已会）",
+   "size": 16568
+  },
+  {
+   "id": "coca-8k",
+   "name": "常用 8000 词之外",
+   "nameEn": "Beyond COCA top 8000",
+   "short": "8k+",
+   "category": "frequency",
+   "level": 8,
+   "source": "ECDICT COCA/BNC 词频排名",
+   "description": "高亮词频排名 8000 之后的词（视前 8000 个常用词为已会）",
+   "size": 14283
+  },
+  {
+   "id": "coca-12k",
+   "name": "常用 12000 词之外",
+   "nameEn": "Beyond COCA top 12000",
+   "short": "12k+",
+   "category": "frequency",
+   "level": 12,
+   "source": "ECDICT COCA/BNC 词频排名",
+   "description": "高亮词频排名 12000 之后的词（视前 12000 个常用词为已会）",
+   "size": 11091
+  }
+ ]
+}
