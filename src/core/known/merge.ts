@@ -1,3 +1,4 @@
+import { getOwn, hasOwnKey, setOwn } from '../storage/own-record';
 import { KNOWN_TOMBSTONE_TTL, type KnownWordsData } from './types';
 
 /** 空熟词本 */
@@ -16,18 +17,21 @@ export function normalizeKnown(raw: unknown): KnownWordsData {
   return { words: { ...(r.words ?? {}) }, removed: { ...(r.removed ?? {}) } };
 }
 
-/** 加入/撤销熟词（纯函数，返回新对象）；words 统一转小写 */
+/**
+ * 加入/撤销熟词（纯函数，返回新对象）；words 统一转小写。
+ * 单词作 key 一律走 own-record（constructor、__proto__ 等单词不能命中原型链或改写原型）
+ */
 export function applyKnownChange(data: KnownWordsData, words: Iterable<string>, known: boolean, now = Date.now()): KnownWordsData {
   const next: KnownWordsData = { words: { ...data.words }, removed: { ...data.removed } };
   for (const raw of words) {
     const w = raw.trim().toLowerCase();
     if (!w) continue;
     if (known) {
-      next.words[w] = now;
+      setOwn(next.words, w, now);
       delete next.removed[w];
-    } else if (w in next.words) {
+    } else if (hasOwnKey(next.words, w)) {
       delete next.words[w];
-      next.removed[w] = now;
+      setOwn(next.removed, w, now);
     }
   }
   return next;
@@ -42,10 +46,10 @@ export function mergeKnownWords(a: KnownWordsData, b: KnownWordsData, now = Date
   const out = createEmptyKnown();
   const all = new Set([...Object.keys(a.words), ...Object.keys(b.words), ...Object.keys(a.removed), ...Object.keys(b.removed)]);
   for (const w of all) {
-    const added = Math.max(a.words[w] ?? -1, b.words[w] ?? -1);
-    const removed = Math.max(a.removed[w] ?? -1, b.removed[w] ?? -1);
-    if (added > removed) out.words[w] = added;
-    else if (now - removed < KNOWN_TOMBSTONE_TTL) out.removed[w] = removed;
+    const added = Math.max(getOwn(a.words, w) ?? -1, getOwn(b.words, w) ?? -1);
+    const removed = Math.max(getOwn(a.removed, w) ?? -1, getOwn(b.removed, w) ?? -1);
+    if (added > removed) setOwn(out.words, w, added);
+    else if (now - removed < KNOWN_TOMBSTONE_TTL) setOwn(out.removed, w, removed);
   }
   return out;
 }

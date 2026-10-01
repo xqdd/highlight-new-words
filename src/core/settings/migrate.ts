@@ -4,6 +4,7 @@ import { CUSTOM_THEME_ID } from '../theme/themes';
 import { EUDIC_PROVIDER_ID, LEGACY_REMOTE_BOOK_ID, YOUDAO_PROVIDER_ID } from '../source/providers';
 import { localBookId, sourceBookId } from '../wordbook/ids';
 import type { LocalBookMeta, SourceBookState, UserWord, UserWordMap } from '../wordbook/types';
+import { setOwn } from '../storage/own-record';
 
 /** 旧版 chrome.storage.local 内容（v2.x jQuery 版） */
 export interface LegacyStorage {
@@ -118,7 +119,7 @@ export function migrateLegacy(legacy: LegacyStorage): MigrationResult {
   // 来源词书总是创建（即使旧版无生词），保证 books.enabled 中的 id 有对应索引，用户点同步即可拉取
   const words: UserWordMap = {};
   for (const [key, info] of Object.entries(legacy.newWords?.wordInfos ?? {})) {
-    words[key.toLowerCase()] = normalizeLegacyWord(key, info, provider);
+    setOwn(words, key.toLowerCase(), normalizeLegacyWord(key, info, provider));
   }
   const sourceBook = makeSourceBook(provider, words, syncTime);
   settings.books.enabled = [sourceBook.state.id];
@@ -170,7 +171,7 @@ export function migrateSettingsV2(raw: DevV2Settings, cloudBook: DevV2CloudBook 
   if (cloudBook?.provider === 'xml') {
     const id = localBookId();
     const words: UserWordMap = {};
-    for (const [k, w] of Object.entries(cloudBook.words)) words[k] = { word: w.word, phonetic: w.phonetic, trans: w.trans };
+    for (const [k, w] of Object.entries(cloudBook.words)) setOwn(words, k, { word: w.word, phonetic: w.phonetic, trans: w.trans });
     result.localBook = {
       meta: { id, name: '导入的生词本', format: 'youdao-xml', wordCount: Object.keys(words).length, createdAt: cloudBook.updatedAt, updatedAt: cloudBook.updatedAt },
       words,
@@ -180,7 +181,7 @@ export function migrateSettingsV2(raw: DevV2Settings, cloudBook: DevV2CloudBook 
     const p = cloudBook?.provider ?? provider;
     const words: UserWordMap = {};
     for (const [k, w] of Object.entries(cloudBook?.words ?? {})) {
-      words[k] = { word: w.word, phonetic: w.phonetic, trans: w.trans, ref: p === YOUDAO_PROVIDER_ID ? w.itemId : (w.display ?? w.word) };
+      setOwn(words, k, { word: w.word, phonetic: w.phonetic, trans: w.trans, ref: p === YOUDAO_PROVIDER_ID ? w.itemId : (w.display ?? w.word) });
     }
     result.sourceBook = makeSourceBook(p, words, cloud?.syncTime ?? cloudBook?.updatedAt ?? 0);
     replacement = result.sourceBook.state.id;

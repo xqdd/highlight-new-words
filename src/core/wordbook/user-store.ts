@@ -3,6 +3,7 @@ import type { ImportFormat } from '../import/types';
 import type { BookId } from '../settings/schema';
 import { STORAGE_KEYS, localBookKey, sourceBookKey } from '../storage/keys';
 import { withStorageLock } from '../storage/lock';
+import { setOwn } from '../storage/own-record';
 import { localBookId } from './ids';
 import type {
   LocalBookData,
@@ -93,7 +94,8 @@ export async function getLocalBook(id: BookId): Promise<LocalBookData | undefine
 
 export function toWordMap(words: Iterable<UserWord>): UserWordMap {
   const map: UserWordMap = {};
-  for (const w of words) map[w.word.toLowerCase()] = w;
+  // key 是单词：__proto__ 等用 setOwn 写成自有属性
+  for (const w of words) setOwn(map, w.word.toLowerCase(), w);
   return map;
 }
 

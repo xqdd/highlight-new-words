@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { STORAGE_KEYS } from '../storage/keys';
 import { withStorageLock } from '../storage/lock';
+import { hasOwnKey } from '../storage/own-record';
 import { applyKnownChange, normalizeKnown } from './merge';
 import type { KnownExportFormat, KnownWordsData } from './types';
 import { normalizeSettings } from '../settings/migrate';
@@ -51,7 +52,7 @@ export function replaceKnownWords(list: Iterable<string>): Promise<number> {
   return withStorageLock(STORAGE_KEYS.knownWords, async () => {
     const cur = await getKnownData();
     const removed = Object.keys(cur.words).filter((w) => !target.has(w));
-    const added = [...target].filter((w) => !(w in cur.words));
+    const added = [...target].filter((w) => !hasOwnKey(cur.words, w));
     const next = applyKnownChange(applyKnownChange(cur, added, true), removed, false);
     await saveKnownData(next);
     return Object.keys(next.words).length;
@@ -63,7 +64,7 @@ export function importKnownWords(words: Iterable<string>): Promise<number> {
   const list = [...words];
   return withStorageLock(STORAGE_KEYS.knownWords, async () => {
     const cur = await getKnownData();
-    const added = list.map((w) => w.trim().toLowerCase()).filter((w) => w && !(w in cur.words));
+    const added = list.map((w) => w.trim().toLowerCase()).filter((w) => w && !hasOwnKey(cur.words, w));
     await saveKnownData(applyKnownChange(cur, added, true));
     return new Set(added).size;
   });

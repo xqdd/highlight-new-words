@@ -7,6 +7,7 @@ import { getSettings, patchSettings } from '@/core/settings/store';
 import { SourceError, type SourceContext } from '@/core/source/types';
 import { sourceBookKey } from '@/core/storage/keys';
 import { withStorageLock } from '@/core/storage/lock';
+import { getOwn, setOwn } from '@/core/storage/own-record';
 import { sourceBookId } from '@/core/wordbook/ids';
 import type { SourceBookState, UserWord, UserWordMap } from '@/core/wordbook/types';
 import { getSourceBook, getSourceIndex, patchSourceBookState, saveSourceBook, updateSourceIndex } from '@/core/wordbook/user-store';
@@ -298,7 +299,7 @@ export async function deleteSourceEntries(targets: SourceRemovalTarget[], remove
     const report = await withStorageLock(sourceBookKey(state.id), async () => {
       const data = await getSourceBook(state.id);
       if (!data) return undefined;
-      const keys = [...new Set(target.keys)].filter((k) => data.words[k]);
+      const keys = [...new Set(target.keys)].filter((k) => getOwn(data.words, k));
       if (keys.length === 0) return undefined;
       const deleted: string[] = [];
       const failed: { word: string; error: string }[] = [];
@@ -306,7 +307,7 @@ export async function deleteSourceEntries(targets: SourceRemovalTarget[], remove
       const pending: UserWord[] = [];
       const pendingKey = new Map<UserWord, string>();
       for (const k of keys) {
-        const entry = data.words[k]!;
+        const entry = getOwn(data.words, k)!;
         if (!provider.globalRefs) {
           pending.push(entry);
           pendingKey.set(entry, k);
@@ -347,7 +348,7 @@ export async function deleteSourceEntries(targets: SourceRemovalTarget[], remove
       }
       const removedEntries: UserWord[] = [];
       for (const k of deleted) {
-        removedEntries.push(data.words[k]!);
+        removedEntries.push(getOwn(data.words, k)!);
         delete data.words[k];
       }
       if (deleted.length > 0) {
@@ -382,7 +383,7 @@ async function purgeDeletedRefs(deleted: Set<string>, skip: Set<BookId>): Promis
         if (left.length === refs.length) continue;
         changed = true;
         if (left.length === 0) delete data.words[k];
-        else data.words[k] = { ...w, ref: left[0], refs: left };
+        else setOwn(data.words, k, { ...w, ref: left[0], refs: left });
       }
       if (!changed) return undefined;
       await saveSourceBook({ ...data, updatedAt: Date.now() });
@@ -455,7 +456,7 @@ export async function addToSourceBook(bookId: BookId, words: UserWord[]): Promis
       // 依次沿用该书已有缓存（从来源同步来的，最贴近远端）与调用方传入的（撤销加回时是删除前缓存的词条，卡片加入时是卡片释义），
       // 避免冷僻词（打包词典没有）丢失来源释义直到下次全量同步（集成审核第 1 轮：卡片“加入”不带释义时覆盖了同步来的 trans/phonetic）
       const input = words.find((x) => x.word.toLowerCase() === key);
-      const prev = data.words[key];
+      const prev = getOwn(data.words, key);
       const merged: UserWord = { ...w };
       const phonetic = w.phonetic ?? prev?.phonetic ?? input?.phonetic;
       const trans = w.trans ?? prev?.trans ?? input?.trans;
@@ -463,7 +464,7 @@ export async function addToSourceBook(bookId: BookId, words: UserWord[]): Promis
       else delete merged.phonetic;
       if (trans) merged.trans = trans;
       else delete merged.trans;
-      data.words[key] = merged;
+      setOwn(data.words, key, merged);
     }
     await saveSourceBook({ ...data, updatedAt: Date.now() });
     return Object.keys(data.words).length;

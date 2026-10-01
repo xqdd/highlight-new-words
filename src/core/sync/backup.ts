@@ -7,6 +7,7 @@ import type { Settings } from '../settings/schema';
 import { getSettings, saveSettings } from '../settings/store';
 import { STORAGE_KEYS, localBookKey, sourceBookKey } from '../storage/keys';
 import { withStorageLock } from '../storage/lock';
+import { getOwn, hasOwnKey, setOwn } from '../storage/own-record';
 import { getLocalBook, getLocalIndex, getSourceBook, getSourceIndex, updateLocalIndex, updateSourceIndex } from '../wordbook/user-store';
 import type { LocalBookMeta, UserWordMap } from '../wordbook/types';
 import { base64ToBytes, bytesToBase64, stableStringify } from './codec';
@@ -319,10 +320,11 @@ async function importOverwrite(file: BackupFile): Promise<void> {
     const cur = await getKnownData();
     const next: KnownWordsData = { words: {}, removed: { ...file.knownWords.removed } };
     for (const [w, t] of Object.entries(file.knownWords.words)) {
-      next.words[w] = cur.removed[w] !== undefined && cur.removed[w]! >= t ? now : t;
+      const removedAt = getOwn(cur.removed, w);
+      setOwn(next.words, w, removedAt !== undefined && removedAt >= t ? now : t);
       delete next.removed[w];
     }
-    for (const w of Object.keys(cur.words)) if (!(w in next.words)) next.removed[w] = now;
+    for (const w of Object.keys(cur.words)) if (!hasOwnKey(next.words, w)) setOwn(next.removed, w, now);
     await saveKnownData(next);
   });
   // 本地词书：备份中的书写入（updatedAt=现在）；本机多出的删除并记墓碑

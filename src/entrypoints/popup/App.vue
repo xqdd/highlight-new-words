@@ -367,7 +367,7 @@ const detailOpen = computed({
   },
 });
 const detailEntry = computed(() => data.entries.value.get(detailWord.value));
-const detailKnown = computed(() => !!detailWord.value && detailWord.value in data.known.value.words);
+const detailKnown = computed(() => !!detailWord.value && Object.hasOwn(data.known.value.words, detailWord.value));
 const detailBooks = computed(() =>
   data.booksOf(detailWord.value).map((id) => bookById.value.get(id)).filter((b): b is BookMeta => !!b),
 );

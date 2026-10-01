@@ -1,5 +1,6 @@
 import { normalizeKnown } from '../known/merge';
 import type { KnownWordsData } from '../known/types';
+import { getOwn, setOwn } from '../storage/own-record';
 import type { SegmentLevel } from './types';
 
 /**
@@ -33,7 +34,7 @@ const UNIT: Record<SegmentLevel, number> = { full: 1000, reduced: 86_400_000 };
 export function encodeKnownSegment(data: KnownWordsData, level: SegmentLevel): KnownSegment {
   const unit = UNIT[level];
   const words = Object.keys(data.words).sort();
-  const units = words.map((w) => Math.floor((data.words[w] ?? 0) / unit));
+  const units = words.map((w) => Math.floor((getOwn(data.words, w) ?? 0) / unit));
   const base = units.length ? Math.min(...units) : 0;
   return { f: 2, u: unit, b: base, w: words.join('\n'), t: units.map((x) => (x - base).toString(36)).join(','), r: { ...data.removed } };
 }
@@ -46,7 +47,7 @@ export function decodeKnownSegment(raw: unknown): KnownWordsData {
   if (seg.w) {
     const list = seg.w.split('\n');
     const times = (seg.t ?? '').split(',');
-    list.forEach((w, i) => (words[w] = ((seg.b ?? 0) + parseInt(times[i] ?? '0', 36)) * (seg.u ?? 1000)));
+    list.forEach((w, i) => setOwn(words, w, ((seg.b ?? 0) + parseInt(times[i] ?? '0', 36)) * (seg.u ?? 1000)));
   }
   return { words, removed: { ...(seg.r ?? {}) } };
 }

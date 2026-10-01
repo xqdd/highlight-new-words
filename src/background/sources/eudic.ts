@@ -1,6 +1,7 @@
 import { EUDIC_PROVIDER_ID, getProviderInfo } from '@/core/source/providers';
 import { SourceError, type RemoteBook, type RemoteDeleteResult, type SourceContext, type SourceProvider } from '@/core/source/types';
 import type { UserWord, UserWordMap } from '@/core/wordbook/types';
+import { setOwn } from '@/core/storage/own-record';
 
 /**
  * 欧路生词本，两种访问方式：
@@ -173,7 +174,7 @@ async function fetchCookieWords(): Promise<UserWordMap> {
     const list = result.data ?? [];
     for (const item of list) {
       const word = (item.uuid ?? '').trim();
-      if (word) words[word.toLowerCase()] = toUserWord(word, item.phon, item.exp);
+      if (word) setOwn(words, word.toLowerCase(), toUserWord(word, item.phon, item.exp));
     }
     if (list.length < limit) break;
     await sleep(COOKIE_PAGE_DELAY_MS);
@@ -230,7 +231,7 @@ async function fetchOpenApiPages(ctx: SourceContext, pathWithQuery: string, remo
     const { data } = await openApi<{ data?: EudicApiWord[] }>(ctx, 'GET', `${pathWithQuery}&page=${page}&page_size=${OPENAPI_PAGE_SIZE}`);
     for (const item of data ?? []) {
       const word = item.word?.trim();
-      if (word) words[word.toLowerCase()] = toUserWord(word, item.phon, item.exp ?? undefined);
+      if (word) setOwn(words, word.toLowerCase(), toUserWord(word, item.phon, item.exp ?? undefined));
     }
     if (!data || data.length < OPENAPI_PAGE_SIZE) break;
     if (page === OPENAPI_MAX_PAGE) console.warn('[hnw] 欧路 OpenAPI 单本最多返回', (OPENAPI_MAX_PAGE + 1) * OPENAPI_PAGE_SIZE, '词，已截断', remoteBookId);

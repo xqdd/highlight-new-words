@@ -1,4 +1,5 @@
 import type { DictEntry, Dictionary } from '../dict/types';
+import { getOwn, hasOwnKey } from '../storage/own-record';
 import type { BookMeta, UserWord, UserWordMap, WordBook } from './types';
 
 /** 用户词书（来源/本地导入）包装为 WordBook（key 为小写单词，可能是变形词，匹配时候选首项即原词） */
@@ -7,10 +8,10 @@ export function createUserWordBook(meta: BookMeta, words: UserWordMap | undefine
   const keys = Object.keys(map);
   return {
     meta: { ...meta, size: keys.length },
-    has: (w) => Object.prototype.hasOwnProperty.call(map, w),
+    has: (w) => hasOwnKey(map, w),
     size: keys.length,
     words: () => keys,
-    entry: (w) => (Object.prototype.hasOwnProperty.call(map, w) ? map[w] : undefined),
+    entry: (w) => (getOwn(map, w)),
   };
 }
 

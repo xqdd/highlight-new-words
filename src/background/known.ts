@@ -19,6 +19,7 @@ import { getSettings, patchSettings } from '@/core/settings/store';
 import { getProviderInfo } from '@/core/source/providers';
 import { STORAGE_KEYS, localBookKey } from '@/core/storage/keys';
 import { withStorageLock } from '@/core/storage/lock';
+import { getOwn, hasOwnKey, setOwn } from '@/core/storage/own-record';
 import { parseBookId } from '@/core/wordbook/ids';
 import type { LocalBookData, LocalBookIndex, SourceBookIndex, UserWord } from '@/core/wordbook/types';
 import { getLocalBook, getLocalIndex, getSourceBook, getSourceIndex, updateLocalIndex } from '@/core/wordbook/user-store';
@@ -234,7 +235,10 @@ async function addLocalWords(id: BookId, words: UserWord[]): Promise<boolean> {
   if (!exists && id !== MY_WORDS_BOOK_ID) return false;
   const count = await withStorageLock(localBookKey(id), async () => {
     const data: LocalBookData = (await getLocalBook(id)) ?? { id, words: {} };
-    for (const w of words) data.words[w.word.toLowerCase()] = { ...data.words[w.word.toLowerCase()], ...w };
+    for (const w of words) {
+      const key = w.word.toLowerCase();
+      setOwn(data.words, key, { ...getOwn(data.words, key), ...w });
+    }
     await browser.storage.local.set({ [localBookKey(id)]: data });
     return Object.keys(data.words).length;
   });
@@ -260,8 +264,9 @@ async function removeLocalWords(id: BookId, keys: string[]): Promise<UserWord[]>
     const data = await getLocalBook(id);
     if (!data) return undefined;
     for (const k of keys) {
-      if (!data.words[k]) continue;
-      removed.push(data.words[k]!);
+      const entry = getOwn(data.words, k);
+      if (!entry) continue;
+      removed.push(entry);
       delete data.words[k];
     }
     if (removed.length) await browser.storage.local.set({ [localBookKey(id)]: data });
@@ -549,8 +554,8 @@ export async function removeWord(data: { lemma: string; bookIds?: BookId[] }): P
   const plan: RemovalItem[] = [];
   for (const id of ids) {
     const kind = parseBookId(id).kind;
-    if (kind === 'local' && (await getLocalBook(id))?.words[target]) plan.push({ bookId: id, kind: 'local', keys: [target] });
-    if (kind === 'source' && (await getSourceBook(id))?.words[target]) {
+    if (kind === 'local' && hasOwnKey((await getLocalBook(id))?.words ?? {}, target)) plan.push({ bookId: id, kind: 'local', keys: [target] });
+    if (kind === 'source' && hasOwnKey((await getSourceBook(id))?.words ?? {}, target)) {
       const state = ctx.sources.books[id];
       plan.push({ bookId: id, kind: 'source', keys: [target], blocked: canDeleteFrom(state) ? undefined : (state?.readOnlyReason ?? '该来源不支持删除') });
     }
@@ -607,7 +612,7 @@ export async function getWordState(lemma: string): Promise<{ collected: boolean;
   for (const id of addTargetsOf(settings)) {
     const kind = parseBookId(id).kind;
     const words = kind === 'local' ? (await getLocalBook(id))?.words : kind === 'source' ? (await getSourceBook(id))?.words : undefined;
-    if (words?.[target]) collectedIn.push(id);
+    if (words && hasOwnKey(words, target)) collectedIn.push(id);
   }
   return { collected: collectedIn.length > 0, collectedIn, known: (await getKnownWords()).has(target) };
 }

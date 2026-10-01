@@ -1,5 +1,6 @@
 import { YOUDAO_PROVIDER_ID, getProviderInfo } from '@/core/source/providers';
 import { SourceError, type RemoteBook, type RemoteDeleteResult, type SourceProvider } from '@/core/source/types';
+import { getOwn, setOwn } from '@/core/storage/own-record';
 import type { UserWord, UserWordMap } from '@/core/wordbook/types';
 
 /**
@@ -89,14 +90,15 @@ export function youdaoItemToWord(item: YoudaoItem): UserWord {
  * 把一个接口条目并入词条表。有道按原文区分条目：同一账号可同时收录 Collapse 与 collapse（调试账号实测有 28 组），
  * 本地按小写合并为一个词条，但必须保留全部 itemId（refs），否则删除只删掉其中一条，重新同步后该词又出现。
  * 词条展示取第一个条目的原文/释义，后续条目只补缺失的音标/释义。
+ * key 是单词，读写走 own-record（constructor/toString 不能命中原型链上的函数，__proto__ 不能改写原型）。
  */
 export function mergeYoudaoItem(words: UserWordMap, item: YoudaoItem): void {
   const key = item.word.trim().toLowerCase();
   const next = youdaoItemToWord(item);
-  const prev = words[key];
+  const prev = getOwn(words, key);
   if (!prev) {
     if (next.ref) next.refs = [next.ref];
-    words[key] = next;
+    setOwn(words, key, next);
     return;
   }
   const refs = prev.refs ?? (prev.ref ? [prev.ref] : []);
