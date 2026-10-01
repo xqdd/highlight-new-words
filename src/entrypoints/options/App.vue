@@ -7,15 +7,19 @@ import { useBooks } from '@/ui/composables/useBooks';
 import { useSettings } from '@/ui/composables/useSettings';
 import { provideOptions } from './lib/context';
 import { dismissToast, toast } from './lib/toast';
+import ReleaseNotesSheet from './components/ReleaseNotesSheet.vue';
+import SiteAccessBanner from './components/SiteAccessBanner.vue';
+import { shouldShowReleaseNotes } from './lib/release-notes';
 import AppearancePage from './pages/AppearancePage.vue';
 import BooksPage from './pages/BooksPage.vue';
 import KnownPage from './pages/KnownPage.vue';
 import MorePage from './pages/MorePage.vue';
 import SourcesPage from './pages/SourcesPage.vue';
+import SyncPage from './pages/SyncPage.vue';
 import WelcomeGuide from './pages/WelcomeGuide.vue';
 
 /**
- * 选项页外壳：分组导航 + hash 路由（#books / #appearance / #sources / #known / #more / #welcome）。
+ * 选项页外壳：分组导航 + hash 路由（#books / #appearance / #sources / #known / #sync / #more / #welcome）。
  * - 桌面（≥900px）：左侧导航栏 + 右侧内容
  * - 手机：顶部标题栏 + 底部 Tab 导航（对标 Relingo 移动端设置），内容区单列
  * - #welcome 为首次使用引导（全屏，无导航）；background 安装时可打开 options.html#welcome
@@ -32,14 +36,19 @@ interface NavItem {
 }
 const NAV: NavItem[] = [
   { id: 'books', label: '词书', icon: 'book', desc: '选择与组合要高亮的词书' },
-  { id: 'appearance', label: '外观', icon: 'palette', desc: '配色、行内释义与卡片' },
+  { id: 'appearance', label: '外观', icon: 'palette', desc: '样式预设、行内译文与卡片' },
   { id: 'sources', label: '生词本', icon: 'cloud', desc: '有道 / 欧路同步与文件导入' },
   { id: 'known', label: '熟词', icon: 'known', desc: '已掌握的词不再高亮' },
-  { id: 'more', label: '更多', icon: 'more', desc: '发音、站点、同步、主题' },
+  { id: 'sync', label: '同步', icon: 'sync', desc: '浏览器账号、WebDAV 与手动备份' },
+  { id: 'more', label: '更多', icon: 'more', desc: '发音、站点、代码块、界面主题' },
 ];
 
+/** 同步相关锚点原在“更多”页（popup/background 生成的 `#more/sync` 链接），现在归“同步”页，旧链接继续可用 */
+const SYNC_ANCHORS = ['sync', 'webdav', 'backup', 'credentials'];
+
 function parseHash() {
-  const [page = 'books', anchor] = location.hash.replace(/^#\/?/, '').split('/');
+  const [rawPage = 'books', anchor] = location.hash.replace(/^#\/?/, '').split('/');
+  const page = rawPage === 'more' && anchor && SYNC_ANCHORS.includes(anchor) ? 'sync' : rawPage;
   return { page: page === 'welcome' || NAV.some((n) => n.id === page) ? page : 'books', anchor };
 }
 const route = ref(parseHash());
@@ -71,6 +80,14 @@ watchEffect(() => {
   const theme = settings.value?.ui.theme ?? 'auto';
   if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', theme);
+});
+
+// 升级后首次打开：弹出简短的更新说明（全新安装走 #welcome，不弹）
+const notesOpen = ref(false);
+const stopNotesWatch = watch(settings, async (s) => {
+  if (!s) return;
+  stopNotesWatch();
+  notesOpen.value = await shouldShowReleaseNotes(s.updatedAt, route.value.page === 'welcome');
 });
 
 // 设置加载完成后才 provide 非空的 settings（各页面只在 settings 就绪后渲染）
@@ -125,10 +142,12 @@ provideOptions({ settings: settings as Ref<Settings>, books, navigate });
           <h1>{{ current?.label }}</h1>
           <p class="muted">{{ current?.desc }}</p>
         </div>
+        <SiteAccessBanner />
         <BooksPage v-if="route.page === 'books'" />
         <AppearancePage v-else-if="route.page === 'appearance'" />
         <SourcesPage v-else-if="route.page === 'sources'" />
         <KnownPage v-else-if="route.page === 'known'" />
+        <SyncPage v-else-if="route.page === 'sync'" />
         <MorePage v-else-if="route.page === 'more'" />
       </main>
 
@@ -145,6 +164,8 @@ provideOptions({ settings: settings as Ref<Settings>, books, navigate });
         </a>
       </nav>
     </template>
+
+    <ReleaseNotesSheet v-model:open="notesOpen" />
 
     <Transition name="toast">
       <div v-if="toast.current" :key="toast.current.id" class="toast" :class="toast.current.tone" role="status">
@@ -198,7 +219,7 @@ provideOptions({ settings: settings as Ref<Settings>, books, navigate });
   .topbar h1 { margin: 0; font-size: 18px; }
   .spacer { flex: 1; }
   .content { margin: 0 auto; max-width: 720px; padding: 12px 12px calc(84px + env(safe-area-inset-bottom)); gap: 12px; }
-  .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; inset: auto 0 0 0; z-index: 20;
+  .tabbar { display: grid; grid-template-columns: repeat(6, 1fr); position: fixed; inset: auto 0 0 0; z-index: 20;
     padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); }
   .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 56px;
     color: var(--text-2); font-size: 12px; text-decoration: none; border-radius: 12px; }

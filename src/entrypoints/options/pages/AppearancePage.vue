@@ -1,116 +1,128 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { InlineTranslationMode } from '@/core/settings/schema';
-import { resolveCardStyle, resolveMarkStyle } from '@/core/theme/resolve';
-import { CUSTOM_THEME_ID, findTheme } from '@/core/theme/themes';
+import { resolveCardStyle, resolveMarkStyle, resolveTranslationStyle } from '@/core/theme/resolve';
+import { CUSTOM_THEME_ID, type MarkStyle } from '@/core/theme/themes';
 import AppIcon from '@/ui/components/AppIcon.vue';
+import BottomSheet from '@/ui/components/BottomSheet.vue';
 import MarkPreview from '@/ui/components/MarkPreview.vue';
 import SegmentedControl from '@/ui/components/SegmentedControl.vue';
 import SettingRow from '@/ui/components/SettingRow.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
 import ToggleSwitch from '@/ui/components/ToggleSwitch.vue';
-import { HIGHLIGHT_PALETTE, MARK_KINDS, buildMark, markKind, markPrimaryColor, tintMark, type MarkKind } from '@/ui/components/palette';
-import { formatHexAlpha, parseColor } from '@/ui/color';
+import { markPrimaryColor } from '@/ui/components/palette';
+import ColorRow from '../components/ColorRow.vue';
 import ColorSheet from '../components/ColorSheet.vue';
 import LivePreview from '../components/LivePreview.vue';
-import { applyCustomMark, applyPreset, autoAssignBookColors, presetGroups, setBookColor } from '../lib/appearance';
+import PresetCard from '../components/PresetCard.vue';
+import StyleEditor from '../components/StyleEditor.vue';
+import {
+  applyCustomMark,
+  applyPreset,
+  autoAssignBookColors,
+  bookStyleMode,
+  currentStyleName,
+  deleteSavedStyle,
+  presetGroups,
+  saveStyle,
+  setBookColor,
+  setBookStyle,
+  type BookStyleMode,
+} from '../lib/appearance';
 import { useOptions } from '../lib/context';
+import { showToast } from '../lib/toast';
 
 /**
- * 外观页：吸顶实时预览 + 预设配色 + 自定义（样式类型 × 色板/取色器）+ 按词书分色 + 行内释义样式 + 卡片。
- * 对标：不背单词“下划线颜色”预设色板（门槛低）+ Relingo 颜色规则与取色器（可精细调整）。
+ * 外观页（v5）：吸顶实时预览（真实句子 + 多本词书 + 行内译文 + 链接，亮/暗网页切换）→ 预设画廊（组合预设带缩略与说明、我的样式、
+ * 单色样式、旧版配色）→ 样式编辑器（装饰线 / 文字 / 背景 / 边框四个维度，可另存为“我的样式”）→ 按词书设置（跟随全局 / 只换颜色 /
+ * 独立样式）→ 行内译文（模式 + 颜色/浓淡/字号/模糊自测）→ 卡片。
+ * 对标：沉浸式翻译的译文样式列表、Relingo 的分组设置与实时预览、Burning Vocabulary 的预设色块。
  */
 const { settings, books } = useOptions();
-const { main: mainPresets, legacy: legacyPresets } = presetGroups();
+const { combos, singles, legacy } = presetGroups();
 
 const globalMark = computed(() => resolveMarkStyle(settings.value));
-const kind = computed(() => markKind(globalMark.value));
-const color = computed(() => markPrimaryColor(globalMark.value));
-const isUnderlineKind = computed(() => !['background', 'text'].includes(kind.value));
-const withTint = computed(() => isUnderlineKind.value && !!globalMark.value.background);
 const isCustom = computed(() => settings.value.style.themeId === CUSTOM_THEME_ID);
-const showLegacy = ref(legacyPresets.some((t) => t.id === settings.value.style.themeId));
+const showSingles = ref(singles.some((t) => t.id === settings.value.style.themeId));
+const showLegacy = ref(legacy.some((t) => t.id === settings.value.style.themeId));
+const saved = computed(() => settings.value.style.saved ?? []);
 
-const setKind = (k: MarkKind) => applyCustomMark(settings.value, buildMark(k, color.value, withTint.value));
-const setColor = (c: string) => applyCustomMark(settings.value, tintMark(globalMark.value, c));
-const setTint = (on: boolean) => applyCustomMark(settings.value, buildMark(kind.value, color.value, on));
+/** 编辑器修改全局样式：自动切到“自定义”（预设本身不可改，用户在预设基础上微调） */
+const editorMark = computed({ get: () => globalMark.value, set: (m: MarkStyle) => applyCustomMark(settings.value, m) });
 
-// ---------- 按词书分色 ----------
+// ---------- 另存为我的样式 ----------
+const saving = ref(false);
+const saveName = ref('');
+function startSave() {
+  saveName.value = isCustom.value ? `我的样式 ${saved.value.length + 1}` : `${currentStyleName(settings.value)}（改）`;
+  saving.value = true;
+}
+function confirmSave() {
+  const name = saveName.value.trim();
+  if (!name) return;
+  saveStyle(settings.value, name, globalMark.value);
+  saving.value = false;
+  showToast(`已另存为“${name}”，在上方“我的样式”中可随时选用`);
+}
+function removeSaved(id: string, name: string) {
+  const item = saved.value.find((s) => s.id === id);
+  deleteSavedStyle(settings.value, id);
+  showToast(`已删除“${name}”`, {
+    action: item ? { label: '撤销', run: () => (settings.value.style.saved = [...(settings.value.style.saved ?? []), item]) } : undefined,
+  });
+}
+const savedChecked = (mark: MarkStyle) => isCustom.value && JSON.stringify(mark) === JSON.stringify(settings.value.style.custom.mark);
+
+// ---------- 按词书 ----------
 const enabledBooks = computed(() =>
   settings.value.books.enabled.map((id) => {
     const meta = books.value.find((b) => b.id === id);
-    const o = settings.value.style.perBook[id];
-    return {
-      id,
-      name: meta ? meta.name : id,
-      mark: resolveMarkStyle(settings.value, id),
-      overridden: !!o,
-      presetName: o?.themeId ? findTheme(o.themeId)?.name : undefined,
-    };
+    return { id, name: meta ? meta.name : id, mark: resolveMarkStyle(settings.value, id), mode: bookStyleMode(settings.value, id) };
   }),
 );
-
-// ---------- 取色弹层：编辑目标可以是全局主色、某本词书、或高级里的某个颜色字段 ----------
-interface ColorTarget {
-  title: string;
-  description?: string;
-  alpha?: boolean;
-  get: () => string;
-  set: (c: string) => void;
-  /** 额外操作（如“跟随全局”） */
-  reset?: { label: string; run: () => void };
-}
-const target = ref<ColorTarget | null>(null);
-const sheetOpen = computed({ get: () => !!target.value, set: (v) => !v && (target.value = null) });
-const sheetColor = computed({ get: () => target.value?.get() || '#ff7008', set: (c) => target.value?.set(c) });
-
-function editGlobalColor() {
-  target.value = { title: '高亮颜色', description: '所有未单独设色的词书使用此颜色', get: () => color.value, set: setColor };
-}
-function editBookColor(id: string, name: string) {
-  target.value = {
-    title: name,
-    description: '为这本词书的生词指定颜色，样式与全局一致',
-    get: () => markPrimaryColor(resolveMarkStyle(settings.value, id)),
-    set: (c) => setBookColor(settings.value, id, c),
-    reset: { label: '跟随全局', run: () => setBookColor(settings.value, id, null) },
-  };
+const MODE_LABEL: Record<BookStyleMode, string> = { follow: '跟随全局', tint: '只换颜色', own: '独立样式' };
+const bookEdit = ref<{ id: string; name: string } | null>(null);
+const bookSheetOpen = computed({ get: () => !!bookEdit.value, set: (v) => !v && (bookEdit.value = null) });
+const editingMode = computed(() => (bookEdit.value ? bookStyleMode(settings.value, bookEdit.value.id) : 'follow'));
+const editingMark = computed({
+  get: () => (bookEdit.value ? resolveMarkStyle(settings.value, bookEdit.value.id) : globalMark.value),
+  set: (m: MarkStyle) => bookEdit.value && setBookStyle(settings.value, bookEdit.value.id, m),
+});
+function setBookMode(mode: BookStyleMode) {
+  const b = bookEdit.value;
+  if (!b) return;
+  const current = resolveMarkStyle(settings.value, b.id);
+  if (mode === 'follow') setBookColor(settings.value, b.id, null);
+  else if (mode === 'tint') setBookColor(settings.value, b.id, markPrimaryColor(current));
+  else setBookStyle(settings.value, b.id, current);
 }
 
-/** 高级：直接编辑 custom 的单个颜色字段（带透明度）；空串表示继承页面 */
-type MarkField = 'background' | 'color' | 'underlineColor';
-type CardField = 'background' | 'color' | 'accent';
-function editMarkField(field: MarkField, title: string) {
-  target.value = {
-    title,
-    alpha: true,
-    get: () => globalMark.value[field] || '#ff7008',
-    set: (c) => applyCustomMark(settings.value, { ...globalMark.value, [field]: c }),
-    reset: { label: '清除', run: () => applyCustomMark(settings.value, { ...globalMark.value, [field]: '' }) },
-  };
-}
-function editCardField(field: CardField, title: string) {
-  target.value = {
-    title,
-    alpha: field === 'background',
-    get: () => resolveCardStyle(settings.value)[field],
-    set: (c) => {
-      if (!isCustom.value) applyCustomMark(settings.value, globalMark.value);
-      settings.value.style.custom.card = { ...settings.value.style.custom.card, [field]: c };
-    },
-  };
-}
-const cardStyle = computed(() => resolveCardStyle(settings.value));
-
-const swatchBg = (c: string) => (c ? c : 'transparent');
-/** 色块显示为不透明主色（背景型高亮本身是半透明的，色块上看不清） */
-const solid = (c: string) => parseColor(c)?.hex ?? c;
-
+// ---------- 行内译文 ----------
+const tr = computed(() => resolveTranslationStyle(settings.value));
 const INLINE_MODES: { value: InlineTranslationMode; label: string; desc: string }[] = [
-  { value: 'off', label: '不显示', desc: '只高亮，点按或悬停查看释义' },
-  { value: 'after', label: '词后括注', desc: '生词后面附简短中文释义' },
-  { value: 'ruby', label: '词上方', desc: '释义以注音样式显示在生词上方' },
+  { value: 'off', label: '不显示', desc: '只标记生词，点按或悬停看释义' },
+  { value: 'after', label: '词后括号', desc: '生词后附简短中文' },
+  { value: 'ruby', label: '词上方', desc: '小字释义在生词上方' },
+  { value: 'hover', label: '悬停显示', desc: '指到生词时浮出，不占位置' },
 ];
+function patchTr(p: Partial<{ blur: boolean; color: string; opacity: number; fontScale: number }>) {
+  settings.value.inlineTranslation = { ...settings.value.inlineTranslation, ...p };
+}
+
+// ---------- 卡片颜色（高级） ----------
+type CardField = 'background' | 'color' | 'accent';
+const cardTarget = ref<{ field: CardField; title: string } | null>(null);
+const cardSheetOpen = computed({ get: () => !!cardTarget.value, set: (v) => !v && (cardTarget.value = null) });
+const cardStyle = computed(() => resolveCardStyle(settings.value));
+const cardColor = computed({
+  get: () => (cardTarget.value ? cardStyle.value[cardTarget.value.field] : '#ffffff'),
+  set: (c: string) => {
+    const f = cardTarget.value?.field;
+    if (!f) return;
+    if (!isCustom.value) applyCustomMark(settings.value, globalMark.value);
+    settings.value.style.custom.card = { ...settings.value.style.custom.card, [f]: c };
+  },
+});
 </script>
 
 <template>
@@ -118,126 +130,58 @@ const INLINE_MODES: { value: InlineTranslationMode; label: string; desc: string 
     <LivePreview :settings="settings" :books="books" />
   </div>
 
-  <SettingsSection id="presets" title="预设配色" description="点选即生效；下面可继续微调样式与颜色">
-    <div class="presets" role="radiogroup" aria-label="预设配色">
-      <button
-        v-for="t in mainPresets"
+  <SettingsSection id="presets" title="样式预设" :description="`当前：${currentStyleName(settings)}。点选即生效，可在下方继续微调`">
+    <div class="gallery" role="radiogroup" aria-label="组合预设">
+      <PresetCard
+        v-for="t in combos"
         :key="t.id"
-        type="button"
-        role="radio"
-        class="preset"
-        :aria-label="t.name"
-        :aria-checked="settings.style.themeId === t.id"
+        :mark="t.mark"
+        :name="t.name"
+        :desc="t.desc"
+        :translation="t.translation?.mode"
+        :checked="settings.style.themeId === t.id"
         @click="applyPreset(settings, t.id)"
-      >
-        <span class="paper"><MarkPreview :mark="t.mark" word="vivid" /></span>
-        <span class="pname">{{ t.name }}</span>
-      </button>
-      <button
-        type="button"
-        role="radio"
-        class="preset"
-        aria-label="自定义"
-        :aria-checked="isCustom"
-        @click="applyCustomMark(settings, globalMark)"
-      >
-        <span class="paper"><MarkPreview :mark="settings.style.custom.mark" word="vivid" /></span>
-        <span class="pname">自定义</span>
-      </button>
+      />
+    </div>
+    <p class="muted small">带“译文”的预设会同时打开对应的行内译文；之后单独修改译文不影响样式。</p>
+
+    <template v-if="saved.length">
+      <h3 class="sub">我的样式</h3>
+      <div class="gallery mine" role="radiogroup" aria-label="我的样式">
+        <div v-for="s in saved" :key="s.id" class="mine-item">
+          <PresetCard :mark="s.mark" :name="s.name" :checked="savedChecked(s.mark)" compact @click="applyCustomMark(settings, s.mark)" />
+          <button type="button" class="del" :aria-label="'删除 ' + s.name" @click="removeSaved(s.id, s.name)"><AppIcon name="close" :size="14" /></button>
+        </div>
+      </div>
+    </template>
+
+    <button type="button" class="link" :aria-expanded="showSingles" @click="showSingles = !showSingles">
+      单色样式（{{ singles.length }}）<AppIcon :name="showSingles ? 'up' : 'down'" :size="16" />
+    </button>
+    <div v-if="showSingles" class="gallery small-grid" role="radiogroup" aria-label="单色样式">
+      <PresetCard v-for="t in singles" :key="t.id" :mark="t.mark" :name="t.name" :checked="settings.style.themeId === t.id" compact @click="applyPreset(settings, t.id)" />
     </div>
     <button type="button" class="link" :aria-expanded="showLegacy" @click="showLegacy = !showLegacy">
-      旧版配色（{{ legacyPresets.length }}）<AppIcon :name="showLegacy ? 'up' : 'down'" :size="16" />
+      旧版配色（{{ legacy.length }}）<AppIcon :name="showLegacy ? 'up' : 'down'" :size="16" />
     </button>
-    <div v-if="showLegacy" class="presets" role="radiogroup" aria-label="旧版配色">
-      <button
-        v-for="t in legacyPresets"
-        :key="t.id"
-        type="button"
-        role="radio"
-        class="preset"
-        :aria-label="t.name"
-        :aria-checked="settings.style.themeId === t.id"
-        @click="applyPreset(settings, t.id)"
-      >
-        <span class="paper"><MarkPreview :mark="t.mark" word="vivid" /></span>
-        <span class="pname">{{ t.name }}</span>
-      </button>
+    <div v-if="showLegacy" class="gallery small-grid" role="radiogroup" aria-label="旧版配色">
+      <PresetCard v-for="t in legacy" :key="t.id" :mark="t.mark" :name="t.name" :checked="settings.style.themeId === t.id" compact @click="applyPreset(settings, t.id)" />
     </div>
   </SettingsSection>
 
-  <SettingsSection id="custom" title="样式与颜色" description="调整后自动切换为“自定义”配色">
-    <div class="kinds" role="radiogroup" aria-label="高亮样式">
-      <button
-        v-for="k in MARK_KINDS"
-        :key="k.value"
-        type="button"
-        role="radio"
-        class="kind"
-        :aria-label="'样式：' + k.label"
-        :aria-checked="kind === k.value"
-        @click="setKind(k.value)"
-      >
-        <span class="kind-sample"><MarkPreview :mark="buildMark(k.value, color, k.value !== 'background' && k.value !== 'text' && withTint)" word="Ab" /></span>
-        <span>{{ k.label }}</span>
-      </button>
-    </div>
-    <ToggleSwitch v-if="isUnderlineKind" :model-value="withTint" label="叠加同色浅底" description="下划线 + 半透明底色，长文中更醒目" @update:model-value="setTint" />
-
-    <div class="palette" role="radiogroup" aria-label="高亮颜色">
-      <button
-        v-for="c in HIGHLIGHT_PALETTE"
-        :key="c.hex"
-        type="button"
-        role="radio"
-        class="swatch"
-        :style="{ '--c': c.hex }"
-        :aria-checked="color === c.hex"
-        :aria-label="c.name"
-        :title="c.name"
-        @click="setColor(c.hex)"
-      >
-        <AppIcon v-if="color === c.hex" name="check" :size="16" />
-      </button>
-      <button
-        type="button"
-        class="swatch more"
-        :class="{ on: !HIGHLIGHT_PALETTE.some((c) => c.hex === color) }"
-        :style="{ '--c': color }"
-        aria-label="更多颜色"
-        title="更多颜色"
-        @click="editGlobalColor"
-      >
-        <AppIcon name="plus" :size="16" />
-      </button>
-    </div>
-
-    <details class="advanced">
-      <summary>高级：分别设置各颜色与透明度</summary>
-      <div class="fields">
-        <button type="button" class="field" @click="editMarkField('background', '高亮背景')">
-          <span>高亮背景</span><i class="chip" :style="{ background: swatchBg(globalMark.background) }" :class="{ none: !globalMark.background }" />
-        </button>
-        <button type="button" class="field" @click="editMarkField('color', '高亮文字颜色')">
-          <span>文字颜色</span><i class="chip" :style="{ background: swatchBg(globalMark.color) }" :class="{ none: !globalMark.color }" />
-        </button>
-        <button type="button" class="field" @click="editMarkField('underlineColor', '下划线颜色')">
-          <span>下划线颜色</span><i class="chip" :style="{ background: swatchBg(globalMark.underlineColor) }" :class="{ none: !globalMark.underlineColor }" />
-        </button>
-        <button type="button" class="field" @click="editCardField('background', '卡片背景')">
-          <span>卡片背景</span><i class="chip" :style="{ background: cardStyle.background }" />
-        </button>
-        <button type="button" class="field" @click="editCardField('color', '卡片文字')">
-          <span>卡片文字</span><i class="chip" :style="{ background: cardStyle.color }" />
-        </button>
-        <button type="button" class="field" @click="editCardField('accent', '卡片强调色')">
-          <span>卡片强调色</span><i class="chip" :style="{ background: cardStyle.accent }" />
-        </button>
-      </div>
-      <p class="muted">空白斜纹表示不设置（继承网页原样式）。</p>
-    </details>
+  <SettingsSection id="custom" title="微调样式" :description="isCustom ? '正在使用自定义样式' : '修改后自动切换为“自定义”，原预设不受影响'">
+    <template #actions>
+      <button type="button" class="btn small" @click="startSave"><AppIcon name="plus" :size="16" />另存为</button>
+    </template>
+    <form v-if="saving" class="save" @submit.prevent="confirmSave">
+      <input v-model="saveName" type="text" aria-label="样式名称" maxlength="20" />
+      <button type="button" class="btn" @click="saving = false">取消</button>
+      <button type="submit" class="btn primary" :disabled="!saveName.trim()">保存</button>
+    </form>
+    <StyleEditor v-model="editorMark" />
   </SettingsSection>
 
-  <SettingsSection id="per-book" title="按词书分色" description="同时启用多本词书时，用颜色区分生词来自哪本书" flush>
+  <SettingsSection id="per-book" title="按词书设置样式" description="同时启用多本词书时，用不同颜色或样式区分生词来自哪本书" flush>
     <template #actions>
       <button v-if="enabledBooks.length > 1" type="button" class="btn small" @click="autoAssignBookColors(settings)">
         <AppIcon name="sparkle" :size="16" />自动分色
@@ -245,13 +189,12 @@ const INLINE_MODES: { value: InlineTranslationMode; label: string; desc: string 
     </template>
     <ul v-if="enabledBooks.length" class="books">
       <li v-for="b in enabledBooks" :key="b.id">
-        <button type="button" class="book" @click="editBookColor(b.id, b.name)">
-          <span class="paper small"><MarkPreview :mark="b.mark" word="word" /></span>
+        <button type="button" class="book" @click="bookEdit = { id: b.id, name: b.name }">
+          <span class="paper-mini"><MarkPreview :mark="b.mark" word="word" /></span>
           <span class="bname">
             <span>{{ b.name }}</span>
-            <span class="muted">{{ b.presetName ? '预设：' + b.presetName : b.overridden ? '自定义颜色' : '跟随全局' }}</span>
+            <span class="muted">{{ MODE_LABEL[b.mode] }}</span>
           </span>
-          <i class="chip" :style="{ background: solid(formatHexAlpha(markPrimaryColor(b.mark), 1)) }" />
           <AppIcon name="chevron" :size="18" class="chev" />
         </button>
       </li>
@@ -259,25 +202,40 @@ const INLINE_MODES: { value: InlineTranslationMode; label: string; desc: string 
     <p v-else class="empty muted">还没有启用词书。</p>
   </SettingsSection>
 
-  <SettingsSection id="inline" title="行内释义" description="在生词旁直接显示简短中文释义，读长文不必逐个点开">
-    <div class="modes" role="radiogroup" aria-label="行内释义样式">
+  <SettingsSection id="inline" title="行内译文" description="在生词旁直接显示简短中文，读长文不必逐个点开；与生词样式相互独立">
+    <div class="modes" role="radiogroup" aria-label="行内译文位置">
       <button
-        v-for="m in INLINE_MODES"
-        :key="m.value"
+        v-for="mo in INLINE_MODES"
+        :key="mo.value"
         type="button"
         role="radio"
         class="mode"
-        :aria-checked="settings.inlineTranslation.mode === m.value"
-        @click="settings.inlineTranslation.mode = m.value"
+        :aria-checked="settings.inlineTranslation.mode === mo.value"
+        @click="settings.inlineTranslation.mode = mo.value"
       >
-        <span class="mode-head">
-          <span class="radio" />
-          <strong>{{ m.label }}</strong>
-          <span class="muted">{{ m.desc }}</span>
-        </span>
-        <LivePreview :settings="settings" :books="books" :mode="m.value" text="short" />
+        <span class="radio" />
+        <span class="mode-text"><strong>{{ mo.label }}</strong><span class="muted">{{ mo.desc }}</span></span>
       </button>
     </div>
+    <template v-if="settings.inlineTranslation.mode !== 'off'">
+      <span class="lbl">译文颜色</span>
+      <ColorRow :model-value="tr.color" label="译文颜色" empty-label="跟随正文颜色" @update:model-value="(c: string) => patchTr({ color: c })" />
+      <label class="slider">
+        <span>浓淡 {{ Math.round(tr.opacity * 100) }}%</span>
+        <input type="range" min="0.2" max="1" step="0.05" :value="tr.opacity" @input="patchTr({ opacity: Number(($event.target as HTMLInputElement).value) })" />
+      </label>
+      <label class="slider">
+        <span>字号 {{ Math.round(tr.fontScale * 100) }}%</span>
+        <input type="range" min="0.5" max="1" step="0.05" :value="tr.fontScale" @input="patchTr({ fontScale: Number(($event.target as HTMLInputElement).value) })" />
+      </label>
+      <ToggleSwitch
+        :model-value="tr.blur"
+        label="模糊自测"
+        description="译文先模糊显示，想不起来时点一下才看清，适合检验记忆"
+        @update:model-value="(v: boolean) => patchTr({ blur: v })"
+      />
+      <p class="muted small">单行标题、按钮、导航等放不下的位置，译文会自动改为悬停显示，不会撑破排版。</p>
+    </template>
   </SettingsSection>
 
   <SettingsSection id="card" title="释义卡片">
@@ -291,88 +249,133 @@ const INLINE_MODES: { value: InlineTranslationMode; label: string; desc: string 
         ]"
       />
     </SettingRow>
+    <details class="advanced">
+      <summary>卡片颜色</summary>
+      <div class="fields">
+        <button type="button" class="field" @click="cardTarget = { field: 'background', title: '卡片背景' }">
+          <span>背景</span><i class="chip" :style="{ background: cardStyle.background }" />
+        </button>
+        <button type="button" class="field" @click="cardTarget = { field: 'color', title: '卡片文字' }">
+          <span>文字</span><i class="chip" :style="{ background: cardStyle.color }" />
+        </button>
+        <button type="button" class="field" @click="cardTarget = { field: 'accent', title: '卡片强调色' }">
+          <span>强调色</span><i class="chip" :style="{ background: cardStyle.accent }" />
+        </button>
+      </div>
+      <p class="muted small">卡片默认跟随所选预设的强调色，在深色网页上自动换为深色卡片。</p>
+    </details>
   </SettingsSection>
 
-  <ColorSheet v-if="target" v-model:open="sheetOpen" v-model:color="sheetColor" :title="target.title" :description="target.description" :alpha="target.alpha">
-    <button
-      v-if="target.reset"
-      type="button"
-      class="btn"
-      @click="
-        target.reset.run();
-        target = null;
-      "
-    >
-      {{ target.reset.label }}
-    </button>
-  </ColorSheet>
+  <BottomSheet v-model:open="bookSheetOpen" :title="bookEdit?.name ?? ''" description="这本词书中的生词如何显示">
+    <div v-if="bookEdit" class="book-sheet">
+      <div class="book-pv">Scientists remain <MarkPreview :mark="editingMark" word="skeptical" /> about it.</div>
+      <SegmentedControl
+        :model-value="editingMode"
+        :options="[
+          { value: 'follow', label: '跟随全局' },
+          { value: 'tint', label: '只换颜色' },
+          { value: 'own', label: '独立样式' },
+        ]"
+        @update:model-value="setBookMode"
+      />
+      <template v-if="editingMode === 'tint'">
+        <p class="muted small">与全局样式相同，只换颜色；全局样式改变时自动跟随。</p>
+        <ColorRow :model-value="markPrimaryColor(editingMark)" label="词书颜色" @update:model-value="(c: string) => setBookColor(settings, bookEdit!.id, c)" />
+      </template>
+      <template v-else-if="editingMode === 'own'">
+        <p class="muted small">从预设开始，或直接调整；不随全局样式变化。</p>
+        <div class="strip" role="radiogroup" aria-label="从预设开始">
+          <PresetCard
+            v-for="t in [...combos, ...singles]"
+            :key="t.id"
+            :mark="t.mark"
+            :name="t.name"
+            :checked="JSON.stringify(t.mark) === JSON.stringify(editingMark)"
+            compact
+            @click="setBookStyle(settings, bookEdit!.id, t.mark)"
+          />
+          <PresetCard
+            v-for="s in saved"
+            :key="s.id"
+            :mark="s.mark"
+            :name="s.name"
+            :checked="JSON.stringify(s.mark) === JSON.stringify(editingMark)"
+            compact
+            @click="setBookStyle(settings, bookEdit!.id, s.mark)"
+          />
+        </div>
+        <StyleEditor v-model="editingMark" />
+      </template>
+      <p v-else class="muted small">使用全局样式“{{ currentStyleName(settings) }}”。</p>
+    </div>
+    <template #footer>
+      <button type="button" class="btn primary" @click="bookEdit = null">完成</button>
+    </template>
+  </BottomSheet>
+
+  <ColorSheet v-if="cardTarget" v-model:open="cardSheetOpen" v-model:color="cardColor" :title="cardTarget.title" :alpha="cardTarget.field === 'background'" />
 </template>
 
 <style scoped>
 .preview-dock { position: sticky; top: 0; z-index: 5; padding: 0 0 4px; background: var(--bg); }
-@media (max-width: 899px) { .preview-dock { top: 56px; margin: 0 -12px; padding: 0 12px 6px; } .preview-dock :deep(.sample) { font-size: 16px; padding: 10px 14px; } }
+@media (max-width: 899px) { .preview-dock { top: 56px; margin: 0 -12px; padding: 0 12px 6px; } }
 @media (min-width: 900px) { .preview-dock { padding-top: 8px; margin-top: -8px; } }
 
-.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
-.preset { display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 12px; border: 1.5px solid var(--border);
-  background: var(--surface); cursor: pointer; color: var(--text); }
-.preset[aria-checked='true'] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.paper { display: grid; place-items: center; height: 46px; border-radius: 8px; background: #fff; color: #1f2328;
-  font: 18px/1 Georgia, 'Times New Roman', serif; border: 1px solid rgba(0, 0, 0, .06); }
-.paper.small { width: 64px; height: 36px; font-size: 15px; flex: none; }
-.pname { font-size: 12px; color: var(--text-2); text-align: center; }
-.preset[aria-checked='true'] .pname { color: var(--text); font-weight: 650; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.gallery.small-grid, .gallery.mine { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
 @media (max-width: 480px) {
-  .presets { grid-template-columns: repeat(4, 1fr); gap: 6px; }
-  .preset { padding: 4px; gap: 4px; }
-  .paper { height: 38px; font-size: 15px; }
+  .gallery { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .gallery.small-grid, .gallery.mine { grid-template-columns: repeat(3, 1fr); gap: 6px; }
 }
+.mine-item { position: relative; display: flex; }
+.mine-item > :first-child { flex: 1; }
+.del { position: absolute; top: -6px; right: -6px; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface);
+  color: var(--text-2); display: grid; place-items: center; cursor: pointer; padding: 0; }
+@media (pointer: coarse) { .del { width: 32px; height: 32px; } }
+.sub { margin: 6px 0 0; font-size: 14px; }
+.small { font-size: 12px; margin: 0; }
 .link { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: var(--text-2);
   cursor: pointer; min-height: 36px; padding: 0; font-size: 13px; }
-
-.kinds { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
-.kind { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; border: 1.5px solid var(--border);
-  background: var(--surface); cursor: pointer; font-size: 12px; color: var(--text-2); min-height: var(--tap); }
-.kind[aria-checked='true'] { border-color: var(--accent); color: var(--text); font-weight: 650; background: var(--accent-soft); }
-.kind-sample { font: 600 17px/1.6 Georgia, serif; color: var(--text); }
-@media (max-width: 560px) { .kinds { grid-template-columns: repeat(3, 1fr); } }
-
-.palette { display: grid; grid-template-columns: repeat(13, 1fr); gap: 8px; }
-.swatch { aspect-ratio: 1; min-height: 32px; border-radius: 50%; border: 0; background: var(--c); cursor: pointer; color: #fff;
-  display: grid; place-items: center; position: relative; }
-.swatch[aria-checked='true']::after, .swatch.more.on::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--c); }
-.swatch.more { background: conic-gradient(#f43f5e, #f59e0b, #84cc16, #10b981, #0ea5e9, #6366f1, #d946ef, #f43f5e); }
-.swatch.more.on { background: var(--c); }
-@media (max-width: 560px) { .palette { grid-template-columns: repeat(7, 1fr); gap: 10px; } .swatch { min-height: 36px; } }
-
-.advanced summary { cursor: pointer; color: var(--text-2); font-size: 13px; min-height: 36px; display: flex; align-items: center; }
-.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; margin: 6px 0; }
-.field { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: var(--tap); padding: 6px 10px 6px 12px;
-  border-radius: 10px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; color: var(--text); }
-.chip { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border); flex: none; }
-.chip.none { background: repeating-linear-gradient(45deg, transparent 0 4px, var(--border) 4px 5px) !important; }
-.advanced p { margin: 4px 0 0; }
+.save { display: flex; gap: 8px; }
+.save input { flex: 1; min-width: 0; }
 
 .books { list-style: none; margin: 0; padding: 0; }
 .book { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 18px; min-height: 60px; border: 0;
   border-top: 1px solid var(--border); background: transparent; cursor: pointer; text-align: left; color: var(--text); }
 .book:hover { background: var(--surface-2); }
+.paper-mini { display: grid; place-items: center; width: 72px; height: 36px; border-radius: 8px; background: #fff; color: #1f2328; font: 15px/1 Georgia, serif;
+  border: 1px solid rgba(0, 0, 0, .06); flex: none; }
 .bname { flex: 1; min-width: 0; display: flex; flex-direction: column; font-weight: 600; }
 .bname > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bname .muted { font-weight: 400; font-size: 12px; }
 .chev { color: var(--text-2); }
 .empty { padding: 4px 18px 12px; margin: 0; }
 
-.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.mode { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 12px; border: 1.5px solid var(--border);
-  background: var(--surface); cursor: pointer; text-align: left; color: var(--text); }
+.modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.mode { display: flex; align-items: flex-start; gap: 8px; padding: 10px; border-radius: 12px; border: 1.5px solid var(--border);
+  background: var(--surface); cursor: pointer; text-align: left; color: var(--text); min-height: var(--tap); }
 .mode[aria-checked='true'] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.mode-head { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; align-items: center; }
-.mode-head .muted { grid-column: 2; font-size: 12px; }
-.radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); }
+.mode-text { display: flex; flex-direction: column; min-width: 0; }
+.mode-text .muted { font-size: 12px; }
+.radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); flex: none; margin-top: 2px; }
 .mode[aria-checked='true'] .radio { border: 5px solid var(--accent); }
-.mode :deep(.sample) { font-size: 15px; padding: 8px 10px; }
-@media (max-width: 720px) { .modes { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .modes { grid-template-columns: 1fr 1fr; } }
+.lbl { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.slider { display: grid; grid-template-columns: 7.5em 1fr; align-items: center; gap: 10px; min-height: var(--tap); font-size: 13px; }
+.slider input { width: 100%; accent-color: var(--accent); }
+
+.advanced summary { cursor: pointer; color: var(--text-2); font-size: 13px; min-height: 36px; display: flex; align-items: center; }
+.fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0; }
+@media (max-width: 480px) { .fields { grid-template-columns: 1fr; } }
+.field { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: var(--tap); padding: 6px 10px 6px 12px;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; color: var(--text); }
+.chip { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border); flex: none; }
+
+.book-sheet { display: flex; flex-direction: column; gap: 12px; }
+.book-pv { text-align: center; padding: 14px; border-radius: 10px; background: #fff; color: #1f2328; font: 17px/1.6 Georgia, serif; border: 1px solid var(--border); }
+.strip { display: grid; grid-auto-flow: column; grid-auto-columns: 96px; gap: 8px; overflow-x: auto; padding: 4px 2px 8px; scroll-snap-type: x proximity; }
+.strip > * { scroll-snap-align: start; }
 .btn.small { min-height: 32px; padding: 4px 12px; font-size: 13px; }
+@media (pointer: coarse) { .btn.small { min-height: 40px; } }
 @media (max-width: 480px) { .book { padding: 10px 14px; } .empty { padding: 4px 14px 12px; } }
 </style>

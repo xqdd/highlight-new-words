@@ -1,3 +1,4 @@
+import { effectiveBookRole } from '@/core/known/sources';
 import type { Settings } from '@/core/settings/schema';
 import { getProviderInfo } from '@/core/source/providers';
 import type { BookCategory, BookMeta } from '@/core/wordbook/types';
@@ -15,6 +16,11 @@ export function bookKindLabel(b: BookMeta): string {
   if (b.kind === 'source') return getProviderInfo(b.providerId ?? '')?.name ?? '云端生词本';
   if (b.kind === 'local') return '导入';
   return b.short;
+}
+
+/** 来源词书当前是否作为熟词本使用（provider 声明或用户指定）：熟词本不进高亮词书列表，在“熟词”页管理 */
+export function isKnownRoleBook(settings: Settings, b: BookMeta): boolean {
+  return b.kind === 'source' && !!b.sync && effectiveBookRole(b.sync, settings) === 'known';
 }
 
 export function isBookEnabled(settings: Settings, id: string): boolean {

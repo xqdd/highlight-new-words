@@ -8,14 +8,16 @@ import SettingRow from '@/ui/components/SettingRow.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
 import { useOptions } from '../lib/context';
 import { showToast } from '../lib/toast';
+import ReleaseNotesSheet from '../components/ReleaseNotesSheet.vue';
+import CodeSection from '../sections/CodeSection.vue';
 import SitesSection from '../sections/SitesSection.vue';
-import SyncSection from '../sections/SyncSection.vue';
 import TtsSection from '../sections/TtsSection.vue';
 
-/** 更多：发音、站点规则、跨设备同步、界面主题、引导与恢复默认 */
+/** 更多：发音、站点规则、代码块标注、界面主题、引导与恢复默认（跨设备同步已移到“同步”页） */
 const { settings, navigate } = useOptions();
 const version = browser.runtime.getManifest().version;
 const confirmReset = ref(false);
+const notesOpen = ref(false);
 
 async function reset() {
   confirmReset.value = false;
@@ -27,7 +29,7 @@ async function reset() {
 <template>
   <TtsSection />
   <SitesSection />
-  <SyncSection />
+  <CodeSection />
 
   <SettingsSection id="ui" title="界面">
     <SettingRow label="设置页与弹窗主题" stack>
@@ -45,6 +47,7 @@ async function reset() {
   <SettingsSection id="about" title="其他">
     <div class="links">
       <button type="button" class="btn" @click="navigate('welcome')"><AppIcon name="sparkle" :size="16" />重新运行快速设置引导</button>
+      <button type="button" class="btn" @click="notesOpen = true"><AppIcon name="file" :size="16" />更新说明</button>
       <a class="btn" href="https://github.com/XQDD/highlight_new_words" target="_blank" rel="noopener"><AppIcon name="link" :size="16" />使用说明</a>
     </div>
     <div v-if="confirmReset" class="confirm">
@@ -57,6 +60,7 @@ async function reset() {
     <button v-else type="button" class="btn danger" @click="confirmReset = true">恢复默认设置</button>
     <p class="muted ver">版本 {{ version }}</p>
   </SettingsSection>
+  <ReleaseNotesSheet v-model:open="notesOpen" />
 </template>
 
 <style scoped>

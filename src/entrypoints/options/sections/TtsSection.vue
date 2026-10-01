@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { browser } from 'wxt/browser';
 import { sendToBackground } from '@/core/messaging';
+import { getBrowserFamily, getPlatformVoices } from '@/core/platform';
 import type { Settings } from '@/core/settings/schema';
 import AppIcon from '@/ui/components/AppIcon.vue';
 import SettingRow from '@/ui/components/SettingRow.vue';
@@ -9,19 +9,23 @@ import SettingsSection from '@/ui/components/SettingsSection.vue';
 import ToggleSwitch from '@/ui/components/ToggleSwitch.vue';
 import { useOptions } from '../lib/context';
 
-/** 发音：自动发音开关、发音来源（只列英文/未标注语言的声音，同旧版）、语速、试听 */
+/**
+ * 发音：自动发音开关、发音来源（只列英文/未标注语言的声音，同旧版）、语速、试听。
+ * 语音列表走 platform 垫片：有 chrome.tts 时列扩展语音，Firefox / 无 tts 的移动端列 Web Speech 语音。
+ * “获取更多声音”指向 Chrome 商店的 TTS 扩展，只在 Chrome 上显示（Edge/Firefox 跳过去也装不了）。
+ */
 const { settings } = useOptions();
 interface VoiceOption { key: string; label: string; voice: Settings['tts']['voice'] }
 const voices = ref<VoiceOption[]>([]);
+const isChrome = getBrowserFamily() === 'chrome';
 
 onMounted(async () => {
-  // 部分平台（如 Android）没有 chrome.tts，忽略即可
-  const list = await browser.tts?.getVoices().catch(() => []) ?? [];
+  const list = await getPlatformVoices().catch(() => []);
   voices.value = list
     .filter((v) => !v.lang || /^(en|xx)/i.test(v.lang))
     .map((v) => ({
       key: `${v.voiceName}|${v.lang}`,
-      label: `${v.voiceName ?? '默认'}${v.lang && !/^xx/i.test(v.lang) ? '（' + v.lang + '）' : ''}${v.remote ? ' · 在线' : ''}`,
+      label: `${v.voiceName}${v.lang && !/^xx/i.test(v.lang) ? '（' + v.lang + '）' : ''}`,
       voice: { voiceName: v.voiceName, lang: v.lang, extensionId: v.extensionId },
     }));
 });
@@ -50,7 +54,7 @@ function select(key: string) {
     </SettingRow>
     <div class="row">
       <button class="btn" type="button" @click="sendToBackground('tts', { text: 'serendipity', force: true })"><AppIcon name="volume" :size="16" />试听</button>
-      <a href="https://chrome.google.com/webstore/detail/speakit/pgeolalilifpodheeocdmbhehgnkkbak" target="_blank" rel="noopener">获取更多声音</a>
+      <a v-if="isChrome" href="https://chrome.google.com/webstore/detail/speakit/pgeolalilifpodheeocdmbhehgnkkbak" target="_blank" rel="noopener">获取更多声音</a>
     </div>
   </SettingsSection>
 </template>

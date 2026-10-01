@@ -58,32 +58,36 @@ export function markKind(mark: MarkStyle): MarkKind {
   return 'background';
 }
 
-/** 样式的主色（不含透明度），用于色板选中态、按词书分色的色块 */
+/**
+ * 样式的主色（不含透明度），用于色板选中态、按词书分色的色块。
+ * v5 多维样式：有装饰线取线色，否则背景色，否则文字色，否则边框色；“无样式”返回默认橙。
+ */
 export function markPrimaryColor(mark: MarkStyle): string {
-  const kind = markKind(mark);
-  const raw = kind === 'background' ? mark.background : kind === 'text' ? mark.color : mark.underlineColor || mark.color;
-  return parseColor(raw || '')?.hex ?? '#ff7008';
+  const raw =
+    (mark.underline !== 'none' ? mark.underlineColor || mark.color : '') || mark.background || mark.color || mark.borderColor || '';
+  return parseColor(raw)?.hex ?? '#ff7008';
+}
+
+/** 保持透明度换色：opaqueAlpha 为原色不透明时使用的透明度（背景需要半透明才不遮字） */
+function recolor(raw: string, hex: string, opaqueAlpha = 1): string {
+  const a = parseColor(raw)?.alpha ?? 1;
+  return formatHexAlpha(hex, a < 1 ? a : opaqueAlpha);
 }
 
 /**
- * 以 base 的样式类型为准，用 color（#RRGGBB）重新着色，返回完整 MarkStyle：
- * - 背景：保留 base 背景的透明度（base 不透明或无背景时用 BACKGROUND_ALPHA）
- * - 文字色：直接替换文字色
- * - 下划线类：替换下划线颜色；带浅底时浅底同步换色
+ * 保持样式的形态（线型、背景形态、边框、字重等）只换颜色，返回完整 MarkStyle：
+ * - 装饰线、边框颜色直接替换；背景保留原透明度（原色不透明时：有装饰线用 TINT_ALPHA，否则 BACKGROUND_ALPHA）；
+ * - 文字色只在它是主色（无背景、无装饰线）时替换，背景 + 文字色的组合（旧版配色）保留文字色保证对比度；
+ * - “无样式”（只有行内译文）没有可换的颜色，原样返回。
  */
 export function tintMark(base: MarkStyle, color: string): MarkStyle {
   const hex = parseColor(color)?.hex ?? color;
-  const kind = markKind(base);
-  if (kind === 'background') {
-    const a = parseColor(base.background || '')?.alpha;
-    return { ...base, background: formatHexAlpha(hex, a !== undefined && a < 1 ? a : BACKGROUND_ALPHA) };
-  }
-  if (kind === 'text') return { ...base, color: hex };
-  const next: MarkStyle = { ...base, underlineColor: hex };
-  if (base.background) {
-    const a = parseColor(base.background)?.alpha ?? TINT_ALPHA;
-    next.background = formatHexAlpha(hex, a < 1 ? a : TINT_ALPHA);
-  }
+  const hasLine = base.underline !== 'none';
+  const next: MarkStyle = { ...base };
+  if (hasLine) next.underlineColor = hex;
+  if (base.border && base.border !== 'none') next.borderColor = hex;
+  if (base.background) next.background = recolor(base.background, hex, hasLine ? TINT_ALPHA : BACKGROUND_ALPHA);
+  if (base.color && !base.background && !hasLine) next.color = hex;
   return next;
 }
 

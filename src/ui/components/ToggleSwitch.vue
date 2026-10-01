@@ -1,21 +1,22 @@
 <script setup lang="ts">
 /** 开关组件：v-model 布尔值，触屏下点击区域不小于 44px */
 const model = defineModel<boolean>({ required: true });
-defineProps<{ label?: string; description?: string }>();
+defineProps<{ label?: string; description?: string; disabled?: boolean }>();
 </script>
 
 <template>
-  <label class="toggle">
+  <label class="toggle" :class="{ disabled }">
     <span v-if="label || description || $slots.default" class="text">
       <span class="label">{{ label }}<slot /></span>
       <span v-if="description" class="muted">{{ description }}</span>
     </span>
-    <input v-model="model" type="checkbox" role="switch" />
+    <input v-model="model" type="checkbox" role="switch" :disabled="disabled" />
     <span class="track" aria-hidden="true"><span class="thumb" /></span>
   </label>
 </template>
 
 <style scoped>
+.toggle.disabled { cursor: default; opacity: .5; }
 .toggle { display: flex; align-items: center; gap: 12px; min-height: var(--tap); cursor: pointer; }
 .text { flex: 1; display: flex; flex-direction: column; }
 .label { font-weight: 550; }

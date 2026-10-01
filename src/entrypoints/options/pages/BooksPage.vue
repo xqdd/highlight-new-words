@@ -5,7 +5,7 @@ import type { BookMeta } from '@/core/wordbook/types';
 import AppIcon from '@/ui/components/AppIcon.vue';
 import MarkPreview from '@/ui/components/MarkPreview.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
-import { CATEGORY_GROUPS, bookKindLabel, formatCount, isBookEnabled, moveBook, toggleBook } from '../lib/books';
+import { CATEGORY_GROUPS, bookKindLabel, formatCount, isBookEnabled, isKnownRoleBook, moveBook, toggleBook } from '../lib/books';
 import { useOptions } from '../lib/context';
 import BookRow from '../components/BookRow.vue';
 
@@ -19,7 +19,8 @@ const byId = computed(() => new Map(books.value.map((b) => [b.id, b])));
 const enabled = computed(() =>
   settings.value.books.enabled.map((id) => ({ id, meta: byId.value.get(id) })),
 );
-const userBooks = computed(() => books.value.filter((b) => b.kind !== 'builtin'));
+// 作为熟词本的来源词书（如欧路“已掌握”）不参与高亮，不在这里列出，见“熟词”页
+const userBooks = computed(() => books.value.filter((b) => b.kind !== 'builtin' && !isKnownRoleBook(settings.value, b)));
 const groups = computed(() => {
   const known = new Set(CATEGORY_GROUPS.map((g) => g.category));
   return CATEGORY_GROUPS.map((g) => ({

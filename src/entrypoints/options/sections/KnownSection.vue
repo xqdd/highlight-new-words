@@ -9,6 +9,7 @@ import SegmentedControl from '@/ui/components/SegmentedControl.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
 import FileDrop from '../components/FileDrop.vue';
 import ImportSheet, { type ImportSource } from '../components/ImportSheet.vue';
+import KnownSourcesSection from './KnownSourcesSection.vue';
 import { formatCount, relativeTime } from '../lib/books';
 import { errorText, showToast } from '../lib/toast';
 import { IMPORT_FORMATS } from '@/core/import/types';
@@ -125,7 +126,8 @@ const ACCEPT = IMPORT_FORMATS[0]!.accept;
 </script>
 
 <template>
-  <SettingsSection id="known-list" title="熟词本" :description="`共 ${formatCount(entries.length)} 个熟词，在这里的词不会被高亮`" flush>
+  <KnownSourcesSection :local-count="entries.length" />
+  <SettingsSection id="known-list" title="本地熟词本" :description="`共 ${formatCount(entries.length)} 个熟词，在这里的词不会被高亮`" flush>
     <template #actions>
       <button type="button" class="btn small" :disabled="!entries.length" @click="exportAs('txt')"><AppIcon name="download" :size="16" />TXT</button>
       <button type="button" class="btn small" :disabled="!entries.length" @click="exportAs('csv')"><AppIcon name="download" :size="16" />CSV</button>

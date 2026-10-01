@@ -2,9 +2,10 @@
 import { computed, ref } from 'vue';
 import type { InlineTranslationMode } from '@/core/settings/schema';
 import AppIcon, { type IconName } from '@/ui/components/AppIcon.vue';
-import MarkPreview from '@/ui/components/MarkPreview.vue';
 import SegmentedControl from '@/ui/components/SegmentedControl.vue';
 import LivePreview from '../components/LivePreview.vue';
+import PresetCard from '../components/PresetCard.vue';
+import SiteAccessBanner from '../components/SiteAccessBanner.vue';
 import { applyPreset, presetGroups } from '../lib/appearance';
 import { formatCount, isBookEnabled, toggleBook } from '../lib/books';
 import { useOptions } from '../lib/context';
@@ -19,12 +20,13 @@ const step = ref(0);
 const STEPS = ['选择词书', '高亮样式', '生词本与熟词'];
 
 const builtin = computed(() => books.value.filter((b) => b.kind === 'builtin').sort((a, b) => (a.category === b.category ? a.level - b.level : a.category.localeCompare(b.category))));
-const presets = presetGroups().main.slice(0, 8);
+const presets = presetGroups().combos.slice(0, 8);
 
 const INLINE: { value: InlineTranslationMode; label: string }[] = [
   { value: 'off', label: '不显示释义' },
   { value: 'after', label: '词后释义' },
   { value: 'ruby', label: '词上方释义' },
+  { value: 'hover', label: '悬停显示' },
 ];
 
 const NEXT_ACTIONS: { icon: IconName; title: string; desc: string; page: string; anchor?: string }[] = [
@@ -48,6 +50,8 @@ function finish(page = 'books', anchor?: string) {
       </div>
       <button type="button" class="skip" @click="finish()">跳过</button>
     </header>
+
+    <SiteAccessBanner />
 
     <ol class="steps" aria-label="引导进度">
       <li v-for="(s, i) in STEPS" :key="s" :class="{ on: i === step, done: i < step }" :aria-current="i === step ? 'step' : undefined">
@@ -82,19 +86,16 @@ function finish(page = 'books', anchor?: string) {
       <h2>生词怎么显示？</h2>
       <div class="pv"><LivePreview :settings="settings" :books="books" /></div>
       <div class="presets" role="radiogroup" aria-label="预设配色">
-        <button
+        <PresetCard
           v-for="t in presets"
           :key="t.id"
-          type="button"
-          role="radio"
-          class="preset"
-          :aria-label="t.name"
-          :aria-checked="settings.style.themeId === t.id"
+          :mark="t.mark"
+          :name="t.name"
+          :translation="t.translation?.mode"
+          :checked="settings.style.themeId === t.id"
+          compact
           @click="applyPreset(settings, t.id)"
-        >
-          <span class="paper"><MarkPreview :mark="t.mark" word="vivid" /></span>
-          <span class="pname">{{ t.name }}</span>
-        </button>
+        />
       </div>
       <SegmentedControl v-model="settings.inlineTranslation.mode" :options="INLINE" />
       <button type="button" class="link" @click="finish('appearance')">更多配色与取色 →</button>

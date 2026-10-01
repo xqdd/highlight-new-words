@@ -1,35 +1,33 @@
 <script setup lang="ts">
-import { computed, onScopeDispose, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { browser } from 'wxt/browser';
+import { effectiveBookRole } from '@/core/known/sources';
 import { sendToBackground } from '@/core/messaging';
+import { requestDataCollection } from '@/core/platform';
 import { createDefaultSourceSettings } from '@/core/settings/defaults';
-import { SOURCE_PROVIDER_INFOS } from '@/core/source/providers';
-import { STORAGE_KEYS } from '@/core/storage/keys';
-import { getSourceIndex } from '@/core/wordbook/user-store';
-import type { BookMeta, SourceBookIndex, SourceSyncStatus } from '@/core/wordbook/types';
+import type { BookRole } from '@/core/settings/schema';
+import { EUDIC_PROVIDER_ID, SOURCE_PROVIDER_INFOS } from '@/core/source/providers';
+import type { BookMeta, SourceSyncStatus } from '@/core/wordbook/types';
 import AppIcon from '@/ui/components/AppIcon.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
 import ToggleSwitch from '@/ui/components/ToggleSwitch.vue';
 import { formatCount, isBookEnabled, relativeTime, toggleBook } from '../lib/books';
 import { useOptions } from '../lib/context';
+import { useSourceIndex } from '../lib/source-index';
+import { canAddSourceBook, canDeleteSourceBook, setSourceBookRole, toggleSourceKnownBook } from '../lib/word-actions';
 import { errorText, showToast } from '../lib/toast';
 
 /**
  * 云端生词本来源（有道 / 欧路 / 将来更多）：每个来源一张卡片，列出其下的多个远端生词本，
  * 每本独立显示词数、同步状态与时间、错误，可单独同步与启用；来源级设置：自动同步、标记熟词时删除、API token。
+ * 每本远端书可指定用途（生词本 / 熟词本，覆盖 provider 声明）：熟词本不高亮其中的词，在“熟词”页也能管理。
+ * 不支持的操作（不能加词、只读）在书名下用一句话说明原因，来源级限制（capabilities.notes）显示在来源卡片中。
  * 来源列表按 SOURCE_PROVIDER_INFOS 渲染，新增来源无需改 UI。
  */
-const { settings, books } = useOptions();
+const { settings, books, navigate } = useOptions();
 
 // 来源级状态（列表刷新时间/错误）只在 sourceBooks 索引中，useBooks 不带，这里单独读取并监听
-const index = ref<SourceBookIndex>({ books: {}, providers: {} });
-const loadIndex = async () => (index.value = await getSourceIndex());
-const onStorage = (changes: Record<string, unknown>, area: string) => {
-  if (area === 'local' && changes[STORAGE_KEYS.sourceBooks]) void loadIndex();
-};
-browser.storage.onChanged.addListener(onStorage);
-onScopeDispose(() => browser.storage.onChanged.removeListener(onStorage));
-void loadIndex();
+const { index } = useSourceIndex();
 
 /** 正在进行的操作：providerId 或 bookId */
 const busy = ref(new Set<string>());
@@ -103,13 +101,56 @@ function open(url: string) {
   void browser.tabs.create({ url });
 }
 const initial = (name: string) => name.slice(0, 1);
+
+/** 书的生效用途：用户指定 > provider 声明 */
+const roleOf = (b: BookMeta): BookRole => (b.sync ? effectiveBookRole(b.sync, settings.value) : 'new');
+/** 熟词本的“启用”= 参与熟词判定（knownBooks.enabled）；生词本的“启用”= 高亮（books.enabled） */
+const isOn = (b: BookMeta) => (roleOf(b) === 'known' ? settings.value.knownBooks.enabled.includes(b.id) : isBookEnabled(settings.value, b.id));
+function setOn(b: BookMeta, on: boolean) {
+  if (roleOf(b) === 'known') toggleSourceKnownBook(settings.value, b.id, on);
+  else toggleBook(settings.value, b.id, on);
+}
+function changeRole(b: BookMeta, role: BookRole) {
+  if (!b.sync) return;
+  setSourceBookRole(settings.value, b.sync, role);
+  showToast(role === 'known' ? `“${b.sync.name}”改为熟词本：其中的词不再高亮` : `“${b.sync.name}”改为生词本：已从熟词中移出，可在词书页启用高亮`);
+}
+
+/** 书名下的一行能力说明：不能加词/删词的原因（欧路“已掌握”只读、有道非默认分组不能加词等） */
+function capabilityNote(b: BookMeta): string | undefined {
+  const st = b.sync;
+  if (!st || st.orphaned) return undefined;
+  const add = canAddSourceBook(st);
+  const del = canDeleteSourceBook(st);
+  if (add && del) return undefined;
+  if (st.readOnlyReason) return st.readOnlyReason;
+  if (!add && !del) return '只读：不能加词，也不能删词';
+  return add ? '不能删词' : '不能加词，只能删词';
+}
+
+/**
+ * 开启来源：Firefox 需先取得“发送认证信息”数据收集授权（Chrome/Edge 直接返回 true）。
+ * requestDataCollection 必须是点击处理里的第一个异步调用（Firefox 要求在用户操作的同步调用栈内发起）。
+ */
+function setProviderEnabled(cfg: { enabled: boolean }, on: boolean) {
+  if (!on) {
+    cfg.enabled = false;
+    return;
+  }
+  void requestDataCollection(['authenticationInfo']).then((granted) => {
+    if (granted) cfg.enabled = true;
+    else showToast('未授权发送登录信息，无法同步该来源', { tone: 'error' });
+  });
+}
+
+const showTokenGuide = ref(false);
 </script>
 
 <template>
   <div id="providers" class="providers">
     <SettingsSection v-for="p in providers" :id="'provider-' + p.info.id" :key="p.info.id" :title="p.info.name" flush>
       <template #actions>
-        <ToggleSwitch v-model="p.cfg.enabled" :aria-label="'启用' + p.info.name" />
+        <ToggleSwitch :model-value="p.cfg.enabled" :aria-label="'启用' + p.info.name" @update:model-value="(v: boolean) => setProviderEnabled(p.cfg, v)" />
       </template>
 
       <div class="summary">
@@ -134,17 +175,34 @@ const initial = (name: string) => name.slice(0, 1);
           <button type="button" class="btn" @click="open(p.info.loginUrl)"><AppIcon name="link" :size="16" />登录网页版</button>
         </div>
         <p v-if="p.listError" class="err">{{ p.listError }}</p>
+        <ul v-if="p.info.capabilities.notes?.length" class="notes muted">
+          <li v-for="n in p.info.capabilities.notes" :key="n">{{ n }}</li>
+        </ul>
 
         <ul v-if="p.books.length" class="books">
           <li v-for="b in p.books" :key="b.id">
-            <ToggleSwitch :model-value="isBookEnabled(settings, b.id)" :aria-label="'启用 ' + (b.sync?.name ?? b.name)" @update:model-value="(v: boolean) => toggleBook(settings, b.id, v)" />
+            <ToggleSwitch
+              :model-value="isOn(b)"
+              :aria-label="(roleOf(b) === 'known' ? '作为熟词本启用 ' : '高亮 ') + (b.sync?.name ?? b.name)"
+              @update:model-value="(v: boolean) => setOn(b, v)"
+            />
             <div class="info">
               <div class="line">
                 <strong>{{ b.sync?.name ?? b.name }}</strong>
                 <span class="badge" :class="bookStatus(b).tone">{{ bookStatus(b).label }}</span>
                 <span v-if="b.sync?.orphaned" class="badge warn">远端已删除</span>
               </div>
-              <span class="muted">{{ formatCount(b.size) }} 词 · {{ b.sync?.lastSyncAt ? relativeTime(b.sync.lastSyncAt) : '从未同步' }}</span>
+              <span class="muted">
+                {{ formatCount(b.size) }} 词 · {{ b.sync?.lastSyncAt ? relativeTime(b.sync.lastSyncAt) : '从未同步' }}
+              </span>
+              <label class="role">
+                <span class="muted">用作</span>
+                <select :value="roleOf(b)" :aria-label="'用途：' + (b.sync?.name ?? b.name)" @change="changeRole(b, ($event.target as HTMLSelectElement).value as BookRole)">
+                  <option value="new">生词本（高亮）</option>
+                  <option value="known">熟词本（不高亮）</option>
+                </select>
+              </label>
+              <span v-if="capabilityNote(b)" class="cap muted">{{ capabilityNote(b) }}</span>
               <span v-if="(b.sync?.status === 'error' || b.sync?.status === 'empty') && b.sync.error" class="err small">{{ b.sync.error }}</span>
             </div>
             <button type="button" class="icon-btn" :disabled="busy.has(b.id) || busy.has(p.info.id)" :aria-label="'同步 ' + b.name" title="同步这一本" @click="syncProvider(p.info.id, [b.id])">
@@ -158,17 +216,33 @@ const initial = (name: string) => name.slice(0, 1);
           <ToggleSwitch
             v-if="p.info.capabilities.delete"
             v-model="p.cfg.deleteOnKnown"
-            label="标记熟词时，从该生词本删除"
-            description="同时删除同一原形的各种词形（如 ran、running 对应 run）。远端删除后无法通过撤销恢复"
+            label="标记熟词时，从该来源的生词本删除"
+            description="同时删除同一原形的各种词形（如 ran、running 对应 run）。远端删除失败时本地仍保留该词；撤销时尽量加回，不能加词的分组无法恢复"
           />
+          <button type="button" class="link" @click="navigate('sources', 'word-actions')">更细的写入 / 移除目标在“单词操作”中设置 →</button>
           <div v-if="p.info.capabilities.apiToken" class="token">
             <label :for="'token-' + p.info.id">
-              <span class="label">API token（可选）</span>
-              <span class="muted">填写后可按生词本分类分别同步；仅保存在本机，不参与跨设备同步</span>
+              <span class="label">OpenAPI 授权 token{{ p.info.id === EUDIC_PROVIDER_ID ? '（推荐）' : '（可选）' }}</span>
+              <span class="muted">
+                填写后按分类同步、可加词删词{{ p.info.capabilities.knownBooks ? '，并同步“已掌握单词”作为熟词本' : '' }}。默认只保存在本机，可在“同步”页选择随同步上传
+              </span>
             </label>
             <div class="token-row">
               <input :id="'token-' + p.info.id" v-model.trim="p.cfg.apiToken" type="password" autocomplete="off" placeholder="NIS xxxxxxxx" />
               <a v-if="p.info.tokenUrl" class="btn" :href="p.info.tokenUrl" target="_blank" rel="noopener">获取</a>
+            </div>
+            <button type="button" class="link" :aria-expanded="showTokenGuide" @click="showTokenGuide = !showTokenGuide">
+              {{ showTokenGuide ? '收起获取步骤' : '如何获取？为什么改用 token？' }}
+            </button>
+            <div v-if="showTokenGuide" class="guide">
+              <ol>
+                <li>在浏览器中登录欧路网页版（my.eudic.net）。</li>
+                <li>打开 <a v-if="p.info.tokenUrl" :href="p.info.tokenUrl" target="_blank" rel="noopener">OpenAPI 授权页</a>，复制以 <code>NIS</code> 开头的整串授权信息。</li>
+                <li>粘贴到上面的输入框，回到本页点“刷新列表”，即可看到各个分类和“已掌握单词”。</li>
+              </ol>
+              <p class="muted">
+                与旧版不同：旧版用网页登录状态（cookie）只能拉取“全部生词”一本，不能加词，删词会从所有分类删除。token 是欧路官方开放接口，可以按分类同步和写入，也不受网页登录过期影响。不填 token 时仍按旧方式工作。
+              </p>
             </div>
           </div>
         </div>
@@ -206,6 +280,17 @@ const initial = (name: string) => name.slice(0, 1);
 .token-row { display: flex; gap: 8px; }
 .token-row input { flex: 1; min-width: 0; }
 .err { color: var(--danger); margin: 0 18px 10px; font-size: 13px; }
+.notes { margin: 0 18px 12px; padding: 8px 12px 8px 28px; border-radius: 10px; background: var(--surface-2); font-size: 12px; }
+.notes li + li { margin-top: 2px; }
+.role { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; align-self: flex-start; }
+.role select { width: auto; min-height: 30px; padding: 2px 8px; font-size: 12px; }
+@media (pointer: coarse) { .role select { min-height: 36px; } }
+.cap { font-size: 12px; }
+.link { align-self: flex-start; border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 0; min-height: 36px; font-size: 13px; text-align: left; }
+.guide { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13px; }
+.guide ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.guide p { margin: 8px 0 0; font-size: 12px; }
+.guide code { font-size: 12px; padding: 0 4px; border-radius: 4px; background: var(--surface); }
 .err.small { margin: 0; font-size: 12px; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -213,6 +298,7 @@ const initial = (name: string) => name.slice(0, 1);
   .summary, .actions { padding-left: 14px; padding-right: 14px; }
   .books li { padding-left: 14px; padding-right: 8px; }
   .settings { padding: 8px 14px 12px; }
+  .notes { margin: 0 14px 12px; }
   .actions .btn { flex: 1 1 auto; }
 }
 </style>

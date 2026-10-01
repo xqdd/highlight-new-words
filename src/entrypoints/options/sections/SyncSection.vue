@@ -2,6 +2,7 @@
 import { computed, onScopeDispose, ref } from 'vue';
 import { browser } from 'wxt/browser';
 import { sendToBackground } from '@/core/messaging';
+import { detectCapabilities } from '@/core/platform';
 import { STORAGE_KEYS } from '@/core/storage/keys';
 import type { SegmentSyncState, SyncPhase, SyncStatus } from '@/core/sync/types';
 import AppIcon from '@/ui/components/AppIcon.vue';
@@ -17,6 +18,9 @@ import { errorText, showToast } from '../lib/toast';
  */
 const { settings } = useOptions();
 const status = ref<SyncStatus>();
+/** Firefox for Android 的 storage.sync 只存本机、不跨设备（MDN），需提示改用 WebDAV */
+const roams = detectCapabilities().storageSyncRoams;
+const showQuotaRule = ref(false);
 
 const onStorage = (changes: Record<string, { newValue?: unknown }>, area: string) => {
   if (area === 'local' && changes[STORAGE_KEYS.syncState]) status.value = changes[STORAGE_KEYS.syncState]!.newValue as SyncStatus;
@@ -56,8 +60,9 @@ const segLabel = (s: { kind: string; label: string }) => (s.kind === 'localBooks
 </script>
 
 <template>
-  <SettingsSection id="sync" title="跨设备同步" description="设置、熟词本与导入的词书通过浏览器账号（chrome.storage.sync）同步；云端生词本各设备自行拉取">
-    <ToggleSwitch v-model="settings.sync.enabled" label="开启跨设备同步" description="需要浏览器登录账号并开启“扩展程序”同步" />
+  <SettingsSection id="sync" title="浏览器账号同步" description="通过浏览器登录的账号（chrome.storage.sync）同步设置、熟词本与导入的词书；云端生词本各设备自行拉取，不占这里的空间">
+    <p v-if="!roams" class="warn-box">这个浏览器的账号同步只保存在本机，不会同步到其他设备。需要跨设备请使用下方的 WebDAV。</p>
+    <ToggleSwitch v-model="settings.sync.enabled" label="开启浏览器账号同步" description="需要浏览器登录账号并开启“扩展程序”同步" />
     <template v-if="settings.sync.enabled">
       <div class="kinds">
         <ToggleSwitch v-model="settings.sync.include.settings" label="设置" />
@@ -75,6 +80,7 @@ const segLabel = (s: { kind: string; label: string }) => (s.kind === 'localBooks
           <button type="button" class="btn small" :disabled="syncing" @click="syncNow"><AppIcon name="sync" :size="16" :class="{ spin: syncing }" />立即同步</button>
         </div>
         <p v-if="status?.error" class="err">{{ status.error }}</p>
+        <p v-else-if="status?.phase === 'pending' && status.notice" class="muted notice">{{ status.notice }}</p>
         <template v-if="usage">
           <div class="meter" role="meter" :aria-valuenow="Math.round(pct)" aria-valuemin="0" aria-valuemax="100" aria-label="同步空间用量">
             <span :style="{ width: pct + '%' }" :class="{ high: pct > 85 }" />
@@ -91,6 +97,10 @@ const segLabel = (s: { kind: string; label: string }) => (s.kind === 'localBooks
             </li>
           </ul>
         </template>
+        <button type="button" class="link" :aria-expanded="showQuotaRule" @click="showQuotaRule = !showQuotaRule">空间不够时怎么办？</button>
+        <p v-if="showQuotaRule" class="muted rule">
+          浏览器只给每个扩展约 100 KB 同步空间。超出时按“设置 → 熟词本 → 导入的词书（小的优先）”的顺序保留：放不下的词书先只同步单词、不带释义（标“仅单词”），仍放不下的不同步（标“超出配额”），但本机数据不受影响。大词书建议改用 WebDAV 或手动备份。
+        </p>
       </div>
     </template>
   </SettingsSection>
@@ -117,6 +127,10 @@ const segLabel = (s: { kind: string; label: string }) => (s.kind === 'localBooks
 .badge.warn { color: var(--warn); }
 .badge.err { color: var(--danger); background: var(--danger-soft); }
 .err { color: var(--danger); margin: 0; font-size: 13px; }
+.notice { margin: 0; }
+.warn-box { margin: 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn); font-size: 13px; }
+.link { align-self: flex-start; border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 0; min-height: 32px; font-size: 13px; }
+.rule { margin: 0; font-size: 12px; }
 .btn.small { min-height: 32px; padding: 4px 12px; font-size: 13px; }
 @media (pointer: coarse) { .btn.small { min-height: 40px; } }
 .spin { animation: spin 1s linear infinite; }

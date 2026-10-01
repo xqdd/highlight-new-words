@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue';
-import { ATTR_BOOK, ATTR_BOOKS, ATTR_LEMMA, ATTR_ON_DARK, ATTR_TR_MODE } from '@/content/engine/dom';
+import { ATTR_BOOK, ATTR_BOOKS, ATTR_IN_LINK, ATTR_LEMMA, ATTR_ON_DARK, ATTR_TR_MODE } from '@/content/engine/dom';
 import { highlightTextNode, setMarkTranslation } from '@/content/engine/highlighter';
 import { buildPageCss } from '@/content/engine/style';
 import type { InlineTranslationMode, Settings } from '@/core/settings/schema';
@@ -17,7 +17,8 @@ import { markPrimaryColor } from '@/ui/components/palette';
  */
 const props = defineProps<{ settings: Settings; books: BookMeta[]; mode?: InlineTranslationMode; text?: 'full' | 'short' }>();
 
-const FULL_TEXT = 'Scientists remain skeptical about the ambitious proposal, citing insufficient evidence and a notoriously volatile market.';
+/** 完整示例：中间一段放在链接里，检验生词样式不会与网页链接色混淆（Relingo 的已知缺陷） */
+const FULL_TEXT: [string, string, string] = ['Scientists remain skeptical about the ambitious proposal, citing ', 'insufficient evidence', ' and a notoriously volatile market.'];
 const SHORT_TEXT = 'A meticulous and resilient team.';
 const TRANSLATIONS: Record<string, string> = {
   skeptical: '怀疑的',
@@ -33,23 +34,35 @@ const TRANSLATIONS: Record<string, string> = {
 const pageTone = ref<'light' | 'dark'>('light');
 const sample = ref<HTMLElement>();
 
-/** 用 engine 的切分逻辑重建示例段落 */
+/** 用 engine 的切分逻辑重建示例段落（逐个文本节点切分，链接内的文本同样处理） */
 function render() {
   const el = sample.value;
   if (!el) return;
-  el.textContent = props.text === 'short' ? SHORT_TEXT : FULL_TEXT;
+  el.replaceChildren();
+  if (props.text === 'short') el.textContent = SHORT_TEXT;
+  else {
+    const link = Object.assign(document.createElement('a'), { href: '#', textContent: FULL_TEXT[1] });
+    link.addEventListener('click', (e) => e.preventDefault());
+    el.append(FULL_TEXT[0], link, FULL_TEXT[2]);
+  }
+  const texts: Text[] = [];
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) texts.push(walker.currentNode as Text);
   const ids = props.settings.books.enabled.length ? props.settings.books.enabled : [''];
-  const marks = highlightTextNode(el.firstChild as Text, (word) => {
-    const lemma = word.toLowerCase();
-    return lemma in TRANSLATIONS ? { surface: word, lemma, bookIds: [''] } : null;
-  });
-  // highlightTextNode 从后往前切分，这里按返回的文档顺序从左到右依次分配启用的词书，并写入释义
+  const marks = texts.flatMap((t) =>
+    highlightTextNode(t, (word) => {
+      const lemma = word.toLowerCase();
+      return lemma in TRANSLATIONS ? { surface: word, lemma, bookIds: [''] } : null;
+    }),
+  );
+  // highlightTextNode 返回文档顺序，这里从左到右依次分配启用的词书，并写入释义
   marks.forEach((mark, i) => {
     const lemma = mark.getAttribute(ATTR_LEMMA) ?? '';
     const book = ids[i % ids.length]!;
     mark.setAttribute(ATTR_BOOK, book);
     mark.setAttribute(ATTR_BOOKS, book);
     mark.toggleAttribute(ATTR_ON_DARK, pageTone.value === 'dark');
+    mark.toggleAttribute(ATTR_IN_LINK, !!mark.closest('a'));
     setMarkTranslation(mark, TRANSLATIONS[lemma]);
   });
 }
@@ -117,6 +130,14 @@ function releasePreviewCss() {
 .sample { margin: 0; padding: 14px 16px; font: 17px/1.9 Georgia, 'Times New Roman', serif; }
 /* 词上方释义需要更大行距，避免注解压到上一行（预览容器固定了行高） */
 .preview[data-pv-tr='ruby'] .sample { line-height: 2.4; }
+/* 手机：预览吸顶，压缩字号与行距，给下方设置留出空间 */
+@media (max-width: 560px) {
+  .sample { font-size: 15px; line-height: 1.75; padding: 10px 12px; }
+  .preview[data-pv-tr='ruby'] .sample { line-height: 2.2; }
+  .caption { padding: 6px 10px; gap: 4px 10px; }
+}
+.sample :deep(a) { color: #1a5fb4; text-decoration: underline; }
+.dark .sample :deep(a) { color: #8ab4f8; }
 .caption { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; font-size: 12px;
   border-top: 1px solid rgba(127, 127, 127, .2); color: inherit; opacity: .85; }
 .legend { display: inline-flex; align-items: center; gap: 5px; max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
