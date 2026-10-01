@@ -74,20 +74,23 @@ function phonesPage({ title, sub, shots }) {
   <div class="row">${shots.map((s) => `<div class="phone"><div><img src="${raw(s)}"></div></div>`).join('')}</div>`;
 }
 
+// 顺序即商店展示顺序：Chrome 最多 5 张（取 1–5），Edge 最多 6 张（全部上传）
 const SCREENSHOTS = {
   zh: [
-    ['1-card', { title: '网页上的生词，一眼就能看到', sub: '悬停或点按查看音标、释义与词形；认识了就一键标为熟词', body: `<img class="page" src="${raw('desktop-card')}">` }],
+    ['1-card', { title: '网页上的生词，一眼就能看到', sub: '悬停、按住修饰键或点击查看音标、释义与词形；认识了就一键标为熟词', body: `<img class="page" src="${raw('desktop-card')}">` }],
     ['2-inline', { title: '行内释义，不打断阅读', sub: '在生词后或上方显示简短中文释义，可随时切换或关闭', body: `<img class="page" src="${raw('desktop-inline')}">` }],
-    ['3-popup', { title: '本页生词一览', sub: '工具栏弹窗：开关本站高亮、切换词书、查看本页生词', body: `<img class="page" src="${raw('desktop-article')}"><div class="popup"><img src="${raw('desktop-popup')}"></div>` }],
-    ['4-style', { title: '分级词书 + 多种高亮样式', sub: '四六级、考研、雅思、托福、GRE、CEFR 分级与词频书，也可同步有道 / 欧路生词本', body: `<img class="page" src="${raw('desktop-options-appearance')}">` }],
-    ['5-mobile', { phones: true, title: '手机上也能用', sub: 'Edge for Android：点按生词弹出底部卡片，触控友好', shots: ['mobile-article', 'mobile-card', 'mobile-popup'] }],
+    ['3-youtube', { title: 'YouTube 字幕里的生词也标出来', sub: '字幕上方显示释义；Alt+L 暂停并打开当前字幕面板，逐句查词', body: `<img class="page" src="${raw('desktop-yt-panel')}">` }],
+    ['4-mobile', { phones: true, title: '手机上也能用', sub: 'Edge for Android：点按生词弹出底部卡片；悬浮球查看本页生词、快捷设置', shots: ['mobile-article', 'mobile-card', 'mobile-menu'] }],
+    ['5-popup', { title: '本页生词一览', sub: '工具栏弹窗：开关本站高亮、切换词书、查看本页生词与同步状态', body: `<img class="page" src="${raw('desktop-article')}"><div class="popup"><img src="${raw('desktop-popup')}"></div>` }],
+    ['6-style', { title: '分级词书 + 多种高亮样式', sub: '四六级、考研、雅思、托福、GRE、CEFR 分级与词频书，也可同步有道 / 欧路生词本', body: `<img class="page" src="${raw('desktop-options-appearance')}">` }],
   ],
   en: [
-    ['1-card', { title: 'Spot unfamiliar words at a glance', sub: 'Hover or tap for phonetics, meaning and word forms; mark as known in one click', body: `<img class="page" src="${raw('desktop-card')}">` }],
+    ['1-card', { title: 'Spot unfamiliar words at a glance', sub: 'Hover, hold a modifier key or click for phonetics, meaning and word forms', body: `<img class="page" src="${raw('desktop-card')}">` }],
     ['2-inline', { title: 'Inline translations that keep you reading', sub: 'Short Chinese glosses after or above each word, switchable any time', body: `<img class="page" src="${raw('desktop-inline')}">` }],
-    ['3-popup', { title: 'All new words on this page', sub: 'Toolbar popup: toggle per site, switch word books, review page words', body: `<img class="page" src="${raw('desktop-article')}"><div class="popup"><img src="${raw('desktop-popup')}"></div>` }],
-    ['4-style', { title: 'Graded word books, many highlight styles', sub: 'CET, IELTS, TOEFL, GRE, CEFR levels and frequency lists, or sync your Youdao / Eudic word book', body: `<img class="page" src="${raw('desktop-options-appearance')}">` }],
-    ['5-mobile', { phones: true, title: 'Works on mobile too', sub: 'Edge for Android: tap a word for a touch-friendly bottom card', shots: ['mobile-article', 'mobile-card', 'mobile-popup'] }],
+    ['3-youtube', { title: 'New words in YouTube captions, too', sub: 'Glosses above the captions; Alt+L pauses and opens the current-caption panel', body: `<img class="page" src="${raw('desktop-yt-panel')}">` }],
+    ['4-mobile', { phones: true, title: 'Works on mobile too', sub: 'Edge for Android: tap for a bottom card; the floating button lists page words and quick settings', shots: ['mobile-article', 'mobile-card', 'mobile-menu'] }],
+    ['5-popup', { title: 'All new words on this page', sub: 'Toolbar popup: toggle per site, switch word books, review page words and sync status', body: `<img class="page" src="${raw('desktop-article')}"><div class="popup"><img src="${raw('desktop-popup')}"></div>` }],
+    ['6-style', { title: 'Graded word books, many highlight styles', sub: 'CET, IELTS, TOEFL, GRE, CEFR levels and frequency lists, or sync your Youdao / Eudic word book', body: `<img class="page" src="${raw('desktop-options-appearance')}">` }],
   ],
 };
 
@@ -123,6 +126,8 @@ const render = async (html, w, h, file, transparent = false) => {
 };
 
 for (const [lang, list] of Object.entries(SCREENSHOTS)) {
+  // 先清空目录，避免改名或删减后留下旧截图被误传到商店
+  fs.rmSync(path.join(OUT, `screenshots-${lang}`), { recursive: true, force: true });
   fs.mkdirSync(path.join(OUT, `screenshots-${lang}`), { recursive: true });
   for (const [name, spec] of list) {
     await render(spec.phones ? phonesPage(spec) : shotPage(spec), 1280, 800, `screenshots-${lang}/${name}.png`);

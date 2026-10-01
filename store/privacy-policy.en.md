@@ -14,7 +14,7 @@ Effective date: October 1, 2026 (applies to version 3.0.0 and later)
 
 ## 2. Network requests that happen only when you turn a feature on
 
-Requests go directly from your browser to the services below, never through an intermediate server:
+Requests go directly from your browser to the services below, never through an intermediate server. The only one on by default is the Youdao word book source (as in previous versions): at most once a day, when the extension starts, it reads your Youdao word book using only the Youdao login cookie already in your browser. If you are not logged in, the read fails, nothing is stored, and the extension shows that Youdao needs setup; you can turn the source off in the settings.
 
 | Feature | Recipient | What is sent | Purpose |
 | --- | --- | --- | --- |

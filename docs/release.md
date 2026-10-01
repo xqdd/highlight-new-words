@@ -17,8 +17,8 @@
 | [listing.zh_CN.md](../store/listing.zh_CN.md) / [listing.en.md](../store/listing.en.md) | 名称、简短描述、两家商店的详细描述、Edge 搜索词、分类 |
 | [permissions.md](../store/permissions.md) | 单一用途、逐项权限说明、远程代码、数据使用披露（隐私表单填写稿） |
 | [privacy-policy.md](../store/privacy-policy.md) / [privacy-policy.en.md](../store/privacy-policy.en.md) | 隐私政策（需公开托管） |
-| [review-notes.md](../store/review-notes.md) | 审核备注（Edge “Notes for certification”） |
-| [images/](../store/images) | 截图（中英各 5 张）、宣传图、商店图标、Edge 徽标；`raw/` 为真实运行原图 |
+| [review-notes.md](../store/review-notes.md) | 审核备注（Edge “Notes for certification”），含 YouTube 字幕、手机悬浮球的测试步骤与有道默认启用的说明 |
+| [images/](../store/images) | 截图（中英各 6 张：Chrome 传 1–5，Edge 全传）、宣传图、商店图标、Edge 徽标；`raw/` 为真实运行原图 |
 | [scripts/](../store/scripts) | `capture.mjs` 采集原图，`render.mjs` 套模板出图 |
 
 ## 二、构建与打包
@@ -91,10 +91,10 @@ flowchart TD
 
 ## 六、审核注意事项
 
-- **权限最小化**：两家都会逐项核对权限。`cookies` 目前在代码中没有调用（见第十节检查清单），提交前必须移除或补上真实用途，否则会以“申请未使用的权限”拒审。新增权限要同步更新 [permissions.md](../store/permissions.md)。
+- **权限最小化**：两家都会逐项核对权限，每一项都要有真实调用（当前为 `storage`、`unlimitedStorage`、`tts`、`tabs`、`contextMenus`、`scripting`，`cookies` 已移除）。新增权限要同步更新 [permissions.md](../store/permissions.md)。
 - **广泛主机权限**：`http/https` 全站权限会触发更细的人工审核，延长审核时间；理由必须写清“内容脚本需在任意网页本地匹配，不上传页面内容”。
-- **简短描述 ≤ 132 字符**：Chrome 上传时校验，当前英文 `appDesc` 为 164 字符，需先缩短（建议文案见 [listing.en.md](../store/listing.en.md)）。
-- **隐私披露一致**：商店表单、隐私政策、实际网络请求三者必须一致；新增来源/同步方式时三处一起改。
+- **简短描述 ≤ 132 字符**：Chrome 上传时校验，当前中文 55 字符、英文 124 字符。
+- **隐私披露一致**：商店表单、隐私政策、审核备注、实际网络请求必须一致；新增来源/同步方式时一起改。有道来源默认启用（未登录时每天最多一次读取失败、提示未登录或待设置），隐私政策与审核备注都已写明，改默认值时同步修改。
 - **无远程代码**：不得从网络加载并执行脚本；内置数据只能是扩展包内 JSON。
 - **截图真实**：截图来自真实运行（[capture.mjs](../store/scripts/capture.mjs)），界面改版后要重新采集，避免与实际不符。
 - **不得堆砌关键词**、不得在描述中冒用“有道”“欧路”等品牌暗示官方合作；描述中只说明“支持同步其生词本”。
@@ -117,7 +117,7 @@ flowchart TD
 
 | 素材 | Chrome | Edge | 文件 |
 | --- | --- | --- | --- |
-| 截图 | 1280x800 或 640x400，1–5 张，直角无留白 | 1280x800 或 640x480，最多 6 张 | `store/images/screenshots-zh/`、`screenshots-en/` 各 5 张 1280x800 |
+| 截图 | 1280x800 或 640x400，1–5 张，直角无留白 | 1280x800 或 640x480，最多 6 张 | `store/images/screenshots-zh/`、`screenshots-en/` 各 6 张 1280x800（卡片、行内释义、YouTube 字幕、手机与悬浮球、弹窗、样式）；Chrome 传 1–5 |
 | 小宣传图 | 440x280，必填，不可本地化 | 440x280，可选 | `promo-small-440x280.png` |
 | 大宣传图 | 1400x560，可选 | 1400x560，可选 | `promo-marquee-1400x560.png` |
 | 图标 / 徽标 | 128x128 PNG（96 图形 + 16 透明边） | 1:1，建议 300x300 | `icon-store-128.png`、`logo-edge-300.png` |
@@ -126,11 +126,11 @@ flowchart TD
 
 ```bash
 OUT_DIR=/tmp/out npm run build
-node store/scripts/capture.mjs --ext /tmp/out/chrome-mv3   # 真实运行截原图到 store/images/raw/
+node store/scripts/capture.mjs --ext /tmp/out/chrome-mv3   # 真实运行截原图到 store/images/raw/（需要 ffmpeg 生成 YouTube fixture 的视频）
 node store/scripts/render.mjs                              # 套模板生成上表各图
 ```
 
-`capture.mjs` 默认用 Playwright 自带的 Chromium（品牌版 Chrome 137+ 不再支持 `--load-extension`）；传 `--browser <msedge 路径>` 可用真实 Edge 采集。宣传图按 Chrome 建议少放文字、用饱和色铺满。
+`capture.mjs` 默认用 Playwright 自带的 Chromium（品牌版 Chrome 137+ 不再支持 `--load-extension`）；传 `--browser <msedge 路径>` 可用真实 Edge 采集。YouTube 截图把 `www.youtube.com/watch` 路由到离线 fixture [youtube-watch.html](../tests/fixtures/youtube-watch.html)，标题、简介和字幕换成脚本内自写的中性文字，不出现真实视频内容。`render.mjs` 每次先清空截图目录再生成。宣传图按 Chrome 建议少放文字、用饱和色铺满。
 
 ## 九、跨浏览器垫片与兼容性
 
@@ -170,34 +170,36 @@ npm run build:firefox            # 产物 ${OUT_DIR:-.output}/firefox-mv3
 - 加载：Firefox 打开 `about:debugging#/runtime/this-firefox` → “临时载入附加组件” → 选产物中的 `manifest.json`；或 `npx web-ext run -s <产物目录>`。
 - 静态检查：`npx web-ext lint -s <产物目录>`，当前 0 error，3 条 `innerHTML` 警告（卡片模板与 Vue 运行时，已转义，不影响调试）。
 - 自动化：geckodriver + Selenium 安装临时附加组件时，要用 `path` 参数让 Firefox 直接读产物目录；默认的 base64 方式由 geckodriver 写临时文件，Firefox 140 之后内容脚本延迟读取该文件会报 “Unable to load script”。headless Firefox 窗口最小宽 500px，手机尺寸用整页缩放模拟。
-- 已在 Firefox 140.17 ESR 与 157 上验证：`tests/fixtures/article.html` 高亮 98 处 / 86 个原形，悬停与点按卡片、popup、options 正常，无扩展报错；已知差异是后台 TTS 尚未接入垫片（Firefox 无声）。
+- 已在 Firefox 140.17 ESR 与 157 上验证：`tests/fixtures/article.html` 能正常高亮，悬停与点按卡片、popup、options 正常，无扩展报错（高亮处数随词书与释义数据变化，以第十一节当次 Chromium 核对为准，发版前用同一构建在 Firefox 复核数量一致）；已知差异是后台 TTS 尚未接入垫片（Firefox 无声）。
 - 将来上架 AMO 需要补：AMO 描述与图片、源码包（`wxt zip -b firefox` 会自动生成 sources zip）与构建说明、开启来源前的数据收集授权（`requestDataCollection`）。
 
 ## 十一、发版检查清单
 
+最近一次核对：2026-10-01，版本 3.0.0，分支 `refactor/v3` 当前构建。未勾选项写明原因，发版前由人工补齐。
+
 **代码与包**
 
-- [ ] `package.json` 版本号已递增（首发 3.0.0），与 tag 一致
-- [ ] `npm ci && npm run typecheck && npm test` 通过
-- [ ] `npm run zip:stores` 成功；解压 chrome zip 检查 `manifest.json`：版本号、权限列表、无 `browser_specific_settings`
-- [ ] `_locales/*/messages.json`：`appName` ≤ 75 字符、`appDesc` ≤ 132 字符（中英文都查）
-- [ ] 权限列表中每一项都在代码中有真实用途（重点：`cookies`）
-- [ ] 无远程代码：产物中没有对外部脚本 URL 的 `import`/`<script src>`
+- [ ] `package.json` 版本号已递增（首发 3.0.0），与 tag 一致 —— 版本号为 3.0.0；tag `v3.0.0` 待发版提交时打
+- [ ] `npm ci && npm run typecheck && npm test` 通过（以发版提交为准重跑；2026-10-01 最近一次全量为 485 通过、1 跳过，另有并行开发中的 `options-fix`、`lemma` 用例未收尾，发版前须全绿）
+- [x] `npm run zip:stores` 成功；解压 chrome zip 检查 `manifest.json`：版本号 3.0.0、权限 `storage`/`unlimitedStorage`/`tts`/`tabs`/`contextMenus`/`scripting`、无 `browser_specific_settings`
+- [x] `_locales/*/messages.json`：`appName` ≤ 75 字符、`appDesc` ≤ 132 字符（中文 20/55，英文 66/124）
+- [x] 权限列表中每一项都在代码中有真实用途（`cookies` 已移除）
+- [x] 无远程代码：产物中没有对外部脚本 URL 的 `import`/`<script src>`
 
 **实机验证**
 
-- [ ] 在 Chromium 与真实 Edge 中加载产物：`article.html` 高亮、卡片、popup、options 正常，控制台无扩展报错（`scripts/qa/shot.mjs` 可批量截图）
-- [ ] 手机尺寸（Edge for Android UA）卡片为底部样式、触控正常
-- [ ] 旧版 v2 数据迁移正常（升级用户）
-- [ ] 有道 / 欧路来源用真实账号冒烟（仅只读与测试词）
+- [ ] 在 Chromium 与真实 Edge 中加载产物：`article.html` 高亮、卡片、popup、options 正常，控制台无扩展报错（`scripts/qa/shot.mjs` 可批量截图）—— Chromium 已验证（2026-10-01 18:36 构建，手机与桌面均 88 处高亮 / 80 个原形，无页面错误）；本机没有 Edge，待人工在 Edge 中加载
+- [x] 手机尺寸（Edge for Android UA）卡片为底部样式、触控正常，悬浮球与菜单正常（见截图 `4-mobile`）
+- [x] 旧版 v2 数据迁移正常（升级用户）—— 由 `tests/unit/migrate.test.ts` 覆盖
+- [ ] 有道 / 欧路来源用真实账号冒烟（仅只读与测试词）—— 发版前按调试账号规则人工执行
 
 **商店材料**
 
-- [ ] 截图与当前界面一致，否则重新 `capture.mjs` + `render.mjs`
-- [ ] 详细描述中列出的功能都已上线（如 WebDAV、凭据随同步上传等未上线的功能不写）
-- [ ] [permissions.md](../store/permissions.md) 与 manifest 权限逐项一致
-- [ ] 隐私政策已托管且可公开访问，内容与实际网络请求一致，描述中的占位网址已替换
-- [ ] 更新说明（GitHub Release）写明新增权限或行为变化
+- [x] 截图与当前界面一致，否则重新 `capture.mjs` + `render.mjs`（2026-10-01 18:36 在词书与释义数据最后一次重建（18:28）之后用当前构建重新采集，含 YouTube 字幕面板与手机悬浮球；之后若再改 `public/data` 或界面，须重新采集）
+- [x] 详细描述中列出的功能都已上线，且覆盖全部功能（YouTube 字幕、悬浮球、代码块标注、卡片触发方式、加入生词本、WebDAV 与手动备份）；中文约 1,300 字符、英文约 3,700 字符，符合 Edge 250–10,000
+- [x] [permissions.md](../store/permissions.md) 与 manifest 权限逐项一致
+- [ ] 隐私政策已托管且可公开访问，内容与实际网络请求一致，描述中的占位网址已替换 —— 内容已与实际请求一致（含有道默认启用说明）；托管与占位网址替换待推送公开仓库后完成
+- [ ] 更新说明（GitHub Release）写明新增权限或行为变化 —— 发版时编写
 
 **提交后**
 
