@@ -17,11 +17,11 @@ const PANEL_CSS = `
 ${BASE_CSS}
 .panel {
   position: fixed; pointer-events: auto; display: flex; flex-direction: column; background: var(--bg); box-shadow: var(--shadow); overflow: hidden;
-  border-radius: 16px; max-height: min(70vh, 520px);
+  border-radius: 16px; max-height: min(70%, 520px);
   opacity: 0; transform: translateY(-6px); transition: opacity .16s, transform .16s;
 }
 .panel.in { opacity: 1; transform: none; }
-.panel.sheet { border-radius: 18px 18px 0 0; max-height: min(62vh, 560px); transform: translateY(100%); opacity: 1; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.panel.sheet { border-radius: 18px 18px 0 0; max-height: min(62%, 560px); transform: translateY(100%); opacity: 1; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
 .panel.sheet.in { transform: none; }
 .head .time { font-weight: 400; font-size: 12px; color: var(--muted); margin-left: 8px; font-variant-numeric: tabular-nums; }
 .body { padding: 4px 16px 8px; }
@@ -66,6 +66,7 @@ export interface CaptionData {
  */
 export class CaptionPanel {
   private overlay: OverlayHost | null = null;
+  private offFrame: (() => void) | null = null;
   private panel: HTMLElement | null = null;
   private sentences: Cue[] = [];
   private index = -1;
@@ -106,7 +107,8 @@ export class CaptionPanel {
     this.overlay.ui.appendChild(this.panel);
     this.layout();
     window.addEventListener('keydown', this.onKey, true);
-    window.addEventListener('resize', this.layout, { passive: true });
+    // 旋转、键盘弹出、双指缩放时重新布局（宿主铺满屏幕可见区域，见 floatball/host.ts）
+    this.offFrame = this.overlay.onFrameChange(this.layout);
     getVideo(doc)?.addEventListener('timeupdate', this.onTime);
     await this.load();
     requestAnimationFrame(() => this.panel?.classList.add('in'));
@@ -118,7 +120,8 @@ export class CaptionPanel {
     if (!panel) return;
     this.panel = null;
     window.removeEventListener('keydown', this.onKey, true);
-    window.removeEventListener('resize', this.layout);
+    this.offFrame?.();
+    this.offFrame = null;
     getVideo(this.ctx.doc)?.removeEventListener('timeupdate', this.onTime);
     const card = this.ctx.getCard();
     if (card?.isOpen && card.anchor && panel.contains(card.anchor)) card.close();
@@ -202,12 +205,15 @@ export class CaptionPanel {
       Object.assign(p.style, { left: '0', right: '0', bottom: '0', top: '', width: '100%', maxWidth: '560px', margin: '0 auto' });
       return;
     }
-    // 桌面：浮在播放器顶部居中（不遮住底部的字幕与进度条）
-    const r = getPlayer(this.ctx.doc)?.getBoundingClientRect();
-    const vw = document.documentElement.clientWidth || innerWidth;
+    // 桌面：浮在播放器顶部居中（不遮住底部的字幕与进度条）。播放器矩形是 client 坐标，换算成宿主局部坐标
+    const overlay = this.overlay!;
+    const frame = overlay.frame();
+    const pr = getPlayer(this.ctx.doc)?.getBoundingClientRect();
+    const r = pr && { ...overlay.toLocal(pr.left, pr.top), width: pr.width * frame.scale, height: pr.height * frame.scale };
+    const vw = frame.width;
     const width = Math.min(680, (r?.width ?? vw) - 24, vw - 16);
-    const left = r ? r.left + (r.width - width) / 2 : (vw - width) / 2;
-    const top = r ? Math.max(8, r.top + 12) : 16;
+    const left = r ? r.x + (r.width - width) / 2 : (vw - width) / 2;
+    const top = r ? Math.max(8, r.y + 12) : 16;
     Object.assign(p.style, { left: `${Math.max(8, left)}px`, top: `${top}px`, width: `${width}px`, maxHeight: r ? `${Math.max(220, r.height - 96)}px` : '' });
   };
 

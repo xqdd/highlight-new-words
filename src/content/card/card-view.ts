@@ -20,7 +20,7 @@ import {
   type HintSegment,
   type Notice,
 } from './word-actions';
-import { describeForm, dictLinks, formatPhonetic, parseDefinitions } from './word-info';
+import { describeForm, dictLinks, formatPhonetic, parseDefinitions, surfaceOwnSenses } from './word-info';
 
 /** 视口宽度不超过该值（或设备无悬停能力）时使用底部卡片布局 */
 const SHEET_MAX_VIEWPORT = 600;
@@ -51,6 +51,8 @@ interface WordContext {
   deleteStates?: Record<BookId, SourceBookState | undefined>;
   /** 打包词典的完整释义（不受用户生词本释义覆盖） */
   dict?: DictEntry;
+  /** 页面词形自己的打包词典词条（advanced 之于 advance），用于展示分词作形容词等独立义项，见 surfaceOwnSenses */
+  surfaceDict?: DictEntry;
 }
 
 /** toast 上的操作按钮（撤销） */
@@ -294,6 +296,11 @@ export class ShadowCardView implements CardView {
       apply({});
     }, ignore);
     this.backend.lookupDict?.(data.lemma).then((dict) => dict && apply({ dict }), ignore);
+    // 页面词形与命中原形不同时也查词形自己的词条：advanced 是常用形容词“先进的”，原形 advance 的释义里没有
+    const surfaceWord = data.surface.toLowerCase();
+    if (surfaceWord !== data.lemma.toLowerCase()) {
+      this.backend.lookupDict?.(surfaceWord).then((surfaceDict) => surfaceDict && apply({ surfaceDict }), ignore);
+    }
     if (data.deletableBooks.length) {
       this.backend.sourceStates(data.deletableBooks.map((b) => b.id)).then((s) => apply({ deleteStates: s }), ignore);
     }
@@ -354,6 +361,7 @@ export class ShadowCardView implements CardView {
     const phon = formatPhonetic(e?.phonetic ?? dict?.phonetic);
     const form = describeForm(data.surface, data.lemma);
     const defs = parseDefinitions(main?.short, main?.full);
+    const surfaceSenses = surfaceOwnSenses(data.surface, data.lemma, this.ctx.surfaceDict);
     const clamp = !this.expanded && defs.length > DEF_CLAMP_LINES;
 
     let defsNode: Child[];
@@ -398,6 +406,16 @@ export class ShadowCardView implements CardView {
       { class: 'body' },
       form &&
         h(d, 'div', { class: 'form' }, h(d, 'b', { lang: 'en' }, data.surface), h(d, 'span', { class: 'rel' }, form), h(d, 'span', {}, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma))),
+      // 页面词形自己的义项（advanced adj. 先进的）排在原形释义前，与行内注解一致
+      surfaceSenses.length > 0 &&
+        h(
+          d,
+          'div',
+          { class: 'surface-defs' },
+          h(d, 'div', { class: 'ut-label' }, '本页词形 ', h(d, 'b', { lang: 'en' }, data.surface.toLowerCase())),
+          h(d, 'ul', { class: 'defs' }, ...surfaceSenses.map((x) => h(d, 'li', {}, h(d, 'span', { class: 'pos' }, x.pos), x.text))),
+          h(d, 'div', { class: 'ut-label' }, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma)),
+        ),
       ...defsNode,
       userTrans && h(d, 'div', { class: 'user-trans' }, h(d, 'span', { class: 'ut-label' }, '生词本释义'), h(d, 'span', {}, userTrans)),
       data.books.length > 0 && h(d, 'div', { class: 'tags' }, ...data.books.map((b) => bookTag(d, b))),

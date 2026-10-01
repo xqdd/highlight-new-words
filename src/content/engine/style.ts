@@ -4,6 +4,7 @@ import { DARK_PAGE_BG, LIGHT_PAGE_BG, ensureContrast, isOpaque, parseColor } fro
 import {
   ATTR_BOOK,
   ATTR_CODE,
+  ATTR_CODE_FLOAT,
   ATTR_IN_LINK,
   ATTR_LOW_CONFIDENCE,
   ATTR_NO_GLOSS,
@@ -225,6 +226,10 @@ function translationRules(settings: Settings): string[] {
     out.push(
       `${M}[${ATTR_CODE}]>${TR}{${float.replace('display:block', 'display:block!important')};font-size:10px;line-height:1.3;padding:0 4px;opacity:.88;font-family:system-ui,sans-serif}`,
       `${M}[${ATTR_CODE}]>${TR}::before{content:attr(${ATTR_TR_TEXT})}`,
+      // engine 按排版计算的摆放（见 engine 的 planCodeFloats）：首行/与左侧标注重叠时放单词下方，上下都放不下时只在悬停时显示
+      `${M}[${ATTR_CODE}][${ATTR_CODE_FLOAT}=below]>${TR}{bottom:auto;top:100%;transform:translate(-50%,3px)}`,
+      `${M}[${ATTR_CODE}][${ATTR_CODE_FLOAT}=none]>${TR}{display:none!important}`,
+      `@media (hover:hover){${M}[${ATTR_CODE}][${ATTR_CODE_FLOAT}=none]:hover>${TR}{display:block!important}}`,
     );
   }
   // 不显示占位译文的位置（悬停模式仍可看，卡片照常）：

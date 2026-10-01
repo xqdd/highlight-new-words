@@ -46,6 +46,11 @@ export const ATTR_LOW_CONFIDENCE = 'data-hnw-lowconf';
  * 仍然高亮，悬停/卡片照常可看释义。
  */
 export const ATTR_NO_GLOSS = 'data-hnw-nogloss';
+/**
+ * hnw-mark 上的标记：代码“浮动小标注”的摆放（engine 按实际排版计算，见 planCodeFloats）。
+ * 缺省=单词上方；below=单词下方（代码块首行上方会被滚动容器裁掉、或与同一行左侧标注重叠时）；none=上下都放不下，只在悬停时显示。
+ */
+export const ATTR_CODE_FLOAT = 'data-hnw-float';
 /** hnw-tr 上的标记：模糊自测模式下已点开 */
 export const ATTR_REVEALED = 'data-hnw-revealed';
 /** hnw-mark 上的标记：卡片当前锚定的单词（激活态，由 card 分片设置并提供样式） */

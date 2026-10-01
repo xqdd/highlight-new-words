@@ -10,15 +10,18 @@ import {
   SAFE_BOTTOM,
   SAFE_TOP,
   clampCenterY,
+  computeOverlayFrame,
   hostMatches,
   isTouchPrimary,
   parsePos,
   snapPosition,
   syncFootText,
   tokenize,
+  toFrameLocal,
   toggleHostRule,
   wordAt,
 } from '@/content/floatball/model';
+import { createOverlayHost } from '@/content/floatball/host';
 import { ballX, IDLE_SCALE, IDLE_VISIBLE } from '@/content/floatball/css';
 import { availableFloatActions, overlayRoot, registerFloatAction, registerOverlayHost, relocateOverlayHosts } from '@/content/floatball/registry';
 import { CaptionDecorator, buildCaptionCss } from '@/content/sites/youtube/captions';
@@ -98,11 +101,12 @@ describe('floatball 纯逻辑', () => {
     expect(ballX('right', vw, false)).toBe(vw - BALL_SIZE - 8);
   });
 
-  it('底栏同步文案：未登录/失效只提示“待设置”，不常驻原始报错', () => {
-    const item = (name: string, level: 'ok' | 'never' | 'error') => ({ id: name, kind: 'source' as const, name, level, text: `${name}：未登录或登录已失效`, lastSyncAt: 0, href: '#sources' });
-    expect(syncFootText({ level: 'error', text: '有道：未登录有道或登录已失效', items: [item('有道', 'never')] })).toEqual({ level: 'off', text: '有道待设置' });
-    expect(syncFootText({ level: 'error', text: 'x', items: [item('浏览器账号同步', 'ok'), item('有道', 'error')] })).toEqual({ level: 'warn', text: '已同步 1 项 · 有道待设置' });
-    expect(syncFootText({ level: 'ok', text: '已全部同步', items: [item('浏览器账号同步', 'ok')] })).toEqual({ level: 'ok', text: '已全部同步' });
+  it('底栏同步文案：未连接中性灰、成功过再失败才是“同步出错”，不常驻原始报错', () => {
+    const item = (name: string, level: 'ok' | 'never' | 'error', text = `${name}：未登录或登录已失效`) => ({ id: name, kind: 'source' as const, name, level, text, lastSyncAt: 0, href: '#sources' });
+    expect(syncFootText({ level: 'never', text: 'x', items: [item('有道词典', 'never', '未连接')] })).toEqual({ level: 'off', text: '有道词典未连接' });
+    expect(syncFootText({ level: 'never', text: 'x', items: [item('浏览器账号同步', 'ok'), item('有道词典', 'never', '未连接')] })).toEqual({ level: 'off', text: '已同步 1 项 · 有道词典未连接' });
+    expect(syncFootText({ level: 'error', text: 'x', items: [item('浏览器账号同步', 'ok'), item('有道', 'error')] })).toEqual({ level: 'error', text: '已同步 1 项 · 有道同步出错' });
+    expect(syncFootText({ level: 'ok', text: '已全部同步', items: [item('A', 'ok')] })).toEqual({ level: 'ok', text: '已全部同步' });
   });
 
   it('tokenize 保留全部原文字符', () => {
@@ -440,4 +444,46 @@ describe('YouTube 字幕生词卡片避让字幕', () => {
     expect(fs.left).toBe(600 + 8);
     expect(inter(fs, block)).toBe(0);
   });
+});
+
+describe('floatball 浮层铺满屏幕可见区域', () => {
+  it('页面横向溢出（布局视口被撑宽）时按 visualViewport 取屏幕宽度', () => {
+    // 布局视口被 nowrap 导航撑到 700px，屏幕实际只显示 390px
+    const f = computeOverlayFrame({ offsetLeft: 0, offsetTop: 0, scale: 1, width: 390, height: 844 }, { width: 700, height: 1515 });
+    expect(f).toEqual({ x: 0, y: 0, scale: 1, width: 390, height: 844 });
+  });
+  it('双指放大并平移后：宿主局部尺寸保持屏幕尺寸，client 坐标正确换算', () => {
+    const f = computeOverlayFrame({ offsetLeft: 100, offsetTop: 50, scale: 2, width: 195, height: 422 }, { width: 390, height: 844 });
+    expect(f).toEqual({ x: 100, y: 50, scale: 2, width: 390, height: 844 });
+    // 可见区域左上角 → (0,0)，右下角 → (390,844)
+    expect(toFrameLocal(f, 100, 50)).toEqual({ x: 0, y: 0 });
+    expect(toFrameLocal(f, 295, 472)).toEqual({ x: 390, y: 844 });
+  });
+  it('不支持 visualViewport 时退回布局视口', () => {
+    expect(computeOverlayFrame(undefined, { width: 390, height: 844 })).toEqual({ x: 0, y: 0, scale: 1, width: 390, height: 844 });
+  });
+});
+
+describe('floatball 浮层深浅色与卡片同一判定（按网页背景）', () => {
+  const settingsOf = () => normalizeSettings(createDefaultSettings()) as Settings;
+  const withSystemDark = (dark: boolean) =>
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: dark && q.includes('dark'), media: q, addEventListener() {}, removeEventListener() {} }));
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.removeAttribute('style');
+    document.documentElement.innerHTML = '<head></head><body></body>';
+  });
+  for (const system of [false, true]) {
+    it(`系统${system ? '深色' : '浅色'} × 网页深色 → 深色；× 网页浅色 → 浅色`, () => {
+      withSystemDark(system);
+      document.body.style.background = '#111418';
+      const o = createOverlayHost(document, 'hnw-test-host', '');
+      o.setTheme(settingsOf());
+      expect(o.host.getAttribute('data-theme')).toBe('dark');
+      document.body.style.background = '#ffffff';
+      o.setTheme(settingsOf());
+      expect(o.host.getAttribute('data-theme')).toBe('light');
+      o.destroy();
+    });
+  }
 });

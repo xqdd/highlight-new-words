@@ -95,6 +95,7 @@ class FloatBallView {
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
   private badgeTimer: ReturnType<typeof setInterval> | undefined;
   private suppressClickUntil = 0;
+  private readonly offFrame: () => void;
   private drag: { id: number; dx: number; dy: number; x0: number; y0: number; moved: boolean } | null = null;
 
   constructor(private readonly ctx: SiteContext) {
@@ -103,7 +104,7 @@ class FloatBallView {
     this.badge = h(doc, 'span', { class: 'badge', hidden: true });
     this.ball = h(doc, 'button', { type: 'button', class: 'ball right', 'aria-label': '生词高亮：打开菜单' }, svgIcon(doc, 'logo', 24), this.badge);
     this.overlay.ui.appendChild(this.ball);
-    this.pick = new PickMode(ctx, this.overlay.ui, this.overlay.host, (on) => {
+    this.pick = new PickMode(ctx, this.overlay, (on) => {
       this.ball.classList.toggle('picking', on);
       this.ball.setAttribute('aria-label', on ? '退出取词模式' : '生词高亮：打开菜单');
       this.wake();
@@ -123,7 +124,7 @@ class FloatBallView {
     });
     setFloatMenuOpener(() => this.menu.open());
     this.bindDrag();
-    window.addEventListener('resize', this.onResize, { passive: true });
+    this.offFrame = this.overlay.onFrameChange(() => this.place());
     window.addEventListener('scroll', this.onScroll, { capture: true, passive: true });
     void browser.storage.local.get(STORAGE_KEYS.floatBallPos).then((r) => {
       this.pos = parsePos(r[STORAGE_KEYS.floatBallPos]);
@@ -152,7 +153,7 @@ class FloatBallView {
   destroy(): void {
     clearTimeout(this.idleTimer);
     clearInterval(this.badgeTimer);
-    window.removeEventListener('resize', this.onResize);
+    this.offFrame();
     window.removeEventListener('scroll', this.onScroll, true);
     this.pick.destroy();
     this.menu.close();
@@ -168,9 +169,9 @@ class FloatBallView {
 
   // ---------------- 位置 ----------------
 
+  /** x/y：宿主局部坐标（拖动中）；不传则按记忆的位置贴边。宽高取屏幕可见区域（见 host.ts），页面横向溢出或双指缩放时球仍在屏幕边缘 */
   private place(x?: number, y?: number): void {
-    const vw = document.documentElement.clientWidth || innerWidth;
-    const vh = innerHeight;
+    const { width: vw, height: vh } = this.overlay.frame();
     const left = x ?? ballX(this.pos.side, vw, this.idle);
     const top = (y ?? clampCenterY(this.pos.y, vh)) - (y === undefined ? BALL_SIZE / 2 : 0);
     // 空闲时缩小（以球心为原点）：拖动中与展开状态不缩放
@@ -201,7 +202,6 @@ class FloatBallView {
     this.place();
   }
 
-  private readonly onResize = () => this.place();
   private readonly onScroll = () => {
     if (!this.idle && !this.pick.active && !this.drag) this.sleep();
   };
@@ -212,8 +212,11 @@ class FloatBallView {
     const b = this.ball;
     b.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
+      // 拖动全程用宿主局部坐标（指针的 client 坐标先换算）
       const r = b.getBoundingClientRect();
-      this.drag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top, x0: e.clientX, y0: e.clientY, moved: false };
+      const p = this.overlay.toLocal(e.clientX, e.clientY);
+      const r0 = this.overlay.toLocal(r.left, r.top);
+      this.drag = { id: e.pointerId, dx: p.x - r0.x, dy: p.y - r0.y, x0: e.clientX, y0: e.clientY, moved: false };
       b.setPointerCapture?.(e.pointerId);
     });
     b.addEventListener('pointermove', (e) => {
@@ -227,9 +230,10 @@ class FloatBallView {
         this.idle = false;
         b.classList.remove('idle');
       }
-      const vw = document.documentElement.clientWidth || innerWidth;
-      const x = Math.min(vw - BALL_SIZE, Math.max(0, e.clientX - d.dx));
-      const y = Math.min(innerHeight - BALL_SIZE, Math.max(0, e.clientY - d.dy));
+      const { width: vw, height: vh } = this.overlay.frame();
+      const p = this.overlay.toLocal(e.clientX, e.clientY);
+      const x = Math.min(vw - BALL_SIZE, Math.max(0, p.x - d.dx));
+      const y = Math.min(vh - BALL_SIZE, Math.max(0, p.y - d.dy));
       this.place(x, y);
     });
     const end = (e: PointerEvent) => {
@@ -240,8 +244,9 @@ class FloatBallView {
       if (!d.moved) return;
       // 拖动结束：吸附并记忆；随后浏览器补发的 click 不当作点按
       this.suppressClickUntil = performance.now() + 400;
-      const vw = document.documentElement.clientWidth || innerWidth;
-      this.pos = snapPosition(e.clientX - d.dx + BALL_SIZE / 2, e.clientY - d.dy + BALL_SIZE / 2, vw, innerHeight);
+      const { width: vw, height: vh } = this.overlay.frame();
+      const p = this.overlay.toLocal(e.clientX, e.clientY);
+      this.pos = snapPosition(p.x - d.dx + BALL_SIZE / 2, p.y - d.dy + BALL_SIZE / 2, vw, vh);
       this.place();
       void browser.storage.local.set({ [STORAGE_KEYS.floatBallPos]: this.pos });
       this.wake();

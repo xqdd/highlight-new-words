@@ -93,6 +93,10 @@ describe('trigger-config', () => {
     expect(triggerSignature({ mode: 'modifier', modifier: 'shift' })).toBe('modifier:shift');
     expect(cardTriggerHintText({ mode: 'modifier', modifier: 'alt' }, true)).toContain('⌥');
     expect(cardTriggerHintText({ mode: 'click', modifier: 'alt' }, true)).toContain('⌘');
+    // 三种方式的首次提示句式一致，均以设置入口路径结尾
+    for (const mode of ['hover', 'modifier', 'click'] as const) {
+      expect(cardTriggerHintText({ mode, modifier: 'alt' }, false)).toMatch(/。可在 设置 › 外观 › 释义卡片 更改$/);
+    }
   });
 
   it('旧设置补齐 card.modifier，旧 trigger 原样保留', () => {

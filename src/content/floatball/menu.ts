@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { sendToBackground } from '@/core/messaging';
 import type { StatusSummary } from '@/core/messaging/protocol';
+import { INLINE_MODE_LABELS, INLINE_MODE_ORDER, INLINE_TRANSLATION_NAME } from '@/core/settings/inline-translation-labels';
 import type { InlineTranslationMode, Settings } from '@/core/settings/schema';
 import { isSiteDisabled, saveSettings } from '@/core/settings/store';
 import { markStyleToCss, resolveMarkStyle } from '@/core/theme/resolve';
@@ -21,12 +22,8 @@ import { availableFloatActions } from './registry';
 
 type Tab = 'words' | 'settings';
 
-const INLINE_MODES: Array<{ value: InlineTranslationMode; label: string }> = [
-  { value: 'off', label: '关闭' },
-  { value: 'after', label: '词后' },
-  { value: 'ruby', label: '上方' },
-  { value: 'hover', label: '悬停' },
-];
+// 行内译文模式：与选项页、引导、popup 同一组短标签（core/settings/inline-translation-labels）
+const INLINE_MODES: Array<{ value: InlineTranslationMode; label: string }> = INLINE_MODE_ORDER.map((value) => ({ value, label: INLINE_MODE_LABELS[value] }));
 const CAPTION_MODES: Array<{ value: Settings['youtube']['captionTranslation']; label: string }> = [
   { value: 'above', label: '上方' },
   { value: 'after', label: '词后' },
@@ -50,7 +47,7 @@ export interface MenuDeps {
 /**
  * 悬浮球菜单（底部抽屉）：
  * - 顶部功能块：站点功能项（如 YouTube“当前字幕”）、取词模式、本站高亮开关
- * - 标签页：本页生词（点开卡片 / 认识）｜快捷设置（行内释义、样式预设、词书、字幕译文、悬浮球隐藏）
+ * - 标签页：本页生词（点开卡片 / 认识）｜快捷设置（行内译文、样式预设、词书、字幕译文、悬浮球隐藏）
  * - 底栏：同步状态（点按立即同步全部）、完整设置
  * 设置写入直接改 storage 中的 settings（与 popup 同一份数据），熟词与同步走 background 消息。
  */
@@ -76,6 +73,8 @@ export class FloatMenu {
     if (this.sheet) return;
     const doc = this.deps.ctx.doc;
     this.deps.overlay.ensureMounted();
+    // 打开时按当前网页背景重新判定深浅色（与卡片一致；页面可能在加载后切换了深浅主题）
+    this.deps.overlay.setTheme(this.deps.ctx.getSettings());
     this.scrim = h(doc, 'div', { class: 'scrim', onclick: () => this.close() });
     this.sheet = h(doc, 'div', { class: 'sheet', role: 'dialog', 'aria-label': '生词高亮菜单' });
     this.deps.overlay.ui.append(this.scrim, this.sheet);
@@ -265,7 +264,7 @@ export class FloatMenu {
         items.map((it) => h(doc, 'button', { type: 'button', 'aria-pressed': String(it.value === current), onclick: () => set(it.value) }, it.label)),
       );
 
-    groups.push(group('行内释义', seg(INLINE_MODES, s.inlineTranslation.mode, (v) => this.update((n) => void (n.inlineTranslation.mode = v)))));
+    groups.push(group(INLINE_TRANSLATION_NAME, seg(INLINE_MODES, s.inlineTranslation.mode, (v) => this.update((n) => void (n.inlineTranslation.mode = v)))));
 
     if (isYouTubeHost(location.hostname)) {
       groups.push(

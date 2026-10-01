@@ -4,7 +4,7 @@ import path from 'node:path';
 import { ShadowCardView, fitContrast, isDarkBackground, luminance } from '@/content/card/card-view';
 import { bindCardTrigger } from '@/content/card/trigger';
 import type { CardActions, CardData } from '@/content/card/types';
-import { describeForm, dictLinks, formatPhonetic, parseDefinitions } from '@/content/card/word-info';
+import { describeForm, dictLinks, formatPhonetic, parseDefinitions, surfaceOwnSenses } from '@/content/card/word-info';
 import {
   buildAddTargets,
   addNotice,
@@ -15,6 +15,7 @@ import {
   type AddTargetOption,
   type CardBackend,
 } from '@/content/card/word-actions';
+import type { DictEntry } from '@/core/dict/types';
 import type { WordActionPreview } from '@/core/messaging/protocol';
 import { createDefaultSettings } from '@/core/settings/defaults';
 import type { BookMeta, SourceBookState } from '@/core/wordbook/types';
@@ -23,6 +24,20 @@ const cet6: BookMeta = { id: 'cet6', name: '大学英语六级', nameEn: 'CET-6'
 const eudic: BookMeta = { id: 'src:eudic:-1', name: '欧路·生词本', nameEn: 'Eudic', short: '欧路', kind: 'source', category: 'user', level: 0, size: 0, providerId: 'eudic' };
 
 describe('word-info', () => {
+  it('surfaceOwnSenses：常用 -ed/-ing 形容词展示页面词形自己的非动词义项（backlog #121）', () => {
+    // 打包词典原文（public/data/dict/full/a.json 等）
+    const advanced = { word: 'advanced', short: '先进的', full: 'adj. 先进的；高级的；晚期的；年老的\nv. 前进；增加；上涨（advance的过去式和过去分词形式）' };
+    expect(surfaceOwnSenses('advanced', 'advance', advanced)).toEqual([{ pos: 'adj.', text: '先进的；高级的；晚期的；年老的' }]);
+    expect(surfaceOwnSenses('Limited', 'limit', { word: 'limited', short: '有限的', full: 'adj. 有限的\nn. 高级快车' }).map((x) => x.pos)).toEqual(['adj.', 'n.']);
+    expect(surfaceOwnSenses('experienced', 'experience', { word: 'experienced', full: 'adj. 老练的，熟练的；富有经验的' })[0]?.text).toContain('老练的');
+    expect(surfaceOwnSenses('interesting', 'interest', { word: 'interesting', full: 'adj. 有趣的；引起兴趣的，令人关注的' })).toHaveLength(1);
+    // 只有动词义的变形词条、没有词条、同形、非分词关系都不额外展示
+    expect(surfaceOwnSenses('advanced', 'advance', { word: 'advanced', full: 'vt.vi. 前进（advance的过去式）' })).toEqual([]);
+    expect(surfaceOwnSenses('walked', 'walk', undefined)).toEqual([]);
+    expect(surfaceOwnSenses('advance', 'advance', { word: 'advance', full: 'n. 发展' })).toEqual([]);
+    expect(surfaceOwnSenses('boxes', 'box', { word: 'boxes', full: 'n. 盒子' })).toEqual([]);
+  });
+
   it('describeForm：规则与不规则词形', () => {
     expect(describeForm('abandon', 'abandon')).toBeUndefined();
     expect(describeForm('Abandoned', 'abandon')).toBe('过去式，过去分词');
@@ -282,6 +297,23 @@ describe('ShadowCardView', () => {
     view.update(data({ entry: { word: 'deliberate', short: '审慎的', full: '审慎的（我的笔记）' } }));
     await flush();
     expect(q('.user-trans')!.textContent).toContain('审慎的（我的笔记）');
+  });
+
+  it('页面词形本身是常用形容词时，原形释义前先显示词形自己的义项（advanced adj. 先进的）', async () => {
+    const dict: Record<string, DictEntry> = {
+      advance: { word: 'advance', short: '前进', full: 'vt. 提出；预付\nn. 发展；前进' },
+      advanced: { word: 'advanced', short: '先进的', full: 'adj. 先进的；高级的\nv. 前进（advance的过去式和过去分词形式）' },
+    };
+    const backend = makeBackend({ lookupDict: vi.fn(async (w: string) => dict[w]) });
+    view = new ShadowCardView(document, makeActions(), backend);
+    view.open(mark, data({ surface: 'Advanced', lemma: 'advance' }));
+    await flush();
+    expect(backend.lookupDict).toHaveBeenCalledWith('advanced');
+    const own = q('.surface-defs')!;
+    expect(own.textContent).toContain('先进的；高级的');
+    // 词形自己的动词行（advance的过去式）不重复展示
+    expect(own.textContent).not.toContain('过去式');
+    expect(q('.word')!.textContent).toBe('advance');
   });
 
   it('加入生词本：按默认目标加入，toast 写明加到哪里，按钮变为已收藏，可撤销', async () => {

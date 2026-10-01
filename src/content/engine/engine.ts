@@ -5,6 +5,7 @@ import type { CodeBlockSettings, InlineTranslationMode } from '@/core/settings/s
 import { isLightText } from './color';
 import {
   ATTR_CODE,
+  ATTR_CODE_FLOAT,
   ATTR_IN_LINK,
   ATTR_LEMMA,
   ATTR_LOW_CONFIDENCE,
@@ -12,6 +13,7 @@ import {
   ATTR_ON_DARK,
   ATTR_REVEALED,
   ATTR_TIGHT,
+  ATTR_TR_TEXT,
   CODE_COMMENT_STRING_SELECTOR,
   TAG_MARK,
   TAG_TRANSLATION,
@@ -197,6 +199,9 @@ export class HighlightEngine {
     this.visibleQueue = [];
     if (this.visibleFrame) this.opts.root.ownerDocument.defaultView?.cancelAnimationFrame(this.visibleFrame);
     this.visibleFrame = 0;
+    if (this.codeFloatFrame) this.opts.root.ownerDocument.defaultView?.cancelAnimationFrame(this.codeFloatFrame);
+    this.codeFloatFrame = 0;
+    this.pendingCodeRoots.clear();
     this.queue = [];
     this.queueHead = 0;
     this.walker = null;
@@ -689,6 +694,9 @@ export class HighlightEngine {
     if (keys.length > 1) {
       const own = this.translations.get(keys[0]!);
       if (own) return own;
+      // -ing/-ed 词形自身无词条、但处在形容词位置（a compelling scenario、very promising）：
+      // 原形动词义（compel 强迫）会译错，行内不显示，只在卡片中看原形释义
+      if (VERB_INFLECTION.test(keys[0]!) && isAdjectivePosition(m)) return null;
       // 动词释义取屈折原形的（没有屈折原形时 keys[1] 即匹配原形）
       if (VERB_INFLECTION.test(keys[0]!)) {
         const verb = this.verbTranslations.get(keys[1]!);
@@ -704,11 +712,62 @@ export class HighlightEngine {
   }
 
   private applyTranslations(marks: Iterable<Element>): void {
+    const floatCode = !!this.opts.code?.enabled && this.opts.code.display === 'float';
     this.withoutObserving(() => {
       for (const m of marks) {
         if (!m.isConnected) continue;
         const tr = this.translationOf(m);
         setMarkTranslation(m, tr ? shortenTranslation(tr) : undefined);
+        if (floatCode && tr && m.hasAttribute(ATTR_CODE)) this.pendingCodeRoots.add(m.parentElement?.closest('pre,code') ?? m.parentElement!);
+      }
+    });
+    if (this.pendingCodeRoots.size > 0 && !this.codeFloatFrame) {
+      const view = this.opts.root.ownerDocument.defaultView;
+      if (view) this.codeFloatFrame = view.requestAnimationFrame(() => this.layoutCodeFloats());
+    }
+  }
+
+  /** 新写入浮动小标注、待重新摆放的代码块（下一帧统一读排版、再统一写） */
+  private pendingCodeRoots = new Set<Element>();
+  private codeFloatFrame = 0;
+
+  /**
+   * 代码“浮动小标注”的摆放：标注绝对定位在单词上方，不占位（复制、代码块尺寸不受影响），但
+   * - 代码块（pre/编辑器）通常 overflow:auto，第一行的标注会被容器顶边裁掉 -> 改放单词下方；
+   * - 同一行相邻的生词标注比单词宽，会互相压住 -> 后一个改放下方，上下都放不下时只在悬停时显示。
+   * 每次重排整个代码块（懒插入会分批写入标注），先读全部排版再写属性，一帧只触发一次布局计算。
+   */
+  private layoutCodeFloats(): void {
+    this.codeFloatFrame = 0;
+    const roots = [...this.pendingCodeRoots];
+    this.pendingCodeRoots.clear();
+    const view = this.opts.root.ownerDocument.defaultView;
+    if (this.stopped || !view) return;
+    const plans: [HTMLElement[], CodeFloatPlacement[]][] = [];
+    for (const root of roots) {
+      if (!root.isConnected) continue;
+      const marks = [...root.querySelectorAll<HTMLElement>(`${TAG_MARK}[${ATTR_CODE}]`)].filter((m) => m.querySelector(`${TAG_TRANSLATION}[${ATTR_TR_TEXT}]`));
+      if (marks.length === 0) continue;
+      // 上一轮判为 none 的标注是 display:none，量不到宽高：先恢复显示再量（同一帧内同步完成，不会闪烁）
+      const hidden = marks.filter((m) => m.getAttribute(ATTR_CODE_FLOAT) === 'none');
+      if (hidden.length > 0) this.withoutObserving(() => hidden.forEach((m) => m.removeAttribute(ATTR_CODE_FLOAT)));
+      const clip = scrollClipOf(marks[0]!, view);
+      const items = marks.map((m) => {
+        const r = m.getBoundingClientRect();
+        const t = m.querySelector(TAG_TRANSLATION)!.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, center: (r.left + r.right) / 2, width: t.width, height: t.height };
+      });
+      // 没有排版信息（不可见的代码块、测试环境）：保持默认
+      if (items.every((i) => i.width === 0)) continue;
+      plans.push([marks, planCodeFloats(items, clip)]);
+    }
+    this.withoutObserving(() => {
+      for (const [marks, placements] of plans) {
+        marks.forEach((m, i) => {
+          const p = placements[i]!;
+          if (p === 'above') m.removeAttribute(ATTR_CODE_FLOAT);
+          else if (m.getAttribute(ATTR_CODE_FLOAT) !== p) m.setAttribute(ATTR_CODE_FLOAT, p);
+        });
       }
     });
   }
@@ -834,6 +893,81 @@ function collocationOf(m: Element, lemma: string): string | undefined {
     if (hit) return hit;
   }
   return undefined;
+}
+
+export type CodeFloatPlacement = 'above' | 'below' | 'none';
+
+/** 代码中一个生词的排版（视口坐标）：单词的上下边、水平中心，标注的宽高 */
+export interface CodeFloatItem {
+  top: number;
+  bottom: number;
+  center: number;
+  width: number;
+  height: number;
+}
+
+/** 标注与单词的间距（与 style.ts 浮层 translate 的 3px 一致）、相邻标注的最小水平间隔 */
+const CODE_FLOAT_GAP = 3;
+const CODE_FLOAT_SPACING = 2;
+
+/**
+ * 代码浮动小标注的摆放（纯计算，便于单测）：按从上到下、从左到右依次放置，
+ * 优先放单词上方；上方超出滚动容器的内容顶边（首行），或与已放置的标注重叠时放下方；上下都不行时为 none（只悬停显示）。
+ * clip 为滚动容器内容区的上下边（与 items 同一坐标系）；没有裁切容器时不传。
+ */
+export function planCodeFloats(items: CodeFloatItem[], clip?: { top: number; bottom: number }): CodeFloatPlacement[] {
+  const order = items.map((_, i) => i).sort((a, b) => items[a]!.top - items[b]!.top || items[a]!.center - items[b]!.center);
+  const placed: { top: number; bottom: number; left: number; right: number }[] = [];
+  const out: CodeFloatPlacement[] = new Array(items.length).fill('none');
+  for (const i of order) {
+    const it = items[i]!;
+    const left = it.center - it.width / 2;
+    const right = it.center + it.width / 2;
+    const above = { top: it.top - CODE_FLOAT_GAP - it.height, bottom: it.top - CODE_FLOAT_GAP, left, right };
+    const below = { top: it.bottom + CODE_FLOAT_GAP, bottom: it.bottom + CODE_FLOAT_GAP + it.height, left, right };
+    const free = (b: typeof above) =>
+      (!clip || (b.top >= clip.top && b.bottom <= clip.bottom)) &&
+      !placed.some((p) => b.left < p.right + CODE_FLOAT_SPACING && p.left < b.right + CODE_FLOAT_SPACING && b.top < p.bottom && p.top < b.bottom);
+    const box = free(above) ? above : free(below) ? below : undefined;
+    if (!box) continue;
+    out[i] = box === above ? 'above' : 'below';
+    placed.push(box);
+  }
+  return out;
+}
+
+/**
+ * mark 所在的滚动/裁切容器的内容区上下边（视口坐标，按滚动位置换算到内容顶端，代码块滚动后结果不变）。
+ * 向上找第一个 overflow 非 visible 的祖先（pre、编辑器的滚动层）；找不到时不裁切。
+ */
+function scrollClipOf(m: Element, view: Window): { top: number; bottom: number } | undefined {
+  for (let el = m.parentElement, depth = 0; el && depth < 8; el = el.parentElement, depth++) {
+    const cs = view.getComputedStyle(el);
+    if (cs.overflowY === 'visible' && cs.overflowX === 'visible') continue;
+    const top = el.getBoundingClientRect().top + el.clientTop - el.scrollTop;
+    return { top, bottom: top + Math.max(el.scrollHeight, el.clientHeight) };
+  }
+  return undefined;
+}
+
+/** 限定词：其后的 -ing/-ed 词再接一个实词时是定语形容词（a compelling scenario） */
+const ADJ_DETERMINERS = new Set(['a', 'an', 'the', 'this', 'that', 'these', 'those', 'its', 'his', 'her', 'their', 'our', 'your', 'my', 'some', 'any', 'no', 'every', 'each', 'such']);
+/** 程度副词：其后的 -ing/-ed 词只能是形容词（very promising、most striking、less compelling） */
+const DEGREE_ADVERBS = new Set(['very', 'more', 'most', 'less', 'least', 'so', 'too', 'quite', 'rather', 'really', 'highly', 'extremely', 'increasingly', 'particularly', 'truly', 'pretty']);
+/** 介词/连词/系动词等虚词：限定词 + -ing + 虚词多为动名词（the killing of、the meeting and） */
+const FUNCTION_WORDS = new Set(['of', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be', 'that', 'which', 'who']);
+
+/**
+ * mark（-ing/-ed 词形）是否处在形容词位置：前一个词是程度副词；或前一个词是限定词、后一个词是实词（名词前的定语）。
+ * 只看紧邻的单词，不做词性标注；判不准时返回 false，沿用原有的动词义回退。
+ */
+function isAdjectivePosition(m: Element): boolean {
+  const prev = adjacentWord(m, true);
+  if (!prev) return false;
+  if (DEGREE_ADVERBS.has(prev)) return true;
+  if (!ADJ_DETERMINERS.has(prev)) return false;
+  const next = adjacentWord(m, false);
+  return !!next && !FUNCTION_WORDS.has(next);
 }
 
 /** mark 前（prev=true）或后紧邻的单词（小写）；中间出现非空白字符（标点等）或跨出父元素时返回 undefined */

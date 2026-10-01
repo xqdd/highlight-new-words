@@ -287,7 +287,7 @@ export const BUILTIN_THEMES: readonly HighlightTheme[] = [
     id: 'ruby-gloss',
     name: '词上注释',
     nameEn: 'Ruby gloss',
-    desc: '琥珀点线 + 单词上方小字释义',
+    desc: '琥珀点线 + 单词上方小字译文',
     mark: { background: '', color: '', underline: 'dotted', underlineColor: '#d97706', underlineThickness: 2, underlineOffset: 3 },
     card: { ...lightCard, accent: '#b45309' },
     translation: { mode: 'ruby' },

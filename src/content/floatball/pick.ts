@@ -1,6 +1,7 @@
 import { h } from '../card/h';
 import { ATTR_ACTIVE, ATTR_BOOKS, ATTR_LEMMA, TAG_CARD_HOST, TAG_MARK } from '../engine/dom';
 import type { SiteContext } from '../sites/types';
+import type { OverlayHost } from './host';
 import { wordAt } from './model';
 
 /** 选区稳定判定（ms） */
@@ -29,9 +30,8 @@ export class PickMode {
 
   constructor(
     private readonly ctx: SiteContext,
-    private readonly ui: HTMLElement,
-    /** 本模块自己的宿主（点在宿主内的事件不处理） */
-    private readonly ownHost: Element,
+    /** 悬浮球的浮层宿主：提示条与取词框挂在其中；点在宿主内的事件不处理 */
+    private readonly overlay: OverlayHost,
     private readonly onChange: (on: boolean) => void,
   ) {}
 
@@ -53,7 +53,7 @@ export class PickMode {
       h(doc, 'span', {}, '取词模式 · 点按任意单词'),
       h(doc, 'button', { type: 'button', onclick: () => this.exit() }, '退出'),
     );
-    this.ui.appendChild(this.bar);
+    this.overlay.ui.appendChild(this.bar);
     this.onChange(true);
   }
 
@@ -88,7 +88,7 @@ export class PickMode {
   private readonly onClick = (e: MouseEvent) => {
     const path = e.composedPath();
     // 悬浮球自身、卡片内的点按不处理
-    if (path.includes(this.ownHost) || path.some((n) => n instanceof Element && n.tagName === TAG_CARD_HOST.toUpperCase())) return;
+    if (path.includes(this.overlay.host) || path.some((n) => n instanceof Element && n.tagName === TAG_CARD_HOST.toUpperCase())) return;
     const target = e.target instanceof Element ? e.target : null;
     if (target && isEditable(target)) return;
     e.preventDefault();
@@ -207,7 +207,7 @@ export class PickMode {
   private ensureBox(): HTMLElement {
     if (this.box) return this.box;
     const box = h(this.ctx.doc, 'span', { class: 'pickbox', 'aria-hidden': 'true' });
-    this.ui.appendChild(box);
+    this.overlay.ui.appendChild(box);
     // 卡片关闭时（移除激活标记）隐藏取词框
     this.boxObserver = new MutationObserver(() => {
       if (!box.hasAttribute(ATTR_ACTIVE)) {
@@ -223,10 +223,13 @@ export class PickMode {
   private placeBox(r: DOMRect): void {
     const b = this.box!;
     const pad = 2;
-    b.style.left = `${r.left - pad}px`;
-    b.style.top = `${r.top - pad}px`;
-    b.style.width = `${r.width + pad * 2}px`;
-    b.style.height = `${r.height + pad * 2}px`;
+    // 单词矩形是 client 坐标，换算到宿主局部坐标（双指缩放时宽高同样乘缩放倍数）
+    const { scale } = this.overlay.frame();
+    const p = this.overlay.toLocal(r.left, r.top);
+    b.style.left = `${p.x - pad}px`;
+    b.style.top = `${p.y - pad}px`;
+    b.style.width = `${r.width * scale + pad * 2}px`;
+    b.style.height = `${r.height * scale + pad * 2}px`;
   }
 
   private clearBox(): void {

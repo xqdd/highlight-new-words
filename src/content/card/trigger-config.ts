@@ -66,9 +66,11 @@ export function triggerSignature(t: ResolvedCardTrigger): string {
 
 /** 卡片首次出现时的一行提示（只在 PC 端鼠标打开时显示，控制在两行内） */
 export function cardTriggerHintText(t: ResolvedCardTrigger, mac: boolean): string {
-  if (t.mode === 'click') return `点击单词显示卡片；链接需再点一次或 ${mac ? '⌘' : 'Ctrl'}+点击才打开。设置中可更改`;
-  if (t.mode === 'modifier') return `按住 ${modifierShort(t.modifier, mac)} 指向单词才显示卡片。设置中可更改`;
-  return '指向单词即显示卡片；设置中可改为按住修饰键或点击';
+  // 三种方式句式统一：“<当前方式说明>。可在 设置 › 外观 › 释义卡片 更改”，入口路径与 options 页面标题一致
+  const where = '可在 设置 › 外观 › 释义卡片 更改';
+  if (t.mode === 'click') return `点击单词显示卡片，链接需再点一次或 ${mac ? '⌘' : 'Ctrl'}+点击才打开。${where}`;
+  if (t.mode === 'modifier') return `按住 ${modifierShort(t.modifier, mac)} 指向单词显示卡片。${where}`;
+  return `指向单词显示卡片。${where}`;
 }
 
 /** 触发方式的一句话说明（options 设置行描述可复用） */

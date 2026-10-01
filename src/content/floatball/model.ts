@@ -1,4 +1,5 @@
 import type { StatusSummary } from '@/core/messaging/protocol';
+import { SOURCE_NOT_CONNECTED_TEXT } from '@/core/source/connect-status';
 
 /**
  * 悬浮球的纯逻辑（无 DOM 依赖，便于单测）：显示条件、位置吸附与夹取、点按位置取词、隐藏站点规则。
@@ -105,17 +106,58 @@ export function tokenize(text: string): Array<{ text: string; word: boolean }> {
 }
 
 /**
- * 底栏同步状态的中性文案：底栏在每次打开菜单时都会出现，不能把某个来源“未登录/授权失效”的原话常驻成像报错一样的提示。
- * - 有需要处理的项：只说“N 项同步待处理”（点按去选项页对应位置），从未配置过（never）的项用中性灰点，真正出错（error）才用红点
+ * 底栏同步状态文案：与 popup 同步行同一口径（未连接中性灰、出错红），底栏在每次打开菜单时都会出现，
+ * 不把某个来源“未登录/授权失效”的原话常驻成像报错一样的提示（点按去选项页对应位置）。
+ * - 有出错项（成功过之后再失败）：“X同步出错” / “N 项同步出错”，红点
+ * - 只有从未同步成功过的项（never）：“X未连接”（口径见 core/source/connect-status），灰点，不算告警
  * - 其他情况沿用 background 的总述（“已全部同步”“正在同步…”“未开启任何同步”）
  */
 export function syncFootText(st: Pick<StatusSummary, 'level' | 'text' | 'items'>): { level: string; text: string } {
-  const problems = st.items.filter((i) => i.level === 'error' || i.level === 'never');
-  if (problems.length === 0) return { level: st.level, text: st.text };
+  const errors = st.items.filter((i) => i.level === 'error');
+  const idle = st.items.filter((i) => i.level === 'never');
+  if (errors.length === 0 && idle.length === 0) return { level: st.level, text: st.text };
   const synced = st.items.filter((i) => i.level === 'ok').length;
-  const pending = problems.length === 1 ? `${problems[0]!.name}待设置` : `${problems.length} 项同步待设置`;
+  let problem: string;
+  if (errors.length) problem = errors.length === 1 ? `${errors[0]!.name}同步出错` : `${errors.length} 项同步出错`;
+  else if (idle.length === 1) problem = `${idle[0]!.name}${idle[0]!.text === SOURCE_NOT_CONNECTED_TEXT ? SOURCE_NOT_CONNECTED_TEXT : '尚未同步'}`;
+  else problem = `${idle.length} 项${SOURCE_NOT_CONNECTED_TEXT}`;
   return {
-    level: problems.some((i) => i.level === 'error') ? 'warn' : 'off',
-    text: synced > 0 ? `已同步 ${synced} 项 · ${pending}` : pending,
+    level: errors.length ? 'error' : 'off',
+    text: synced > 0 ? `已同步 ${synced} 项 · ${problem}` : problem,
   };
+}
+
+// ---------------- 浮层坐标系（屏幕实际可见区域） ----------------
+
+/**
+ * 浮层宿主铺满的区域：屏幕实际可见区域（visualViewport），用宿主自身的局部坐标（单位 = 未缩放时的 CSS px）表示。
+ *
+ * 为什么不直接用 position:fixed 的视口：手机上页面横向溢出（如 nowrap 导航）时，布局视口会被撑宽到内容宽度，
+ * fixed 的 left:0/right:0 抽屉跟着变宽、右侧落到屏幕外；双指放大时 fixed 元素也随页面放大、跑出屏幕。
+ * 宿主用 transform 平移到可见区域左上角并按 1/scale 缩小，子元素的 fixed 以宿主为包含块，始终落在屏幕内且大小不随缩放变化。
+ */
+export interface OverlayFrame {
+  /** 可见区域左上角相对布局视口的偏移（CSS px，即 clientX/clientY 坐标系） */
+  x: number;
+  y: number;
+  /** 双指缩放倍数 */
+  scale: number;
+  /** 宿主局部坐标系下的宽高 */
+  width: number;
+  height: number;
+}
+
+/** 按 visualViewport 计算浮层区域；浏览器不支持 visualViewport 时退回布局视口（不平移不缩放） */
+export function computeOverlayFrame(
+  vv: Pick<VisualViewport, 'offsetLeft' | 'offsetTop' | 'scale' | 'width' | 'height'> | null | undefined,
+  fallback: { width: number; height: number },
+): OverlayFrame {
+  if (!vv || !(vv.width > 0) || !(vv.height > 0)) return { x: 0, y: 0, scale: 1, ...fallback };
+  const scale = vv.scale > 0 ? vv.scale : 1;
+  return { x: vv.offsetLeft, y: vv.offsetTop, scale, width: vv.width * scale, height: vv.height * scale };
+}
+
+/** clientX/clientY（及 getBoundingClientRect）坐标 → 浮层宿主局部坐标 */
+export function toFrameLocal(frame: OverlayFrame, clientX: number, clientY: number): { x: number; y: number } {
+  return { x: (clientX - frame.x) * frame.scale, y: (clientY - frame.y) * frame.scale };
 }

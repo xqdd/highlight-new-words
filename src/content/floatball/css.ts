@@ -3,7 +3,7 @@ import { BALL_SIZE, EDGE_GAP } from './model';
 /**
  * 悬浮球与页内面板的样式（注入各自的 Shadow DOM，不受页面 CSS 影响也不污染页面）。
  *
- * 颜色只由变量驱动：浅色/深色两套（`:host([data-theme=dark])` 由脚本按 prefers-color-scheme 与 settings.ui.theme 设置），
+ * 颜色只由变量驱动：浅色/深色两套（`:host([data-theme=dark])` 由脚本按网页背景亮度设置，与单词卡片同一判定，见 host.ts setTheme），
  * --accent 取当前高亮主题的卡片强调色（与单词卡片一致）。触控目标 ≥ 44px。
  */
 export const BASE_CSS = `
@@ -36,7 +36,8 @@ svg { display: block; flex: none; }
 .scrim.in { opacity: 1; }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; margin: 0 auto; width: 100%; max-width: 520px;
-  max-height: min(78vh, 640px); display: flex; flex-direction: column;
+  /* 百分比相对宿主（= 屏幕可见区域，见 host.ts）；vh 会随被撑宽的布局视口变化 */
+  max-height: min(78%, 640px); display: flex; flex-direction: column;
   background: var(--bg); border-radius: 18px 18px 0 0; box-shadow: var(--shadow);
   padding-bottom: env(safe-area-inset-bottom, 0px);
   transform: translateY(100%); transition: transform .22s cubic-bezier(.2, .8, .2, 1); pointer-events: auto; overflow: hidden;

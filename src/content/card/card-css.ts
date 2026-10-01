@@ -97,6 +97,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .form b { font-weight: 600; color: var(--fg); }
 .form .rel { padding: 0 6px; border-radius: 4px; background: var(--soft); }
 .defs { margin: 0; padding: 0; list-style: none; }
+/* 页面词形自己的义项（advanced adj. 先进的）：在原形释义前，下方小标签引出原形释义 */
+.surface-defs .defs { margin: 2px 0 6px; }
+.surface-defs .ut-label b { font-weight: 600; color: var(--fg); }
 .defs li { margin: 0 0 4px; overflow-wrap: anywhere; }
 .pos { color: var(--muted); margin-right: 6px; font-style: italic; font-size: .92em; }
 .defs.clamp li:nth-child(n+4) { display: none; }

@@ -2,6 +2,7 @@
  * 卡片展示用的纯函数：词形关系说明、释义分行解析、音标规范化、外部词典链接。
  * 不依赖 DOM，便于单测；card-view 只负责把结果渲染出来。
  */
+import type { DictEntry } from '@/core/dict/types';
 
 /** 释义行：词性/领域标签 + 释义正文 */
 export interface DefinitionLine {
@@ -84,7 +85,8 @@ export function describeForm(surface: string, lemma: string): string | undefined
   const l = lemma.toLowerCase();
   if (s === l) return undefined;
   if (/[’']s$/.test(s) && s.slice(0, -2) === l) return '所有格';
-  const verb = IRREGULAR_VERBS[l];
+  // 查表用 Object.hasOwn：lemma 来自页面/用户词书，constructor、toString 等会命中 Object.prototype 上的同名成员
+  const verb = Object.hasOwn(IRREGULAR_VERBS, l) ? IRREGULAR_VERBS[l] : undefined;
   if (verb) {
     const [past, pp] = verb.map((v) => v.split(' ')) as [string[], string[]];
     const isPast = past.includes(s);
@@ -93,8 +95,8 @@ export function describeForm(surface: string, lemma: string): string | undefined
     if (isPast) return '过去式';
     if (isPp) return '过去分词';
   }
-  if (IRREGULAR_PLURALS[l] === s) return '复数';
-  const degree = IRREGULAR_DEGREES[l];
+  if (Object.hasOwn(IRREGULAR_PLURALS, l) && IRREGULAR_PLURALS[l] === s) return '复数';
+  const degree = Object.hasOwn(IRREGULAR_DEGREES, l) ? IRREGULAR_DEGREES[l] : undefined;
   if (degree?.[0].split(' ').includes(s)) return '比较级';
   if (degree?.[1].split(' ').includes(s)) return '最高级';
   if ([l + 's', l + 'es', ...(l.endsWith('y') && !VOWELS.includes(l.slice(-2, -1)) ? [l.slice(0, -1) + 'ies'] : [])].includes(s)) {
@@ -125,6 +127,25 @@ export function parseDefinitions(short?: string, full?: string): DefinitionLine[
     lines.push(m && m[2] ? { pos: m[1]!.trim(), text: m[2] } : { pos: '', text: line });
   }
   return lines;
+}
+
+/** 页面词形是原形的这些屈折变化时，词形本身可能是独立的常用形容词/名词（advanced、limited、interesting、running） */
+const PARTICIPLE_FORMS = new Set(['过去式，过去分词', '过去分词', '过去式', '现在分词']);
+
+/**
+ * 页面词形自己的非动词义项（卡片在原形释义之前单独展示）。
+ *
+ * 匹配命中的是原形词条（advanced -> advance），原形释义只有动词/名词义，而页面上这个分词常作形容词用
+ * （an advanced civilization = 先进的）；行内注解取的是页面词形自己的短释义，卡片也要给出同一义项才一致。
+ * 只取词典中页面词形自己词条里的非动词行（动词行就是“advance的过去式”，原形释义已覆盖），
+ * 只对过去式/过去分词/现在分词生效；词典里没有该词形词条（walked）时返回空数组。
+ */
+export function surfaceOwnSenses(surface: string, lemma: string, surfaceEntry: DictEntry | undefined): DefinitionLine[] {
+  if (!surfaceEntry || surfaceEntry.word.toLowerCase() !== surface.toLowerCase()) return [];
+  const form = describeForm(surface, lemma);
+  if (!form || !PARTICIPLE_FORMS.has(form)) return [];
+  // 词性可能连写（"vt.vi."），以 v/vt/vi 开头即视为动词行
+  return parseDefinitions(surfaceEntry.short, surfaceEntry.full).filter((x) => x.pos && !/^v[ti]?\./i.test(x.pos));
 }
 
 /** 音标规范化：去掉两端的 [] 或 //，ECDICT 中的西里尔字母 ә 替换为 IPA ə */
