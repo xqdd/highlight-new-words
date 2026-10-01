@@ -116,6 +116,7 @@ flowchart LR
 | `uiNotesSeen` | 选项页已读“更新说明”版本（字符串，见 options `lib/release-notes.ts`；全新安装记为已读不弹出） | options |
 | `floatBallPos` | `FloatBallPos { side: 'left'\|'right', y: 视口高度比例 }`：悬浮球位置，按设备记忆，不参与同步 | 内容脚本（floatball） |
 | `cardTriggerHint` | 已提示过的卡片触发方式签名（字符串，如 `hover`、`modifier:alt`、`click`）：PC 端卡片首次出现时提示一次当前触发方式，方式变化后再提示一次；提示可见满 1 秒或用户在卡片内按下后才写入；按设备记忆、不参与同步（card v11 新增） | 内容脚本（card） |
+| `knownUndo` | 单词操作撤销记录 `known:<lemma>` / `add:<lemma>` → `{ at, sourceRemoved, localRemoved, knownLocalRemoved, sourceAdded }`：10 分钟内撤销有效；存 local 使浏览器重启后仍可撤销，过期记录只用于说明“撤销记录已失效”，24 小时后清理（集成审核第 1 轮由 `storage.session` 迁来） | background |
 | `updateNotice` | `UpdateNotice { from, to, at }`：扩展从旧版本升级（`onInstalled reason=update`，版本号不同）时写入，options/popup 展示简短“更新说明”后发 `dismissUpdateNotice` 清除（第二阶段新增） | background |
 
 `storage.session` 中 `tabWords` 用于徽章；`storage.sync` 键见 4.9。
@@ -162,12 +163,13 @@ v2.0.1 旧键 `toggle/ttsToggle/ttsVoices/highlight*/bubble*/dictionaryType/auto
 | `exam` 增量（`delta`） | `gk-new cet4-new cet6-new kaoyan-new ielts-new toefl-new gre-new` | 如六级新增 = 六级 − 中考/高考/四级原始词表 |
 | `frequency` 词频 | `coca-3k coca-5k coca-8k coca-12k` | COCA（缺失用 BNC）排名前 N 之外、级别 ≥ B1 的词 |
 
-- **行内短释义的选取**（`build-data.mjs#shortOf`）：跨词性给每个候选义项打分——ECDICT、ECDICT-ultimate（有道简明释义，权重最高）与各 KyleBing 教材词表按“该义项在本词性内的位次”投票，票数按词性常用度（ultimate 词性占比 + CEFR-J 词性）缩放；带专业/语体标注（[医]、(商)、<计>、〔尤指〕、古/俚）的义项、单字义项、超过 6 字的义项降权；同一义项取最自然的写法（动词去“使”“对…/把…”，形容词带“的”，副词去“地”）。有道把计算机义排在首位的（browser：[计] 浏览器）不降权，其他领域标注仍降权。仍不合常用义的词在 [short-overrides.tsv](../scripts/data/short-overrides.tsv) 人工覆盖（约 800 词：高频多义词 project→项目；ECDICT 缺现代义的网页/科技词 server→服务器、cache→缓存；数量词 billion→十亿；领域误义 utility→公用事业、projection→预测）。`build-data.mjs --audit <tsv>` 输出可疑选义审计表（单字、四字、不在各来源前 3 义项、带领域标注、未取计算机义），复核后补进覆盖表。金标与格式约束见 `tests/unit/data.test.ts`「行内短释义质量」。
+- **行内短释义的选取**（`build-data.mjs#shortOf`）：跨词性给每个候选义项打分——ECDICT、ECDICT-ultimate（有道简明释义，权重最高）与各 KyleBing 教材词表按“该义项在本词性内的位次”投票，票数按词性常用度（ultimate 词性占比 + CEFR-J 词性）缩放；带专业/语体标注（[医]、(商)、<计>、〔尤指〕、古/俚）的义项、单字义项、超过 6 字的义项降权；同一义项取最自然的写法（动词去“使”“对…/把…”，形容词带“的”，副词去“地”）。有道把计算机义排在首位的（browser：[计] 浏览器）不降权，其他领域标注仍降权。仍不合常用义的词在 [short-overrides.tsv](../scripts/data/short-overrides.tsv) 人工覆盖（约 830 词：现代常用义 submit→提交、legacy→遗产、attribute→属性、volatile→易变的；高频多义词 project→项目；ECDICT 缺现代义的网页/科技词 server→服务器、cache→缓存；数量词 billion→十亿；领域误义 utility→公用事业、projection→预测）。`build-data.mjs --audit <tsv>` 输出可疑选义审计表（单字、四字、不在各来源前 3 义项、带领域标注、未取计算机义），复核后补进覆盖表。金标与格式约束见 `tests/unit/data.test.ts`「行内短释义质量」。
 - **搭配义 `collocationShort(word, prev?, next?)`**（[collocation.ts](../src/core/dict/collocation.ts)，data 第二阶段第 2 轮新增，engine 第二阶段第 2 轮已接入：取 mark 同一父元素内左右紧邻、中间只有空白的单词，按小写与去 -s/-es 两种形式查询）：固定搭配中的短释义（vicious cycle→恶性的、concrete structure→混凝土、storm surge→风暴潮、bulk of→大部分、shed light→揭示）。engine 显示行内译文时传入左右相邻词的小写原形，命中则替换 `short`。
 - **编程熟词** `isCodeKnownWord`（[code-words.ts](../src/core/dict/code-words.ts)）：关键字、内置类型、常见缩写与占位名；标识符子词的 -s/-es/-ed/-ing 屈折形式按原形判断（defaults、modules、callbacks）。
 - **`shortVerb`（短表 `v`，data 第二阶段新增，可选）**：`short` 取的是名词/形容词义项、而该词有动词变形且动词用法不罕见时提供动词释义（advocate：提倡者 / 提倡，约 690 词；超过 6 字或含“…”残缺框式的不提供，规则见 [verb-short.mjs](../scripts/data/verb-short.mjs)，产物中出现不合格的 v 构建直接失败）。ECDICT/有道常把冷僻动词义排在首位（match 使比赛、bolt 筛选、date 过时），在 [verb-overrides.tsv](../scripts/data/verb-overrides.tsv) 人工改为常用义或写 `-` 置空（冷僻义宁可留空，行内回退到 `short`）；short-overrides 覆盖的词默认不给 `v`，需要时同样在该表给出。页面词形是动词变形（advocating、advocated，以 -ing/-ed 结尾且没有自己的词条）时行内翻译改用它（engine 已接入）。`CompositeDictionary` 合并时，前面的来源（用户词书）给了 `short` 就不再混入打包词典的 `shortVerb`。
+- **高频词的屈折形式**（`build-data.mjs#isCommonInflectionOutside`）：CEFR-J 与考试词表把一些屈折形式当独立词条收录（found、means、remains、times、known、understanding、willing），页面上多为原形的屈折用法，单独高亮会按罕见义误译（found=创立、times=乘以）。构建每本书时，若词是另一词的屈折形式（ECDICT exchange + BNC 词形表）、原形比它更常见（COCA 排名更前）且原形不在本书中（低于本书起点或在词频书阈值内），就不收录；原形也在本书时照常收录。比原形常见的（media、data）与没有原形的（statistics、headquarters）不受影响，词汇化复数与同形异义词（goods、customs、shorts、stranger、wound）列在 `LEXICALIZED_FORMS` 中保留。`--report` 输出每本书去掉的词（`droppedInflections`）。
 - **误匹配防护**：词书只收纯字母单词，页面分词按连字符切开复合词，所以用户词书里的短语（give up）与连字符词（well-known）只会漏标、不会把组成部分误标（单测覆盖）。构建时排除：连字符前缀与伪单词（re/non/mid/micro/bio…、vs/etc/km、罗马数字，`NOT_WORDS`）；只有 BNC 排名、没有 COCA 排名的词（多为人名地名，chelsea/marx/hong/kong，英式拼写除外）不按词频进入级别/词频书。本身也是单词的构词前缀（auto-、vice-、self-）由 [hyphen.ts](../src/core/dict/hyphen.ts) `isHyphenPrefix` 提供给 engine，在 `词-词` 结构中跳过前半部分（engine 已接入）。
-- **编程熟词**（需求 v8）：[code-words.ts](../src/core/dict/code-words.ts) `CODE_KNOWN_WORDS` / `isCodeKnownWord`，收录主流语言关键字、内置类型与常见缩写（if/return/const/func/str/init/args/ctx/impl…），engine 在代码上下文中对标识符拆分后的子词调用，命中则视为熟词。
+- **编程熟词**（需求 v8）：[code-words.ts](../src/core/dict/code-words.ts) `CODE_KNOWN_WORDS` / `isCodeKnownWord`，收录主流语言关键字、内置类型与常见缩写（if/return/const/func/str/init/args/ctx/impl…），以及在代码里几乎总是术语义的高频编程术语（prototype/stack/heap/queue/node/handler/listener/render/attribute/instance/array/query/token…），engine 在代码上下文中对标识符拆分后的子词调用，命中则视为熟词。口径：编程术语**只在代码本体（标识符）中**视为熟词、不高亮；代码注释与字符串、正文中的同名单词照常按词书判断，行内/卡片仍给通用常用义（heap 一堆、listener 听众），不按代码上下文切换计算机义。
 
 默认启用的 `cet6` 在 [article.html](../tests/fixtures/article.html) 上标出约 86 个不同原形（Relingo B2 约 79 个），对照 Relingo B2 判定的回归见 `tests/unit/data.test.ts`。
 
@@ -197,7 +199,7 @@ flowchart LR
 ```
 
 - 规则与数据：[rules.ts](../src/core/lemma/rules.ts)（无依赖纯函数，构建脚本与运行时共用）、[data-lemmatizer.ts](../src/core/lemma/data-lemmatizer.ts)（`candidates` / `analyze` / `lemma` / `root`）、`public/data/lemma/lemma.json`（`LemmaDataFile { v: 1, e: { 词: "屈折1,屈折2|派生1,派生2" } }`，约 360KB）。
-- 生成：`node scripts/lemma/build-lemma-data.mjs <ecdict.csv> <lemma.en.txt> [out] [--report]`（ECDICT exchange + BNC 词形表，MIT）。词汇表 = 考试词 + 词频前 3 万 + 其屈折变形；对每个词算出真值（屈折原形 + 经中英文释义语义校验的派生词根链），运行时规则输出与真值不一致的才写表，所以词汇表内的词结果精确（went→go、better→good、business/news/hardly/corner 不还原），词汇表外长尾词走规则。派生还原另有词频口径：高频词（COCA 排名 ≤ 5000）本身是独立词条，只允许透明后缀（方式副词 -ly、-ness/-ful/-less：quickly→quick、happiness→happy），其余不还原（normal ↛ norm、committee ↛ commit、teacher ↛ teach），规则生成的非词候选也写表清空；低频词的词根不能比它更罕见（spiral ↛ spire），carelessly→careless→care 等照常。**改了 rules.ts 必须重新生成 lemma.json。**
+- 生成：`node scripts/lemma/build-lemma-data.mjs <ecdict.csv> <lemma.en.txt> [out] [--report]`（ECDICT exchange + BNC 词形表，MIT）。词汇表 = 考试词 + 词频前 3 万 + 其屈折变形；对每个词算出真值（屈折原形 + 经中英文释义语义校验的派生词根链），运行时规则输出与真值不一致的才写表，所以词汇表内的词结果精确（went→go、better→good、business/news/hardly/corner 不还原），词汇表外长尾词走规则。派生还原另有词频口径：高频词（COCA 排名 ≤ 5000）本身是独立词条，只允许透明后缀（方式副词 -ly、-ness/-ful/-less：quickly→quick、happiness→happy），其余不还原（normal ↛ norm、committee ↛ commit、teacher ↛ teach），规则生成的非词候选也写表清空；低频词的词根不能比它更罕见（spiral ↛ spire），carelessly→careless→care 等照常。屈折还原也有同形口径（`commonHeadwordHomograph`）：变形本身是高频独立词条（排名 ≤ 5000）且比原形更常用时不做屈折还原（ground ↛ grind、wedding ↛ wed、clothes ↛ clothe、advertising ↛ advertise、statistics ↛ statistic），避免词书只收原形时常用词借原形高亮、卡片显示原形释义、点“认识”把原形记成熟词；原形更常用的正常变形（used→use、found→find、left→leave）不受影响。同一口径还有分级版：变形本身的 CEFR 级别低于原形（取自已生成的 `cefr-*.json` 级别词书，如 bound 在 B1+、bind 在 B2+；frustrated / frustrate）时也不做屈折还原，否则选 B2 时“已会”的 bound 会借 bind 高亮成“必定的”，因此**重新生成级别词书后要重新生成 lemma.json**。原形本身又是另一原形的变形、且与该词无规则屈折关系的词形表噪声也丢弃（grinding ↛ ground，只留 grind）。按页面单词查表一律用 Map / `Object.hasOwn`，不用普通对象下标（页面上的 constructor、toString 会取到 Object.prototype 上的函数）。**改了 rules.ts 必须重新生成 lemma.json。**
 - 测试：金标集 [lemma-gold.tsv](../tests/fixtures/lemma-gold.tsv)（屈折/不规则/复数/比较级/所有格/派生/高频独立词条/不应还原，含“禁止误还原”列）在 `tests/unit/lemma.test.ts` 中校验（ALL-无派生、keep > 90%，deriv > 95%，deriv-hf 全对）；与 wink-lemmatizer、compromise 的对标评测见 `tests/unit/lemma-bench.test.ts` 文件头（标杆库装在临时目录，不进依赖）。
 - 派生金标口径：高频派生限制属于产品口径变化而非实现退化。按原金标（84 个 deriv）计，deriv 从 83/84 降到 45/84，下降的 38 个全部是 COCA 排名 ≤ 5000 的非透明后缀词（development、teacher、national、realize 等），它们按新口径故意不还原；屈折与 keep 不降反升（ALL-无派生 327→329/329、keep 73→75/75，修好 apply ↛ app、comment ↛ com）。金标随口径把这 38 词从 deriv 移到 deriv-hf（金标为原词，第 5 列保留语言学词根仅作说明），其中 realize 另把 real 列为禁止误还原。调整后：ALL 412/413、deriv 45/46（唯一错例 unhappiness，口径调整前就错）、deriv-hf 38/38。
 
@@ -301,7 +303,7 @@ flowchart LR
 | → background | `syncSourceBooks` | `{bookIds?, providerId?}` → `SourceSyncResult[]`（逐本独立；无登记的书时先刷新列表） |
 | → background | `deleteSourceWords` | `{word, bookIds?, forms?}` → `DeleteWordsResult`（远端成功才移除本地缓存；`forms` 只含屈折词形） |
 | → background | `markKnown` | `{word, lemma, confirmed?}` → `MarkKnownResult`（按 `wordActions` 写熟词本 + 从生词本移除屈折词形；`written`/`removedLocal`/`fullyUndoable` 为第 2 轮新增；第 3 轮新增 `confirmed` 与 `withheld`：同形异义词形的远端删除未确认时不执行，见 4.9） |
-| → background | `unmarkKnown` | `{lemma}` → `{ok, restored?, message?}`（10 分钟内撤销：本地词书完整恢复，来源词书加回可写的原书，不可写时加回同来源可写书并在 message 说明；记录存 `storage.session` 的 `knownUndo`） |
+| → background | `unmarkKnown` | `{lemma}` → `{ok, restored?, message?}`（10 分钟内撤销：本地词书完整恢复，来源词书加回可写的原书，不可写时加回同来源可写书并在 message 说明；记录存 `storage.local` 的 `knownUndo`；超过 10 分钟时 message 说明“撤销记录已失效”及未加回的词） |
 | → background | `addWord` | `{word, lemma, trans?, phonetic?, targets?}` → `AddWordResult`（写入 `addTargets`，移出 `addRemoveFromKnown`；`targets` 为卡片临时目标（card 第二阶段新增，background 第 2 轮实现）：传入时完全取代 `addTargets`，未知 id 与本地熟词本过滤，只读目标（欧路“已掌握”、有道非默认分组）跳过并在 `added` 写明原因；`[]` 或过滤后为空视为非法，返回 `ok=false` 且不写入、不回退默认目标） |
 | → background | `removeWord` | `{lemma, bookIds?}` → `RemoveWordResult`（移出生词本；10 分钟内会把加入时移出的熟词加回） |
 | → background | `previewWordAction` | `{action:'add'\|'known', word, lemma}` → `WordActionPreview`（只读本地缓存，列出写入目标和各书将移除的词形，`needsConfirm` 表示含远端删除；`remove[].homographs` 为需确认的同形异义词形） |
@@ -325,9 +327,9 @@ flowchart LR
 
 **总状态 `StatusSummary`**（[background/status.ts](../src/background/status.ts)）：popup 状态条与 options 概览共用，避免各页面自己拼 `syncState`/`webdavSyncState`/`sourceBooks`。
 
-- `items: StatusItem[]`：`storage-sync`、`webdav`、每个启用来源 `source:<providerId>` 各一项，含 `name`、`level`、一句中文 `text`、`lastSyncAt`、`retryAt?`、`href`（选项页位置：浏览器账号同步 `#sync/sync`、WebDAV `#sync/webdav`、来源 `#sources`）。
-- `level` 严重程度 `error > busy > pending > never > ok > off`，总 `level` 取最严重项，总 `text` 如“已全部同步”“欧路词典：授权失效…”“正在同步 WebDAV…”。**从未成功同步过的来源失败**（如默认启用有道但用户从没登录）记为 `never` 并附原因，不显示为红色错误；成功过之后再失败才是 `error`。
-- popup 消费约定（第二阶段第 4 轮）：`level=never` 且 `text` 不以“尚未同步”开头 = 从未成功过的来源失败了（未登录等），popup 给“去登录 / 去连接”修复入口，登录类原因显示为“未登录”；`level=error` 的登录类原因显示为“登录已过期”。`lastSyncAt` 用于在正常行显示同步时间、在出错行显示“上次成功 …”。background 改动 `never` 的文案时请保持“尚未同步…”这一前缀表示“只是还没试过”。
+- `items: StatusItem[]`：`storage-sync`、`webdav`、每个启用来源 `source:<providerId>` 各一项，含 `name`、`level`、一句中文 `text`、`lastSyncAt`、`retryAt?`、`detail?`（补充原因，如“未连接”时最近一次失败原文）、`href`（选项页位置：浏览器账号同步 `#sync/sync`、WebDAV `#sync/webdav`、来源 `#sources`）。
+- `level` 严重程度 `error > busy > pending > never > ok > off`，总 `level` 取最严重项，总 `text` 如“已全部同步”“欧路词典：授权失效…”“正在同步 WebDAV…”。**从未成功同步过的来源**（还没有任何远端生词本，或列表 / 各书刷新失败，如默认启用有道但用户从没登录）统一记为 `never`、`text`=“未连接”（口径见 `core/source/connect-status.ts`，原因放 `detail`），options 来源卡片、popup、悬浮球都按中性灰显示、不计入告警；已列出生词本但没同步过的是 `never`+“尚未同步…”；成功过之后再失败才是 `error`。
+- popup 消费约定：`level=never` 用中性灰（muted）；`text`=“未连接”时给“去连接”入口（不进告警条），以“尚未同步”开头时先试一次同步；`level=error` 的登录类原因显示为“登录已过期”。行内译文在各界面的名称与模式标签统一取 `core/settings/inline-translation-labels.ts`。`lastSyncAt` 用于在正常行显示同步时间、在出错行显示“上次成功 …”。background 改动 `never` 的文案时请保持“尚未同步…”这一前缀表示“只是还没试过”。
 - storage.sync 已同步时 `text` 带用量与超配额取舍说明（“1 本本地词书超出配额未同步”/“只同步了单词”）。
 - `permissions { allSites, webdavOrigin?, text? }`：`allSites=false` 时页面不会高亮（platform `hasAllSitesAccess`）；授权按钮仍须由页面在点击处理里第一句调用 `requestAllSitesAccess()`（后台无法发起授权）。
 - `updateNotice?`：见存储键 `updateNotice`。
@@ -417,7 +419,7 @@ sequenceDiagram
 - **删除集合只含屈折变化**（`findInflectedForms`）：生词本中的词 w 只有在 w 就是原形，或 w 经屈折还原（复数、三单、-ed、-ing、比较级以及 went/gone/better 这类不规则形，来自 `Lemmatizer#analyze().inflections`）等于原形时才会被删除。派生词（runner、careful、careless、carelessly、ability）永远不删。数据表外的词按规则还原时，-er/-est 不还原（runner 不当作 run 的比较级）。同原形开关 `sameLemma` 关闭时只处理当前词形和原形本身。
 - **来源删除的保护**：只对可删的书（未孤立、`canDelete`、provider 支持删除）发请求；`globalRefs` 的来源（有道）跨书按句柄去重，删除成功后同步清理其他书（含迁移来的孤儿书）缓存中的同一条目；任何失败都保留本地缓存并在文案中说明。
 - `knownRemoveFrom='auto'`（默认）等同旧开关：启用的来源中开启 `deleteOnKnown` 的全部生词本。
-- **撤销**（10 分钟，记录在 `storage.session` 的 `knownUndo`，键为 `known:<lemma>` / `add:<lemma>`）：本地词书完整恢复；来源词书原书可加词时加回原书，否则加回同来源可写的书（有道默认分组）并说明，都不行时在文案中列出无法加回的词；撤销认识时还会删除写入来源熟词本的词。
+- **撤销**（10 分钟，记录在 `storage.local` 的 `knownUndo`，浏览器重启后仍有效，键为 `known:<lemma>` / `add:<lemma>`）：本地词书完整恢复；来源词书原书可加词时加回原书，否则加回同来源可写的书（有道默认分组）并说明，都不行时在文案中列出无法加回的词；加回时保留删除前缓存的释义与音标（provider 只回传新句柄）；撤销认识时还会删除写入来源熟词本的词。超过 10 分钟撤销认识只移出熟词本，message 说明撤销记录已失效并列出未加回的词。
 - “加入生词本”默认写入“我的生词本”（`local:mine`，首次加入时自动创建并放到 `books.enabled` 最前），并从本地熟词本移除该词的屈折词形；词仍在启用的只读来源熟词本中时，文案提示“仍不会高亮”。
 
 **选中文本右键菜单**（[background/context-menu.ts](../src/background/context-menu.ts)，第二阶段新增，manifest 权限 `contextMenus`，无安装警告）：桌面浏览器选中单词后右键“加入生词本：“…””/“标记为熟词：“…””，与卡片按钮走同一个 `addWord`/`markKnown`（目标按 `wordActions`），原形取屈折还原（running→run，不取派生词根）；选中的不是单个英文单词时提示“请只选中一个英文单词”，含非英文字母的拉丁词（café、fiancé）不截断、直接拒绝并提示；`markKnown` 不带 `confirmed`，同形异义词形的远端删除保留并在 message 说明。结果通过 `actionNotice` 发给内容脚本，同时徽章闪 ✓/!。没有 `contextMenus` API 的浏览器（Edge/Chrome Android）不注册，菜单与徽章初始化失败都不影响 SW 其余初始化（有单测覆盖 `contextMenus=undefined`）。
@@ -567,7 +569,7 @@ stdout 输出每页统计 JSON（高亮数、不同词条数、行内翻译数�
 - 撤销熟词时有道非默认分组的词只能加回默认分组“无标签”（markKnown 的 message 预先说明“撤销时会加回 …”）；欧路 cookie 模式无加词接口，无法加回（message 说明“撤销不会恢复”，`fullyUndoable=false`）。
 - 认识（`knownRemoveFrom='auto'`）时同时从“加入生词本”的本地目标（默认“我的生词本”）移除，撤销时加回。
 - 屈折还原数据中的同形异义词（lay 是 lie 的过去式也是原形动词、found 是 find 的过去式也是原形）：后台层保护（`forms.ts#findHomographForms`：不规则词形且打包词典中它有自己的屈折变化，如 lay/laid、found/founded、saw/sawing）——这些词的**远端**删除只有 `markKnown` 带 `confirmed=true` 才执行，否则保留并在 `withheld` 与 message 中说明；用户点的页面词形本身不拦截。卡片可据 `previewWordAction.remove[].homographs` 弹确认后带 `confirmed` 重发（幂等）。本地词书移除可完整撤销，不拦截。
-- 欧路“已掌握”868 词同步约 19 秒：`page_size` 服务器上限 100（2026-10 实测 500/1000 返回 400），叠加 1 分钟 30 次限流（间隔 2.1s），无法再快。读请求（列分组、分页）网络错误/5xx 自动重试 2 次（2.1s、4.2s 退避），写请求不重试。
+- 欧路“已掌握”868 词同步约 19 秒：`page_size` 服务器上限 100（2026-10 实测 500/1000 返回 400），叠加 1 分钟 30 次限流（间隔 2.1s），无法再快。读请求（列分组、分页）网络错误/5xx 自动重试 2 次（2.1s、4.2s 退避）；写请求（加词/删词，欧路接口幂等）只在网络层错误（没有拿到响应）时同样重试，5xx 不重试。有道接口网络层错误也重试 2 次（加词除外）。
 - WebDAV 只用本地 docker（bytemark/webdav，Apache mod_dav）实测，坚果云/Nextcloud 未实测（是否支持 LOCK 未验证）。并发写入：支持 LOCK 时真实两 profile 并发 0/72 轮丢失；不支持 LOCK（用拒绝 LOCK 的代理模拟）时写后回读校验 + 复查 0/20 轮丢失，对方 PUT 比本机回读还慢落地时远端会暂时缺本机的词，5–15s 复查补推；复查前 SW 被回收时由持久化的 `recheckAt` 在下次 SW 启动时立即补做（合并幂等，不会永久丢失本机数据）。
 - storage.sync 的防抖/退避计时器在 SW 被回收后丢失，未推送的改动在 SW 下次启动时由启动同步补推（没有使用 alarms 权限）。
 - 徽章：background 在 URL（不含 hash）变化时清零（含 SPA 路由），依赖内容脚本在路由切换后按页面实际高亮重新全量上报。
