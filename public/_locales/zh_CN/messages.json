@@ -4,7 +4,7 @@
     "description": "The title of the application, displayed in the web store."
   },
   "appDesc": {
-    "message": "在英文网页中高亮有道/欧路生词本与四六级、考研、托福、雅思、GRE 等分级词书中的单词，支持行内翻译与词形还原",
+    "message": "在英文网页中高亮有道/欧路生词本和内置分级词书中的单词，支持行内翻译与词形还原",
     "description": "The description of the application, displayed in the web store."
   }
 }

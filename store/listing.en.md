@@ -11,27 +11,27 @@ Name and summary come from `public/_locales/en/messages.json` (`appName`, `appDe
 | Field | Current value | Limit | Status |
 | --- | --- | --- | --- |
 | Name `appName` | Highlight New Words – Vocabulary Builder for Youdao, Eudic, CET & IELTS | Chrome: max 75 chars | 71 chars, OK |
-| Summary `appDesc` | Highlight new words from Youdao/Eudic word books and graded lists (CET, IELTS, TOEFL, GRE) on web pages, with inline glosses | Chrome: max 132 chars | 124 chars, OK |
+| Summary `appDesc` | Highlight new words from your Youdao/Eudic word books and built-in graded word lists on web pages, with inline glosses | Chrome: max 132 chars | 118 chars, OK |
 
 ## 2. Detailed Description - Chrome Web Store
 
-Plain text only (no HTML/Markdown); keep under 16,000 characters; no keyword stuffing. The text below is about 3,780 characters and was checked against the current build on 2026-10-01. The interface is currently in Simplified Chinese, which the description states up front.
+Plain text only (no HTML/Markdown); keep under 16,000 characters; no keyword stuffing: do not enumerate exam names, file formats or storage brands; describe them in general terms (in 2026-10 the Chrome Web Store rejected the listing for "excessive keywords" because of such lists). The text below is about 3,690 characters and was checked against the current build on 2026-10-01. The interface is currently in Simplified Chinese, which the description states up front.
 
 ```text
-Highlight New Words is a vocabulary builder and word highlighter for English learning: it marks the words you are studying on any web page and in YouTube captions, taken from your Youdao or Eudic word book or from built-in CET, IELTS and TOEFL lists. Hover (or tap on mobile) to see phonetics, meaning and word forms, and mark a word as known in one click so it never shows up again.
+Highlight New Words is a vocabulary builder and word highlighter for English learning: it marks the words you are studying on any web page and in YouTube captions, taken from your Youdao or Eudic word book or from the built-in graded word lists. Hover (or tap on mobile) to see phonetics, meaning and word forms, and mark a word as known in one click so it never shows up again.
 Note: the interface and the built-in glosses are in Simplified Chinese.
 
 CHOOSE WHAT TO LEARN
-- Built-in graded word books: Chinese exam lists (Zhongkao, Gaokao, CET-4, CET-6, postgraduate entrance, TEM-4, TEM-8), IELTS, TOEFL, SAT, GRE; CEFR levels A2 to C2; COCA frequency bands. Combine them freely; pick B2 to highlight B2 and above.
+- Built-in graded word books covering Chinese school, university and graduate entrance exams and common study-abroad tests, plus CEFR levels and COCA frequency bands. Combine them freely; pick B2 to highlight B2 and above.
 - Sync your cloud word books from Youdao Dictionary and Eudic. Each remote word book becomes a separate book with its own sync status; Eudic's "mastered words" list can be synced as a known-words list.
-- Import your own lists: TXT, CSV, TSV, Youdao XML export, Eudic export, Anki plain-text export.
+- Import your own lists from plain-text or spreadsheet files, or from word lists exported by Youdao, Eudic or Anki.
 
 READ WITHOUT INTERRUPTION
 - Inline glosses after or above each highlighted word, switchable at any time.
 - Word card with phonetics, pronunciation, full definitions, exam tags and word-form notes such as "past tense of run".
 - Choose how the card opens: hover (adjustable delay), hold a modifier key while hovering, or click; tap on touch screens.
 - Lemmatization: running and ran both count as run; marking a word as known hides all of its forms.
-- Many highlight styles (background, marker, underline, wavy, dotted, colored text), per-book colors, automatic contrast on dark pages.
+- Many highlight style presets (or show glosses only, without highlighting), per-book colors, automatic contrast on dark pages.
 - Code block highlighting (off by default): mark new words in code comments and strings on technical pages; online editors and input fields are left alone.
 
 YOUTUBE CAPTIONS
@@ -47,7 +47,7 @@ WORD BOOKS, KNOWN WORDS AND SYNC
 - "Add to word book" on the card saves a word to a local word book or to your Youdao / Eudic cloud word book.
 - When marking a word as known, choose which known-words lists to write to and which word books (local or cloud) to remove it from; by default it only goes to the local known-words list. Undo is available for 10 minutes.
 - Import and export your known-words list.
-- Settings, known words and imported books can be synced or backed up in several ways, used together if you like: your browser account; WebDAV (Nextcloud, Synology, Jianguoyun and other servers you own); or a manual backup file, imported with merge or overwrite. Credentials such as the Eudic token or WebDAV password are not uploaded unless you opt in.
+- Settings, known words and imported books can be synced or backed up in several ways, used together if you like: your browser account; WebDAV on a server you own; or a manual backup file, imported with merge or overwrite. Credentials such as the Eudic token or WebDAV password are not uploaded unless you opt in.
 
 MORE
 - Turn highlighting on or off per site; the toolbar badge shows how many new words are on the page, and the popup lists them along with sync status.
@@ -59,7 +59,7 @@ Feedback: https://github.com/xqdd/highlight-new-words/issues
 
 ## 3. Detailed Description - Microsoft Edge Add-ons
 
-Limit: 250 to 10,000 characters and it must describe the full functionality. Reuse section 2 (it covers every feature; about 3,840 characters with the line below) and add this line after the first paragraph:
+Limit: 250 to 10,000 characters and it must describe the full functionality. Reuse section 2 (it covers every feature; about 3,750 characters with the line below) and add this line after the first paragraph:
 
 ```text
 Works on Microsoft Edge for desktop and Edge for Android.

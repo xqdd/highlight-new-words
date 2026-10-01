@@ -92,7 +92,7 @@ flowchart TD
 
 - **权限最小化**：两家都会逐项核对权限，每一项都要有真实调用（当前为 `storage`、`unlimitedStorage`、`tts`、`tabs`、`contextMenus`、`scripting`，`cookies` 已移除）。新增权限要同步更新 [permissions.md](../store/permissions.md)。
 - **广泛主机权限**：`http/https` 全站权限会触发更细的人工审核，延长审核时间；理由必须写清“内容脚本需在任意网页本地匹配，不上传页面内容”。
-- **简短描述 ≤ 132 字符**：Chrome 上传时校验，当前中文 55 字符、英文 124 字符。
+- **简短描述 ≤ 132 字符**：Chrome 上传时校验，当前中文 39 字符、英文 118 字符。
 - **隐私披露一致**：商店表单、隐私政策、审核备注、实际网络请求必须一致；新增来源/同步方式时一起改。云端来源（有道、欧路）默认不连接，安装后不向第三方发请求；用户打开来源即同步一次，之后每天同步一次。隐私政策与审核备注都已写明，改默认值时同步修改。
 - **无远程代码**：不得从网络加载并执行脚本；内置数据只能是扩展包内 JSON。
 - **截图真实**：截图来自真实运行（[capture.mjs](../store/scripts/capture.mjs)），界面改版后要重新采集，避免与实际不符。
@@ -181,7 +181,7 @@ npm run build:firefox            # 产物 ${OUT_DIR:-.output}/firefox-mv3
 - [ ] `package.json` 版本号已递增（首发 3.0.0），与 tag 一致 —— 版本号为 3.0.0；tag `v3.0.0` 待发版提交时打
 - [ ] `npm ci && npm run typecheck && npm test` 通过（以发版提交为准重跑；2026-10-01 最近一次全量为 485 通过、1 跳过，另有并行开发中的 `options-fix`、`lemma` 用例未收尾，发版前须全绿）
 - [x] `npm run zip` 成功；解压 chrome zip 检查 `manifest.json`：版本号 3.0.0、权限 `storage`/`unlimitedStorage`/`tts`/`tabs`/`contextMenus`/`scripting`、无 `browser_specific_settings`
-- [x] `_locales/*/messages.json`：`appName` ≤ 75 字符、`appDesc` ≤ 132 字符（中文 20/55，英文 66/124）
+- [x] `_locales/*/messages.json`：`appName` ≤ 75 字符、`appDesc` ≤ 132 字符（中文 20/39，英文 66/118）
 - [x] 权限列表中每一项都在代码中有真实用途（`cookies` 已移除）
 - [x] 无远程代码：产物中没有对外部脚本 URL 的 `import`/`<script src>`
 

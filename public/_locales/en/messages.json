@@ -4,7 +4,7 @@
     "description": "The title of the application, displayed in the web store."
   },
   "appDesc": {
-    "message": "Highlight new words from Youdao/Eudic word books and graded lists (CET, IELTS, TOEFL, GRE) on web pages, with inline glosses",
+    "message": "Highlight new words from your Youdao/Eudic word books and built-in graded word lists on web pages, with inline glosses",
     "description": "The description of the application, displayed in the web store."
   }
 }
