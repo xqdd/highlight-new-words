@@ -95,7 +95,7 @@ flowchart LR
 | `credentialSync` | 凭据是否随同步上传：`token:<providerId>`（来源 API token）、`webdav`（WebDAV 连接信息含密码），默认全部 false；本字段参与设置同步，各设备一致，见 4.11 |
 | `sites.disabled` | 禁用站点（含子域名，见 `isSiteDisabled`） |
 | `ui.theme` | 扩展页面（popup/options）界面主题 `auto`/`light`/`dark`（options 分片新增，默认 `auto`）；页面在根元素设置 `data-theme`，`auto` 时不设置、跟随系统 |
-| `youtube` | YouTube 字幕（v9，floatball 负责）：`captions` 字幕中标注生词（默认开）；`captionTranslation` 字幕内生词译文 `above` 上方注解（默认）/ `below` 下方注解 / `after` 词后小字 / `off` 只高亮（自动生成字幕的 `above`/`below` 改用 `after`）；`captionStyle`（可选）字幕注解样式：`color`、`background`（空串=无底色，改用加重黑色描边）、`fontScale`（相对字幕字号 0.55–1，缺省 0.64）、`bracket`（缺省不加，三种模式都适用）、`bold`、`italic`，类型、缺省值、7 套预设 `CAPTION_GLOSS_PRESETS` 与 `resolveCaptionStyle`/`applyCaptionPreset`/`matchCaptionPreset` 在 [caption-style.ts](../src/core/theme/caption-style.ts)；`hoverPause` 桌面悬停字幕自动暂停（默认关）。见 4.12 |
+| `youtube` | YouTube 字幕（v9，floatball 负责）：`captions` 字幕中标注生词（默认开）；`captionTranslation` 字幕内生词译文 `above` 上方注解（默认）/ `below` 下方注解 / `after` 词后小字 / `off` 只高亮（自动生成字幕的 `above`/`below` 改用 `after`）；`captionStyle`（可选）字幕注解样式：`color`（空串=跟随字幕文字颜色，缺省暖黄）、`background`（空串=无底色，改用加重黑色描边）、`fontScale`（相对字幕字号 0.55–1，缺省 0.64）、`bracket`（缺省不加，三种模式都适用）、`bold`、`italic`，类型、缺省值、7 套预设 `CAPTION_GLOSS_PRESETS` 与 `resolveCaptionStyle`/`applyCaptionPreset`/`matchCaptionPreset` 在 [caption-style.ts](../src/core/theme/caption-style.ts)；`hoverPause` 桌面悬停字幕自动暂停（默认关）。见 4.12 |
 | `floatBall` | 通用悬浮球（v10，floatball 新增）：`enabled` 全局开关（默认开）、`hiddenSites` 隐藏悬浮球的站点（规则同 `sites.disabled`）。只在触屏/手机端显示 |
 | `performance.prehide` | 加载时先隐藏页面，避免首屏译文插入造成跳动（engine 第 3 轮新增，默认 `false`，旧设置由 `normalizeSettings` 补齐）。开启后由 background 动态注册隐藏样式，见 4.5“首屏预隐藏” |
 

@@ -35,7 +35,7 @@ export function glossLook(s: ResolvedCaptionGlossStyle, baseWeight: number): str
   const lightBg = !!bg && bg.a > 0.5 && (0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b) / 255 > 0.55;
   const shadow = !s.background ? '0 0 2px #000,0 0 3px #000,1px 1px 2px #000' : lightBg ? 'none' : '0 0 1px #000,0 0 2px #000';
   return (
-    `background:${s.background || 'transparent'};color:${s.color};font-weight:${s.bold ? 700 : baseWeight};font-style:${s.italic ? 'italic' : 'normal'};` +
+    `background:${s.background || 'transparent'};color:${s.color || 'inherit'};font-weight:${s.bold ? 700 : baseWeight};font-style:${s.italic ? 'italic' : 'normal'};` +
     `text-shadow:${shadow}`
   );
 }

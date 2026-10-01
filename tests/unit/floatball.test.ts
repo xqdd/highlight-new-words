@@ -372,6 +372,9 @@ describe('YouTube 字幕译文模式', () => {
     expect(matchCaptionPreset(undefined)?.id).toBe('classic');
     expect(matchCaptionPreset({ color: '#FFE08A', background: 'rgba(0, 0, 0, .86)' })?.id).toBe('classic');
     expect(matchCaptionPreset({ italic: true })).toBeUndefined();
+    // 颜色清空 = 跟随字幕文字颜色（不是回到缺省暖黄）
+    expect(buildCaptionCss({ color: '' })).toContain('color:inherit');
+    expect(matchCaptionPreset({ color: '' })).toBeUndefined();
   });
 });
 

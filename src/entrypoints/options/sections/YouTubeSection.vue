@@ -103,7 +103,7 @@ const presetSamples = computed(() => CAPTION_GLOSS_PRESETS.map((p) => ({ preset:
         <span class="lbl">括号</span>
         <SegmentedControl :model-value="capStyle.bracket" :options="CAP_BRACKETS" aria-label="字幕译文括号" @update:model-value="(v: TranslationBracket) => patchCap({ bracket: v })" />
         <span class="lbl">译文颜色</span>
-        <ColorRow :model-value="capStyle.color" label="字幕译文颜色" @update:model-value="(c: string) => patchCap({ color: c })" />
+        <ColorRow :model-value="capStyle.color" label="字幕译文颜色" empty-label="跟随字幕文字颜色" @update:model-value="(c: string) => patchCap({ color: c })" />
         <span class="lbl">译文底色</span>
         <ColorRow
           :model-value="capStyle.background"

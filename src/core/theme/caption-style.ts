@@ -7,7 +7,7 @@ import type { TranslationBracket } from './themes';
 
 /** 字幕注解样式（存于 Settings.youtube.captionStyle，所有字段可选，缺省值见 CAPTION_STYLE_DEFAULTS） */
 export interface CaptionGlossStyle {
-  /** 注解文字颜色 */
+  /** 注解文字颜色，空串=跟随字幕文字颜色（缺省 undefined 为暖黄） */
   color?: string;
   /** 注解底色，空串=无底色（改用黑色描边保证可读） */
   background?: string;
@@ -64,7 +64,7 @@ const PRESET_FIELDS = ['color', 'background', 'fontScale', 'bracket', 'bold', 'i
 export function resolveCaptionStyle(s: CaptionGlossStyle | undefined): ResolvedCaptionGlossStyle {
   const d = CAPTION_STYLE_DEFAULTS;
   return {
-    color: s?.color || d.color,
+    color: s?.color ?? d.color,
     background: s?.background ?? d.background,
     fontScale: Math.min(1, Math.max(0.55, s?.fontScale ?? d.fontScale)),
     bracket: s?.bracket ?? d.bracket,
