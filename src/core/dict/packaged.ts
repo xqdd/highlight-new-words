@@ -40,6 +40,7 @@ export function unpackDictEntry(word: string, e: PackedDictEntry, full?: PackedD
     word,
     phonetic: e.p,
     short: e.s,
+    shortVerb: e.v,
     full: f ?? e.s,
     tags: e.g ? e.g.split(' ') : undefined,
     level: e.l,
@@ -111,7 +112,7 @@ export class CompositeDictionary implements Dictionary {
   async lookup(word: string): Promise<DictEntry | undefined> {
     const results = await Promise.all(this.sources.map((s) => s.lookup(word)));
     let out: DictEntry | undefined;
-    for (const e of results) if (e) out = out ? { ...e, ...stripUndefined(out) } : e;
+    for (const e of results) if (e) out = out ? mergeEntry(out, e) : e;
     return out;
   }
 
@@ -122,11 +123,21 @@ export class CompositeDictionary implements Dictionary {
     for (const map of results) {
       for (const [w, e] of map) {
         const prev = out.get(w);
-        out.set(w, prev ? { ...e, ...stripUndefined(prev) } : e);
+        out.set(w, prev ? mergeEntry(prev, e) : e);
       }
     }
     return out;
   }
+}
+
+/**
+ * 合并同一词的两个来源：prev 优先，later 只补齐缺失字段。
+ * 前者已给出 short（用户词书自带释义）时不再补后者的 shortVerb，避免行内翻译在用户释义与打包动词释义之间来回切换
+ */
+function mergeEntry(prev: DictEntry, later: DictEntry): DictEntry {
+  const merged = { ...later, ...stripUndefined(prev) };
+  if (prev.short !== undefined && prev.shortVerb === undefined) delete merged.shortVerb;
+  return merged;
 }
 
 function stripUndefined<T extends object>(o: T): Partial<T> {

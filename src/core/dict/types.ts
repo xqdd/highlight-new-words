@@ -7,6 +7,11 @@ export interface DictEntry {
   phonetic?: string;
   /** 简短释义：一行，适合行内翻译（如 “v. 放弃；抛弃”） */
   short?: string;
+  /**
+   * 动词短释义（data 分片第二阶段新增，可选）：short 取的是名词/形容词义项、而该词也常作动词时提供（advocate：short 提倡者 / shortVerb 提倡）。
+   * 页面词形是动词变形（advocating、advocated）时，行内翻译宜改用它；只来自打包词典，用户词书自带释义时不提供
+   */
+  shortVerb?: string;
   /** 完整释义：可多行（\n 分隔） */
   full?: string;
   /** 标签，如 ['cet4','cet6','gre']，与词书 id 一致时 UI 可展示为词书徽标 */
@@ -53,7 +58,7 @@ export interface Dictionary {
 
 /**
  * 打包词典分片文件结构，shard 为首字母 a-z，其他字符归入 '_'。使用短键名以减小体积。分两层：
- * - 短表 data/dict/<shard>.json：p/s/g/l/r（高亮 + 行内翻译热路径）
+ * - 短表 data/dict/<shard>.json：p/s/v/g/l/r（高亮 + 行内翻译热路径）
  * - 全表 data/dict/full/<shard>.json：f/x（卡片展开时才加载）
  * 旧格式（f 直接在短表中）仍兼容。
  */
@@ -62,6 +67,8 @@ export interface PackedDictEntry {
   p?: string;
   /** short translation：行内翻译用的单个义项，不带词性，≤ 8 字（如 “放弃”） */
   s?: string;
+  /** short verb translation：s 不是动词义项时的动词短释义（如 advocate 的 “提倡”），见 DictEntry.shortVerb */
+  v?: string;
   /** full translation：每行一个词性（如 “vt. 放弃, 抛弃\nn. 放任”） */
   f?: string;
   /** 空格分隔标签（考试词书 id） */

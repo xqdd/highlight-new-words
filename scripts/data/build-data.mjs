@@ -4,19 +4,21 @@
  *
  * 用法：
  *   scripts/data/fetch-raw.sh .cache/data-raw [--with-ultimate]
- *   node scripts/data/build-data.mjs --raw .cache/data-raw [--out public/data] [--report report.json]
+ *   node scripts/data/build-data.mjs --raw .cache/data-raw [--out public/data] [--report report.json] [--audit audit.tsv]
+ *     --audit 输出短释义审计表（可疑选义打标，供人工复核后补进 short-overrides.tsv，见 auditFlags）
  *
  * 输入（--raw 目录）：
  *   ecdict.csv                         ECDICT（MIT）：音标/释义/考试标签/COCA(frq)/BNC 排名/词形变化(exchange)
  *   lemma.en.txt                       ECDICT 附带 BNC 词形表（MIT）：补充屈折词形 -> 原形
  *   cefrj/cefrj-vocabulary-profile-1.5.csv  CEFR-J Wordlist 1.5（免费商用，需署名）：A1–B2 分级
  *   kyle/7 SAT-乱序.txt、kyle/tsv_专四.txt、kyle/tsv_专八.txt  KyleBing/english-vocabulary（BSD-3）：只取词表
- *   ultimate/ultimate.csv              可选，ECDICT-ultimate（MIT）：只用 pos 词性占比给短释义排序
+ *   ultimate/ultimate.csv              可选（仓库产物带它生成），ECDICT-ultimate（MIT）：pos 词性占比与更规整的释义行（短释义打分、完整释义 f）
+ *   short-overrides.tsv（脚本同目录）   行内短释义人工覆盖表
  *
  * 输出（--out 目录，默认 public/data，结构见 src/core/wordbook/types.ts、src/core/dict/types.ts）：
  *   books/index.json        BookCatalog：词书目录（词数/描述/分类/级别/增量关系）
  *   books/<id>.json         BookDataFile：小写原形，已排序
- *   dict/<a-z>.json         DictShardFile 短表：p 音标、s 行内短释义、g 考试标签、l 级别、r 词频排名（高亮/行内翻译热路径）
+ *   dict/<a-z>.json         DictShardFile 短表：p 音标、s 行内短释义、v 动词短释义（可选）、g 考试标签、l 级别、r 词频排名（高亮/行内翻译热路径）
  *   dict/full/<a-z>.json    DictShardFile 全表：f 完整释义、x 词形变化（卡片展开时才加载）
  *   NOTICE.txt              数据来源与许可声明
  *
@@ -42,6 +44,7 @@ function arg(name, def) {
 const RAW = arg('--raw', '.cache/data-raw');
 const OUT = arg('--out', 'public/data');
 const REPORT = arg('--report');
+const AUDIT = arg('--audit');
 if (!fs.existsSync(path.join(RAW, 'ecdict.csv'))) {
   console.error(`缺少 ${RAW}/ecdict.csv，先运行 scripts/data/fetch-raw.sh ${RAW}`);
   process.exit(1);
@@ -49,6 +52,19 @@ if (!fs.existsSync(path.join(RAW, 'ecdict.csv'))) {
 
 /** 只有纯字母才视为可高亮单词；短语、连字符词、缩写不进词书 */
 const WORD_RE = /^[a-z]+$/;
+/**
+ * 不进任何词书的“伪单词”：
+ * - 连字符前缀：页面分词按连字符切开（re-run、non-profit、mid-century、co-founder），切出的前缀单独高亮只会误标
+ * - 缩写/单位/罗马数字：vs、etc、km、ph、iii…（多数已被 isBncOnly 挡住，这里兜底有 COCA 排名的）
+ * - 常见人名同形词：lee、tony（ECDICT 小写词条有“保护”“时髦的”等冷僻义，页面上几乎总是人名）
+ */
+const NOT_WORDS = new Set([
+  're', 'non', 'de', 'co', 'mid', 'pre', 'anti', 'semi', 'multi', 'inter', 'eco', 'bio', 'sub', 'ex', 'neo', 'para', 'pseudo', 'quasi', 'ultra',
+  'micro', 'macro', 'mini', 'mega', 'anglo', 'amino', 'turbo', 'alpha', 'beta', 'gamma', 'fore',
+  'vs', 'etc', 'ie', 'eg', 'km', 'kg', 'ft', 'lb', 'mm', 'cm', 'ph', 'bp', 'cv', 'hiv', 'pc', 'tv', 'cd', 'dvd', 'vcd', 'ok', 'id',
+  'ii', 'iii', 'iv', 'vi', 'vii', 'viii', 'ix', 'xi', 'xii', 'xiv', 'xv',
+  'lee', 'tony',
+]);
 /** 词典收录的词频上限（COCA/BNC 排名）：超出且无考试标签/CEFR 级别的生僻词不收 */
 const DICT_RANK_MAX = 30000;
 /** 级别/词频词书的总词表（inventory）词频上限 */
@@ -253,7 +269,7 @@ for (const [id, set] of examRaw) for (const w of set) examTagsOf.set(w, [...(exa
 /** 可作为原形收录的词：非专有名词、非变形词、有中文释义、不是叹词/缩写 */
 function isLemmaCandidate(w) {
   const e = ecdict.get(w);
-  if (!e || w.length < 2 || isProperNoun(w)) return false;
+  if (!e || w.length < 2 || NOT_WORDS.has(w) || isProperNoun(w)) return false;
   if (lemmaOf.has(w) && !cefr.has(w)) return false;
   if (!e.lines.some((l) => CJK_RE.test(l))) return false;
   // 叹词（oh/wow/huh）与缩写（vs/etc）不做生词
@@ -268,7 +284,32 @@ for (const [w, c] of cefr) if (ecdict.has(w) && !isProperNoun(w)) levelOf.set(w,
 // 实测（对照 Relingo B2 在同一文章上的判定）：高考词/高频词再降级会漏掉 barrier、community、federal 等 Relingo 会标的词，故不做
 for (const [w, l] of levelOf) if (l > 2 && examTagsOf.get(w)?.includes('zk')) levelOf.set(w, 2);
 const extraWords = new Set([...examTagsOf.keys()]);
-for (const [w] of ecdict) if (rankOf(w) <= INVENTORY_RANK_MAX && isLemmaCandidate(w)) extraWords.add(w);
+/**
+ * 只有 BNC 排名、没有 COCA 排名（frq=0）的词多是人名/地名/缩写（chelsea、oliver、marx、hong、kong、km、vs）：
+ * COCA 词频表按词元统计、不收专有名词，BNC 排名却按字形统计。这类词不按词频进入级别/词频词书（考试词与 CEFR-J 词不受影响）
+ */
+const isBncOnly = (w) => !cefr.has(w) && !ecdict.get(w).frq && !americanSpellings(w).some((a) => ecdict.get(a)?.frq);
+/** 英式拼写对应的美式拼写候选（emphasise → emphasize、watercolour → watercolor、foetal → fetal），英式词在 COCA 中没有排名 */
+function americanSpellings(w) {
+  return [
+    w.replace(/is(e|es|ed|ing|er|ers|ation|ations)$/, 'iz$1'),
+    w.replace(/isation$/, 'ization'),
+    w.replace(/our/, 'or'),
+    w.replace(/tre$/, 'ter'),
+    w.replace(/ence$/, 'ense'),
+    w.replace(/oe/, 'e').replace(/ae/, 'e'),
+    w.replace(/ll(ed|ing|er|ist)$/, 'l$1'),
+    w.replace(/logue$/, 'log'),
+    w.replace(/yse$/, 'yze'),
+  ].filter((a) => a !== w);
+}
+const bncOnlyDropped = [];
+for (const [w] of ecdict) {
+  if (rankOf(w) > INVENTORY_RANK_MAX || !isLemmaCandidate(w)) continue;
+  if (isBncOnly(w) && !examTagsOf.has(w)) { bncOnlyDropped.push(w); continue; }
+  extraWords.add(w);
+}
+if (process.env.DEBUG_DROPPED) console.log('bnc-only dropped', bncOnlyDropped.length, bncOnlyDropped.join(' '));
 for (const w of extraWords) {
   if (levelOf.has(w) || !isLemmaCandidate(w)) continue;
   const r = rankOf(w);
@@ -292,7 +333,7 @@ const bookWords = new Map();
 /** 嵌套词书（级别、词频是包含关系）：数据文件只存本书比 extendsId 多出的词，加载时由 registry 合并，体积减少约 70% */
 const bookExtends = new Map();
 function addBook(meta, words, extendsId) {
-  const list = [...new Set(words)].filter((w) => WORD_RE.test(w)).sort();
+  const list = [...new Set(words)].filter((w) => WORD_RE.test(w) && !NOT_WORDS.has(w)).sort();
   bookWords.set(meta.id, list);
   if (extendsId) {
     const parent = new Set(bookWords.get(extendsId));
@@ -413,8 +454,10 @@ if (fs.existsSync(ULT)) {
 
 /**
  * KyleBing 各词表自带的教材式释义（常用义在前）：只作为“哪个义项最常用”的投票信号，不输出其文本。
- * 格式："v. 使固定；修理 n. 困境" 或 "v::离弃；放弃"
- * @type {Map<string, string>}
+ * 每个词收集所有词表中**不同**的释义文本（多个词表照抄同一份有道释义时只算一票）；
+ * 四级/六级/托福/雅思等精选表只列 1–3 个考点义项，是“最常用义项”的强信号。
+ * 格式："v. 使固定；修理 n. 困境"、"v::离弃；放弃¦n::…"、"vi&n::拖欠"
+ * @type {Map<string, string[]>}
  */
 const kyleGloss = new Map();
 for (const f of fs.existsSync(path.join(RAW, 'kyle')) ? fs.readdirSync(path.join(RAW, 'kyle')).sort() : []) {
@@ -422,12 +465,20 @@ for (const f of fs.existsSync(path.join(RAW, 'kyle')) ? fs.readdirSync(path.join
   for (const line of fs.readFileSync(path.join(RAW, 'kyle', f), 'utf8').split('\n')) {
     const [w, gloss] = line.split('\t');
     const key = w?.trim().toLowerCase();
-    if (key && gloss && dictWords.has(key) && !kyleGloss.has(key)) kyleGloss.set(key, gloss.replace(/::/g, '. '));
+    if (!key || !gloss || !dictWords.has(key)) continue;
+    const text = gloss.replace(/\s*::\s*/g, '. ').replace(/(^|¦)\s*([a-z]+)&[a-z&]+\./g, '$1$2.').trim();
+    const list = kyleGloss.get(key) ?? [];
+    if (!list.includes(text)) list.push(text);
+    kyleGloss.set(key, list);
   }
+}
+/** 教材释义拆成“词性段”：按 ¦ 或下一个词性前缀切分 */
+function kyleSegments(text) {
+  return text.split(/\s*¦\s*|\s+(?=(?:vt|vi|v|n|adj|adv|a|ad|prep|conj|pron|int|num|art)\.)/).filter(Boolean);
 }
 
 const POS_PREFIX = {
-  n: ['n.'], v: ['v.', 'vt.', 'vi.'], j: ['adj.', 'a.', 's.'], r: ['adv.', 'ad.'], i: ['prep.'],
+  n: ['n.'], v: ['v.', 'vt.', 'vi.', 'aux.', 'modal.'], j: ['adj.', 'a.', 's.'], r: ['adv.', 'ad.'], i: ['prep.'],
   c: ['conj.'], p: ['pron.'], u: ['int.', 'interj.'], m: ['num.'], d: ['det.', 'art.'],
 };
 const PREFIX_POS = Object.fromEntries(Object.entries(POS_PREFIX).flatMap(([code, list]) => list.map((pre) => [pre, code])));
@@ -458,59 +509,212 @@ function sortLines(lines, weight) {
   return lines.map((l, i) => [l, i]).sort((a, b) => wOf(b[0]) - wOf(a[0]) || a[1] - b[1]).map((x) => x[0]);
 }
 
-/** 一行释义拆成义项：去掉词性前缀、学科标注、括注 */
+/**
+ * 专业/学科/语体标注：[医]、[计]、(商)、<计>、〔尤指…〕、【体育】、(美)(俚) 等。
+ * 带这类标注的义项是专业义或冷僻义，短释义降权（不是排除：interface 的“<计>接口”仍可能胜出）
+ */
+const DOMAIN_MARK_RE = /^\s*(?:\[[^\]]{1,6}\]|［[^］]{1,6}］|\([^)]{1,4}\)|（[^）]{1,4}）|<[^>]{1,6}>|〈[^〉]{1,6}〉|【[^】]{1,8}】)/;
+/** 冷僻/古旧/口语/贬义的语体词（出现在义项括注里）：降权 */
+const RARE_MARK_RE = /古|旧|废|俚|方言|诗|罕|蔑|粗|俗|苏格兰|美俚|英俚|口语/;
+
+/** 按 , ; ， ； 、 切分义项，括号内的分隔符不切（"(日, 月)落下" 是一个义项） */
+function splitTopLevel(str) {
+  const out = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of str) {
+    if ('[［(（<〈【〔《'.includes(ch)) depth++;
+    else if (depth > 0 && ']］)）>〉】〕》'.includes(ch)) depth--;
+    if (depth === 0 && ',;，；、'.includes(ch)) { out.push(cur); cur = ''; } else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+/**
+ * 一行释义拆成义项：去掉词性前缀、学科标注、括注。
+ * 返回 {text, marked}：marked 为该义项带专业/语体标注（降权用）
+ */
+function senseItems(line) {
+  // 有的释义用空格分隔义项（"山药 甘薯 白薯"）：汉字之间的空白视为分隔符
+  return splitTopLevel(line.replace(/^(?:[a-z]+\.\s*(?:&\s*)?)+/i, '').replace(/([\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])/g, '$1；'))
+    .map((raw) => {
+      const marked = DOMAIN_MARK_RE.test(raw) || (/[[［(（<〈【〔]/.test(raw) && RARE_MARK_RE.test(raw.match(/[[［(（<〈【〔][^\]］)）>〉】〕]*/g)?.join('') ?? ''));
+      // 计算机领域标注（[计]、<计>）：现代网页上计算机义往往已是最常用义，打分时有单独的例外规则
+      const computing = /^\s*[[［(（<〈【]计算?机?[\]］)）>〉】]/.test(raw);
+      const text = raw
+        .replace(/\[[^\]]*\]|［[^］]*］|〔[^〕]*〕|【[^】]*】/g, '')
+        .replace(/\([^)]*\)|（[^）]*）|<[^>]*>|〈[^〉]*〉|《[^》]*》/g, '')
+        .trim()
+        // “在……之后”“使...加快”统一为单个省略号，行内更紧凑
+        .replace(/…+$|\.+$/g, '').replace(/…+|\.{2,}/g, '…')
+        // 残留的数字编号（"1. 具体的"）与空白
+        .replace(/^[\d.\s·&]+/, '').replace(/[()（）[\]［］<>〈〉【】〔〕《》]/g, '').replace(/\s+/g, '');
+      return { text, marked, computing };
+    })
+    .filter((x) => CJK_RE.test(x.text) && !/[a-z]{3}/.test(x.text));
+}
+/** 兼容旧调用：只要文本 */
 function senses(line) {
-  return line
-    .replace(/^(?:[a-z]+\.\s*)+/i, '')
-    .replace(/\[[^\]]*\]|［[^］]*］|〔[^〕]*〕/g, '')
-    .replace(/\([^)]*\)|（[^）]*）|<[^>]*>|《[^》]*》/g, '')
-    .split(/[,;，；、]/)
-    // “在……之后”“使...加快”统一为单个省略号，行内更紧凑
-    .map((x) => x.trim().replace(/…+$|\.+$/g, '').replace(/…+|\.{2,}/g, '…'))
-    .filter((x) => CJK_RE.test(x));
+  return senseItems(line).map((x) => x.text);
 }
 /** 义项比较时忽略“使/的/地”等虚词，让“使固定”与“固定”、“过时的”与“过时”视为同一义项 */
 const senseKey = (s) => s.replace(/^使/, '').replace(/[的地]$/, '');
+/** 按词性归一：只有动词去“使”（使用者 ≠ 用者），只有形容词/副词去“的/地”（目的 ≠ 目） */
+const senseKeyOf = (s, pos) => (pos === 'v' ? s.replace(/^使(?=..)/, '') : (pos === 'j' || pos === 'r') ? s.replace(/(?<=..)[的地]$/, '') : s);
 
 /**
- * 行内短释义：在首选词性的义项里投票选出最常用的一个。
- * 候选 = ECDICT 基础版与 ultimate 首选词性行的义项；ECDICT/ultimate/教材词表各自包含该义项各得一票，
- * 同票按出现位置靠前优先；超过 SHORT_MAX 字的义项降权。
- * 例：scenario -> 方案（ultimate、教材都靠前），convert -> 转换，obsolete -> 废弃的
+ * 行内短释义：跨词性给每个候选义项打分，取最高分。
+ *
+ * - 词性分：ultimate 词性占比 + CEFR-J 词性加成（常用词性的义项优先：present 取动词/形容词，不取“瞄准”）
+ * - 位次票：ECDICT 基础版、ultimate、各 KyleBing 词表各是一个投票来源；义项在**本词性内**排第 i 位得 max(10-3i, 1) 分，
+ *   多个来源都把它排在前面说明它最常用（scenario → 方案，convert → 转换）。精选词表（义项 ≤ 4 个的）只列考点义，权重更高
+ * - 降权：专业/语体标注（[医]保险费、(商)溢价、〔尤指〕）、1 个字（线：歧义大）、超过 6 个字（不精炼）
+ * - 同一义项的多个写法（“使合并/合并”“具体/具体的”）取最自然的：动词去掉“使”，形容词保留“的”
+ * - 人工覆盖表 SHORT_OVERRIDES：自动打分仍明显不合常用义的高频多义词（见文件内说明）
  */
-function shortOf(w, baseLines) {
-  const weight = posWeights(w);
-  const sources = [sortLines(baseLines, weight), sortLines(ultimate.get(w)?.lines ?? [], weight)]
-    .filter((ls) => ls.some((l) => senses(l).length));
-  if (!sources.length) return '';
-  // 首选词性：权重最高的，没有权重信息时用 ECDICT 第一行的词性
-  const topPos = posOfLine(sources[0].find((l) => senses(l).length));
-  const pick = (lines) => {
-    const same = lines.filter((l) => posOfLine(l) === topPos).flatMap(senses);
-    return same.length ? same : senses(lines.find((l) => senses(l).length) ?? '');
-  };
-  const lists = sources.map(pick);
-  // 教材词表：取与首选词性相同的那段释义，没有则取第一段
-  const segs = (kyleGloss.get(w) ?? '').trim().split(/\s+(?=[a-z]+\.)/);
-  const kyle = senses(segs.find((g) => posOfLine(g) === topPos) ?? segs[0] ?? '');
-  // 位次投票：来源中排第 i 位得 max(10-3i, 1) 分，越靠前越重要；ultimate 义项更现代（scenario：方案）权重略高，
-  // 教材词表多抄自有道（与 ultimate 相关），权重略低
-  const voters = [[lists[0], 1], [lists[1] ?? [], 1.2], [kyle, 0.8]];
-  let best = '';
-  let bestScore = -Infinity;
-  for (const s of new Set(lists.flat())) {
-    const k = senseKey(s);
-    let score = 0;
-    for (const [list, wgt] of voters) {
-      const i = list.findIndex((x) => senseKey(x) === k);
-      if (i >= 0) score += Math.max(10 - 3 * i, 1) * wgt;
+/**
+ * 中文义项的“常用度”：该中文词在全部词条（ECDICT + ultimate，词频前 3 万）的释义中出现的次数。
+ * 区域/损失/观察/当前 这类常用中文词是很多英文词的译文，流通/遗失/主管人员 则少，用来在位次票接近时打破平局
+ * @type {Map<string, number>}
+ */
+const zhFreq = new Map();
+for (const [w, e] of ecdict) {
+  if (rankOf(w) > DICT_RANK_MAX) continue;
+  for (const lines of [e.lines, ultimate.get(w)?.lines ?? []]) {
+    for (const line of lines) for (const { text } of senseItems(line)) {
+      const k = senseKeyOf(text, posOfLine(line));
+      zhFreq.set(k, (zhFreq.get(k) ?? 0) + 1);
     }
-    // 偏好短义项：超长截断难看，5 字以上降权（住在都市的 < 城市的）
-    score -= s.length > SHORT_MAX ? 20 : s.length > 4 ? 2 : 0;
-    if (score > bestScore) { bestScore = score; best = s; }
   }
-  return best.length > SHORT_MAX ? best.slice(0, SHORT_MAX) : best;
 }
+
+/** 打分权重（调参时可用环境变量 SHORT_W='{"ult":2}' 覆盖，正式构建用默认值） */
+const W = { ec: 0.8, ult: 3, kc: 0.7, kf: 0.4, pos: 25, zh: 2, mark: 5, long: 12, ...JSON.parse(process.env.SHORT_W || '{}') };
+function shortOf(w, baseLines) {
+  // 人工覆盖的词只给 s，不另给动词释义（覆盖值已按常见用法选定词性）
+  if (SHORT_OVERRIDES.has(w)) return { short: SHORT_OVERRIDES.get(w) };
+  const weight = posWeights(w);
+  const maxW = Math.max(1, ...weight.values());
+  /** @type {{lines:string[], wgt:number}[]} */
+  const sources = [
+    { lines: baseLines.filter((l) => !/^\[/.test(l)), wgt: W.ec },
+    { lines: ultimate.get(w)?.lines ?? [], wgt: W.ult },
+  ];
+  const kyle = kyleGloss.get(w) ?? [];
+  // 词表很多（常用词在 20 个文本里都出现）时整体缩放，避免压过 ECDICT/ultimate
+  const kyleScale = Math.min(1, 4 / Math.max(1, kyle.length));
+  for (const g of kyle) {
+    const segs = kyleSegments(g);
+    const n = segs.reduce((acc, s) => acc + senseItems(s).length, 0);
+    // 精选表（只列少数考点义）是强信号；照抄完整释义的弱一些（与 ultimate 高度相关）
+    sources.push({ lines: segs, wgt: (n <= 4 ? W.kc : W.kf) * kyleScale });
+  }
+  /** key -> {score, variants: Map<text, count>, pos} */
+  const cand = new Map();
+  for (const { lines: raw, wgt } of sources) {
+    // 有道/ultimate 常把 vi. 行排在 vt. 行前（accept：vi. 承认 / vt. 接受），及物用法更常见，vt. 行提前
+    const lines = [...raw].sort((x, y) => (/^vi\./.test(x) && /^vt\./.test(y) ? 1 : /^vt\./.test(x) && /^vi\./.test(y) ? -1 : 0));
+    const rankInPos = new Map();
+    const seen = new Set();
+    for (const line of lines) {
+      const pos = posOfLine(line);
+      for (const { text, marked, computing } of senseItems(line)) {
+        // 候选按“词性 + 义项”区分：concrete 的“混凝土(n.)”与“混凝土的(adj.)”是两个候选，各自吃自己词性的分
+        const key = pos + ':' + senseKeyOf(text, pos);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const i = rankInPos.get(pos) ?? 0;
+        rankInPos.set(pos, i + 1);
+        let c = cand.get(key);
+        if (!c) cand.set(key, (c = { key, base: senseKeyOf(text, pos), score: 0, variants: new Map(), pos, marked: false }));
+        // 位次票按该词性的常用度缩放：implement 的名词“工具”在各词表都排名词第一，但名词只占 5%
+        c.score += Math.max(10 - 3 * i, 1) * wgt * (weight.size ? 0.3 + 0.7 * ((weight.get(pos) || 0) / maxW) : 1);
+        c.variants.set(text, (c.variants.get(text) ?? 0) + wgt);
+        if (marked) c.marked = true;
+        // 有道（ultimate）把计算机义项排在本行首位（browser：[计] 浏览器；printer：[计] 打印机），
+        // 说明计算机义已是现代最常用义，不再降权。只对计算机领域放开：其他领域（[化] 化合物、[医] 瘤）放开后普遍变差；
+        // ECDICT 基础版的 [计] 义项多为术语堆砌，不享受此例外
+        if (computing && wgt === W.ult && i === 0) c.primaryMarked = true;
+      }
+    }
+  }
+  if (!cand.size) return { short: '' };
+  let best;
+  let bestScore = -Infinity;
+  for (const c of cand.values()) {
+    // 词性分：最常用词性满分 25；无词性信息时为 0，只看位次票
+    let score = c.score + W.pos * ((weight.get(c.pos) || 0) / maxW);
+    score += W.zh * Math.min(4, Math.log2(1 + (zhFreq.get(c.base) ?? 0)));
+    if (c.marked && !c.primaryMarked) score -= W.mark;
+    const len = c.base.length;
+    score -= len === 1 ? 5 : len > SHORT_MAX ? 30 : len > 6 ? W.long : len > 4 ? 1 : 0;
+    c.final = score;
+    if (score > bestScore) { bestScore = score; best = c; }
+  }
+  if (process.env.DEBUG_SHORT?.split(',').includes(w)) {
+    console.log(w, [...cand.values()].sort((a, b) => b.final - a.final).slice(0, 8).map((c) => `${c.key}=${c.final.toFixed(1)}${c.marked ? '*' : ''}`).join(' '));
+  }
+  const short = displayText(best);
+  // 动词短释义：首选义项不是动词、但该词有动词变形（-ed/-ing/-s）且动词用法不罕见时另给一个动词释义，
+  // 页面上的词形是动词变形（advocating、elevated）时 engine 可改用它（advocate：提倡者 / 提倡）
+  let verb;
+  const verbForms = /(?:^|\/)[pdi3]:/.test(ecdict.get(w)?.exchange ?? '');
+  if (best.pos !== 'v' && verbForms && (weight.size ? (weight.get('v') || 0) / maxW >= 0.15 : true)) {
+    const bestVerb = [...cand.values()].filter((c) => c.pos === 'v').sort((x, y) => y.final - x.final)[0];
+    if (bestVerb) verb = displayText(bestVerb);
+  }
+  return { short, verb: verb && verb !== short ? verb : undefined };
+}
+
+/** 候选义项的显示写法：在同义写法中挑最自然的一个，并去掉行内注解里生硬的成分 */
+function displayText(best) {
+  // 出现次数多的优先；动词去“使”（使合并 → 合并）；形容词带“的”更像形容词（具体 → 具体的）
+  const variants = [...best.variants].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length).map((x) => x[0]);
+  let text = variants[0];
+  if (text.startsWith('使') && text.length >= 3 && variants.some((v) => !v.startsWith('使'))) text = variants.find((v) => !v.startsWith('使'));
+  if (best.pos === 'j' && !/[的地]$/.test(text) && variants.some((v) => v.endsWith('的'))) text = variants.find((v) => v.endsWith('的'));
+  // 副词不带“地”更自然（完全地 → 完全、特别地 → 特别）
+  if (best.pos === 'r' && text.endsWith('地') && variants.some((v) => !v.endsWith('地'))) text = variants.find((v) => !v.endsWith('地'));
+  // 动词义项的“对…/把…/使…/将…”框式前缀在行内注解里生硬（对…评价过高 → 评价过高、把…归档 → 归档），去掉；介词的“在…旁边”保留
+  if (best.pos === 'v') text = text.replace(/^(?:对|把|使|将|给|为|向|与|让)…(?=..)/, '');
+  // 超长义项在“或”处截断（服装设计或其服装店 → 服装设计），仍超长才硬截
+  if (text.length > 6 && text.indexOf('或') >= 2) text = text.slice(0, text.indexOf('或'));
+  return text.length > SHORT_MAX ? text.slice(0, SHORT_MAX) : text;
+}
+
+/** 人工覆盖表（scripts/data/short-overrides.tsv）：自动打分仍不合常用义的高频多义词 */
+const SHORT_OVERRIDES = new Map(
+  fs.readFileSync(new URL('./short-overrides.tsv', import.meta.url), 'utf8').split('\n')
+    .filter((l) => l.trim() && !l.startsWith('#'))
+    .map((l) => l.split('\t').map((x) => x.trim())),
+);
+for (const [w, g] of SHORT_OVERRIDES) if (!g || g.length > SHORT_MAX) throw new Error(`short-overrides.tsv: ${w} 的释义为空或超过 ${SHORT_MAX} 字`);
+
+/**
+ * 短释义审计：给可疑的自动选义打标（不影响输出），人工复核后补进 short-overrides.tsv。
+ * - one：单字（队、科、珠、孵），歧义大
+ * - idiom：四字且非“…的”（流连忘返、若有所思），多为文学化译法
+ * - offtop：不在 ECDICT / ultimate 任一来源首行的前 3 个义项中（启齿、全权），与常用义不重合
+ * - domain：选中的义项带专业标注（[医]、[数]…）
+ * - tech：ECDICT 有计算机义项而短释义没取它（server 发球员、cache 贮存物），网页上常是计算机义
+ */
+function auditFlags(w, short, baseLines) {
+  if (!short || SHORT_OVERRIDES.has(w)) return [];
+  const flags = [];
+  const k = senseKey(short);
+  if (short.length === 1) flags.push('one');
+  if (short.length === 4 && !/[的地]$/.test(short)) flags.push('idiom');
+  const firsts = [baseLines.find((l) => !/^\[/.test(l)), ultimate.get(w)?.lines[0]].filter(Boolean);
+  const top3 = new Set(firsts.flatMap((l) => senseItems(l).slice(0, 3).map((x) => senseKey(x.text))));
+  if (top3.size && !top3.has(k)) flags.push('offtop');
+  const all = [...baseLines, ...(ultimate.get(w)?.lines ?? [])].flatMap((l) => senseItems(l));
+  if (all.some((x) => x.marked && senseKey(x.text) === k) && !all.some((x) => !x.marked && senseKey(x.text) === k)) flags.push('domain');
+  const tech = baseLines.filter((l) => /^\[计\]/.test(l)).flatMap((l) => senseItems(l).map((x) => x.text));
+  if (tech.length && !tech.some((t) => senseKey(t) === k)) flags.push('tech:' + tech.slice(0, 2).join('/'));
+  return flags;
+}
+const auditRows = [];
 
 /** 词形变化：只保留屈折类型，供卡片展示 “widths 复数” */
 function formsOf(e) {
@@ -530,17 +734,22 @@ for (const w of [...dictWords].sort()) {
   const e = ecdict.get(w);
   // 完整释义优先 ultimate（义项更规整），按词性常用度排序
   const lines = sortLines(ultimate.get(w)?.lines.length ? ultimate.get(w).lines : e.lines, posWeights(w));
-  let s = shortOf(w, e.lines);
+  let { short: s, verb: sv } = shortOf(w, e.lines);
   if (!s) {
     // 英式拼写 -ise 借 -ize 词条
     const alt = w.replace(/is(e|es|ed|ing|ation|ations)$/, 'iz$1');
-    s = ecdict.has(alt) && alt !== w ? shortOf(alt, ecdict.get(alt).lines) : '';
+    if (ecdict.has(alt) && alt !== w) ({ short: s, verb: sv } = shortOf(alt, ecdict.get(alt).lines));
   }
   if (!s) emptyShort++;
+  if (AUDIT && (rankOf(w) <= 20000 || levelOf.has(w))) {
+    const flags = auditFlags(w, s, e.lines);
+    if (flags.length) auditRows.push([w, rankOf(w), s, flags.join(' '), (ultimate.get(w)?.lines[0] ?? e.lines[0] ?? '').slice(0, 60)].join('\t'));
+  }
   const shard = w[0];
   const short = {};
   if (e.phonetic) short.p = e.phonetic;
   if (s) short.s = s;
+  if (sv) short.v = sv;
   const g = examTagsOf.get(w);
   if (g) short.g = g.join(' ');
   if (levelOf.has(w)) short.l = levelOf.get(w);
@@ -614,5 +823,6 @@ stats.totals = {
   all: sum(() => true),
 };
 if (REPORT) fs.writeFileSync(REPORT, JSON.stringify(stats, null, 1));
+if (AUDIT) fs.writeFileSync(AUDIT, ['word\trank\tshort\tflags\tfirst_line', ...auditRows.sort((a, b) => Number(a.split('\t')[1]) - Number(b.split('\t')[1]))].join('\n') + '\n');
 console.log(JSON.stringify(stats.totals));
 console.log(Object.entries(stats.books).map(([k, v]) => `${k}=${v}`).join(' '));

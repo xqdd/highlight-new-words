@@ -10,7 +10,7 @@
    "level": 2,
    "source": "CEFR-J Wordlist 1.5 + ECDICT 词频",
    "description": "高亮 A2 及以上的词。已掌握 A1 入门词，能应对熟悉话题的简单交流",
-   "size": 20327
+   "size": 19669
   },
   {
    "id": "cefr-b1",
@@ -21,7 +21,7 @@
    "level": 3,
    "source": "CEFR-J Wordlist 1.5 + ECDICT 词频",
    "description": "高亮 B1 及以上的词。已掌握 A1–A2，能理解熟悉主题的要点（约初中毕业）",
-   "size": 18866
+   "size": 18210
   },
   {
    "id": "cefr-b2",
@@ -32,7 +32,7 @@
    "level": 4,
    "source": "CEFR-J Wordlist 1.5 + ECDICT 词频",
    "description": "高亮 B2 及以上的词。已掌握 A1–B1，能就多种话题流利交流（约高考/四级）",
-   "size": 16951
+   "size": 16302
   },
   {
    "id": "cefr-c1",
@@ -43,7 +43,7 @@
    "level": 5,
    "source": "CEFR-J Wordlist 1.5 + ECDICT 词频",
    "description": "高亮 C1 及以上的词。已掌握 A1–B2，能读懂复杂长文（约六级/考研）",
-   "size": 14572
+   "size": 13926
   },
   {
    "id": "cefr-c2",
@@ -54,7 +54,7 @@
    "level": 6,
    "source": "CEFR-J Wordlist 1.5 + ECDICT 词频",
    "description": "高亮 C2 及以上的词。已掌握 C1 及以下，只标出低频、专业或文学词（约 GRE）",
-   "size": 9011
+   "size": 8520
   },
   {
    "id": "zk",
@@ -65,7 +65,7 @@
    "level": 1,
    "source": "ECDICT (MIT)",
    "description": "中考词汇",
-   "size": 1575
+   "size": 1570
   },
   {
    "id": "gk",
@@ -76,7 +76,7 @@
    "level": 2,
    "source": "ECDICT (MIT)",
    "description": "高考词汇，已去掉 943 个 A1 及以下的基础词",
-   "size": 2644
+   "size": 2639
   },
   {
    "id": "gk-new",
@@ -93,7 +93,7 @@
     ]
    },
    "description": "高考中不属于中考的词，适合已过中考的读者",
-   "size": 1960
+   "size": 1959
   },
   {
    "id": "cet4",
@@ -133,7 +133,7 @@
    "level": 4,
    "source": "ECDICT (MIT)",
    "description": "大学英语六级词汇，已去掉 2462 个 B1 及以下的基础词",
-   "size": 2871
+   "size": 2870
   },
   {
    "id": "cet6-new",
@@ -152,7 +152,7 @@
     ]
    },
    "description": "大学英语六级中不属于中考/高考/四级的词，适合已过四级的读者",
-   "size": 1511
+   "size": 1510
   },
   {
    "id": "kaoyan",
@@ -163,7 +163,7 @@
    "level": 5,
    "source": "ECDICT (MIT)",
    "description": "考研词汇，已去掉 2553 个 B1 及以下的基础词",
-   "size": 2221
+   "size": 2219
   },
   {
    "id": "tem4",
@@ -174,7 +174,7 @@
    "level": 5,
    "source": "KyleBing/english-vocabulary (BSD-3) 词表",
    "description": "英语专业四级词汇，已去掉 1309 个 B1 及以下的基础词",
-   "size": 2958
+   "size": 2954
   },
   {
    "id": "kaoyan-new",
@@ -205,7 +205,7 @@
    "level": 6,
    "source": "ECDICT (MIT)",
    "description": "雅思词汇，已去掉 2031 个 B1 及以下的基础词",
-   "size": 2695
+   "size": 2692
   },
   {
    "id": "ielts-new",
@@ -225,7 +225,7 @@
     ]
    },
    "description": "雅思中不属于中考/高考/四级/六级的词，适合已过六级的读者",
-   "size": 936
+   "size": 935
   },
   {
    "id": "toefl",
@@ -236,7 +236,7 @@
    "level": 7,
    "source": "ECDICT (MIT)",
    "description": "托福词汇，已去掉 1785 个 B1 及以下的基础词",
-   "size": 4955
+   "size": 4954
   },
   {
    "id": "toefl-new",
@@ -256,7 +256,7 @@
     ]
    },
    "description": "托福中不属于中考/高考/四级/六级的词，适合已过六级的读者",
-   "size": 3033
+   "size": 3032
   },
   {
    "id": "sat",
@@ -278,7 +278,7 @@
    "level": 8,
    "source": "KyleBing/english-vocabulary (BSD-3) 词表",
    "description": "英语专业八级词汇，已去掉 5609 个 B2 及以下的基础词",
-   "size": 6477
+   "size": 6471
   },
   {
    "id": "gre",
@@ -289,7 +289,7 @@
    "level": 9,
    "source": "ECDICT (MIT)",
    "description": "GRE词汇，已去掉 1511 个 B2 及以下的基础词",
-   "size": 5814
+   "size": 5813
   },
   {
    "id": "gre-new",
@@ -312,7 +312,7 @@
     ]
    },
    "description": "GRE中不属于中考/高考/四级/六级/考研/雅思/托福的词，适合已过托福的读者",
-   "size": 3183
+   "size": 3182
   },
   {
    "id": "coca-3k",
@@ -323,7 +323,7 @@
    "level": 3,
    "source": "ECDICT COCA/BNC 词频排名",
    "description": "高亮词频排名 3000 之后的词（视前 3000 个常用词为已会）",
-   "size": 17899
+   "size": 17263
   },
   {
    "id": "coca-5k",
@@ -334,7 +334,7 @@
    "level": 5,
    "source": "ECDICT COCA/BNC 词频排名",
    "description": "高亮词频排名 5000 之后的词（视前 5000 个常用词为已会）",
-   "size": 16568
+   "size": 15973
   },
   {
    "id": "coca-8k",
@@ -345,7 +345,7 @@
    "level": 8,
    "source": "ECDICT COCA/BNC 词频排名",
    "description": "高亮词频排名 8000 之后的词（视前 8000 个常用词为已会）",
-   "size": 14283
+   "size": 13784
   },
   {
    "id": "coca-12k",
@@ -356,7 +356,7 @@
    "level": 12,
    "source": "ECDICT COCA/BNC 词频排名",
    "description": "高亮词频排名 12000 之后的词（视前 12000 个常用词为已会）",
-   "size": 11091
+   "size": 10726
   }
  ]
 }

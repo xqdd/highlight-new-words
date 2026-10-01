@@ -240,3 +240,128 @@ describe('文章生词判定回归（article.html）', () => {
     expect(h.size).toBeLessThan(150);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 行内短释义质量（第二阶段）：常用义项、词性一致、2–6 字
+// ---------------------------------------------------------------------------
+
+describe('行内短释义质量', () => {
+  /**
+   * 金标：常见多义词的可接受短释义（任一即可，比较时忽略形容词“的”/副词“地”/动词“使”）。
+   * 依据有道词典网页首义项与 Relingo 在同一文章上的行内注解；只收“常用义 vs 冷僻义/专业义”区分明显的词。
+   */
+  const GOLD: Record<string, string[]> = {
+    abandon: ['放弃'], accept: ['接受'], address: ['地址', '处理', '演讲'], apply: ['申请', '应用'], believe: ['相信'],
+    explain: ['解释', '说明'], famous: ['著名的'], concrete: ['具体的'], minute: ['分钟'], present: ['现在的', '现在', '礼物', '呈现', '提出', '出席的'],
+    premium: ['高级的', '优质的', '溢价', '保险费'], implement: ['实施', '执行'], multiple: ['多个', '多重的', '多样的', '许多的'],
+    project: ['项目', '工程', '计划'], current: ['当前的', '现在的'], apartment: ['公寓'], area: ['区域', '地区', '面积'],
+    loss: ['损失', '亏损'], observe: ['观察', '遵守'], deploy: ['部署'], merge: ['合并'], fix: ['修理', '固定', '修复'],
+    scenario: ['情景', '场景', '方案', '设想'], convert: ['转换', '转变'], obsolete: ['过时的', '废弃的'], socket: ['插座', '插口'],
+    serum: ['血清'], basin: ['盆地'], arbitration: ['仲裁'], impeachment: ['弹劾'], credential: ['证书', '凭据'],
+    abstraction: ['抽象'], phase: ['阶段'], coup: ['政变'], boost: ['提高', '促进', '增加'], drain: ['排水', '耗尽', '消耗'],
+    recruit: ['招募', '招聘', '新兵'], patch: ['补丁', '修补', '小块'], judicial: ['司法的'], odd: ['奇怪的'], integrate: ['整合', '使结合', '融入'],
+    sustainable: ['可持续的'], removal: ['移除', '去除', '清除'], surge: ['激增', '汹涌', '浪涌'], assumption: ['假设', '假定'],
+    barrier: ['障碍', '屏障', '障碍物'], revenue: ['收入', '税收'], infrastructure: ['基础设施'], vulnerable: ['脆弱的', '易受攻击的', '易受伤害的'],
+    hybrid: ['混合的', '杂交', '混合物'], conventional: ['传统的', '常规的'], genuine: ['真正的'], dilemma: ['困境'], retreat: ['撤退'],
+    ethical: ['伦理的', '道德的'], reluctant: ['不情愿的'], premise: ['前提'], pessimistic: ['悲观的'], inspect: ['检查'],
+    quantify: ['量化'], mature: ['成熟的'], urban: ['城市的'], federal: ['联邦的'], medicine: ['药', '医学', '药物'],
+    parent: ['父母', '家长', '父亲'], iodine: ['碘'], immunity: ['免疫力', '免疫'], screwdriver: ['螺丝刀'], adapter: ['适配器'],
+    filter: ['过滤器', '过滤'], input: ['输入'], output: ['输出', '产量'], default: ['默认', '违约'], interface: ['界面', '接口'],
+    release: ['发布', '释放'], file: ['文件', '档案'], user: ['用户'], domestic: ['国内的', '家庭的'], primary: ['主要的', '首要的'],
+    technical: ['技术的'], chip: ['芯片', '碎片'], peer: ['同龄人', '同事', '同伴'], integration: ['整合', '一体化', '结合'],
+    programming: ['编程', '程序设计'], array: ['一系列', '数组', '大量'], anxious: ['焦虑的', '担心的', '渴望的'],
+  };
+  const norm = (s: string) => s.replace(/^使(?=..)/, '').replace(/(?<=..)[的地]$/, '');
+
+  it('常见多义词取常用义项（金标命中率 ≥ 95%）', () => {
+    const miss: string[] = [];
+    for (const [w, ok] of Object.entries(GOLD)) {
+      const s = dictEntry(w)?.s ?? '';
+      if (!ok.some((g) => norm(g) === norm(s))) miss.push(`${w}=${s}`);
+    }
+    expect(miss.length / Object.keys(GOLD).length, miss.join(' ')).toBeLessThanOrEqual(0.05);
+  });
+
+  it('词书词的短释义 ≥ 95% 为 2–6 字，且不含英文、括注与残留标点', () => {
+    const all = new Set(catalog.books.flatMap((b) => [...bookWords(b.id)]));
+    let ok = 0;
+    let total = 0;
+    const dirty: string[] = [];
+    for (const w of all) {
+      const s = dictEntry(w)?.s;
+      if (!s) continue;
+      total++;
+      if (s.length >= 2 && s.length <= 6) ok++;
+      // 允许 DNA/OK 这类大写缩写，不允许小写英文、括号、分隔符与 & 残留
+      if (/[a-z<>[\]()（）〔〕【】&，、；]/.test(s)) dirty.push(`${w}=${s}`);
+    }
+    expect(ok / total).toBeGreaterThanOrEqual(0.95);
+    expect(dirty).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 误匹配：人名/地名/缩写/连字符前缀不进词书；用户词书中的短语与连字符词不造成误匹配
+// ---------------------------------------------------------------------------
+
+describe('误匹配防护', () => {
+  it('内置词书不含人名地名同形词、缩写、罗马数字与连字符前缀', () => {
+    const all = new Set(catalog.books.flatMap((b) => [...bookWords(b.id)]));
+    const NOT = [
+      'chelsea', 'oliver', 'marx', 'hong', 'kong', 'russell', 'newton', 'jordan', 'lee', 'tony', 'taylor', 'glasgow',
+      'vs', 'etc', 'km', 'ft', 'ph', 'iii', 'xiv', 're', 'non', 'mid', 'micro', 'macro', 'mini', 'bio', 'alpha', 'beta',
+    ];
+    expect(NOT.filter((w) => all.has(w))).toEqual([]);
+    // 英式拼写不受“只有 BNC 排名”规则误伤
+    for (const w of ['emphasise', 'privatisation']) expect(all.has(w), w).toBe(true);
+  });
+
+  it('用户词书里的短语/连字符词：分词按连字符切开，只会漏标、不会把组成部分误标', async () => {
+    const { tokenize } = await import('@/core/text/tokenize');
+    const { WordMatcher } = await import('@/core/match/matcher');
+    const meta = localBookMeta({ id: 'local:p', name: 'p', format: 'txt', wordCount: 3, createdAt: 0, updatedAt: 0 });
+    const book = createUserWordBook(meta, { 'well-known': { word: 'well-known' }, 'give up': { word: 'give up' }, 'e-mail': { word: 'e-mail' } });
+    const lemmatizer = { candidates: (s: string) => [s.toLowerCase()] };
+    const m = new WordMatcher({ lemmatizer, books: [book], known: new Set() });
+    const hits = tokenize('A well-known author will never give up; send an e-mail.').filter((t) => m.match(t.word));
+    expect(hits).toEqual([]);
+  });
+
+  it('isHyphenPrefix：auto/vice/micro 等构词前缀', async () => {
+    const { isHyphenPrefix } = await import('@/core/dict/hyphen');
+    for (const w of ['auto', 'Vice', 'micro', 'self', 'non']) expect(isHyphenPrefix(w), w).toBe(true);
+    for (const w of ['vulnerable', 'premise']) expect(isHyphenPrefix(w), w).toBe(false);
+  });
+});
+
+describe('编程熟词（v8 代码块）', () => {
+  it('收录常见关键字与缩写，大小写不敏感', async () => {
+    const { isCodeKnownWord, CODE_KNOWN_WORDS } = await import('@/core/dict/code-words');
+    for (const w of ['if', 'return', 'const', 'var', 'func', 'str', 'init', 'args', 'Ctx', 'impl', 'kwargs', 'async', 'Await', 'nullptr', 'stdout']) {
+      expect(isCodeKnownWord(w), w).toBe(true);
+    }
+    // 正常词汇不应被当成编程熟词
+    for (const w of ['vulnerable', 'element', 'infrastructure', 'premise']) expect(isCodeKnownWord(w), w).toBe(false);
+    expect([...CODE_KNOWN_WORDS].every((w) => w === w.toLowerCase())).toBe(true);
+  });
+});
+
+describe('动词短释义 shortVerb（v）', () => {
+  it('名词/形容词首选义项的词另给动词释义，打包产物与 unpack 一致', async () => {
+    expect(dictEntry('advocate')).toMatchObject({ s: '提倡者', v: '提倡' });
+    // 首选义项本身就是动词的词不重复提供
+    expect(dictEntry('abandon')?.v).toBeUndefined();
+    const dict = new PackagedDictionary(async (p) => (p.startsWith('full/') ? {} : shortShard(p)));
+    expect((await dict.lookupMany(['advocate'])).get('advocate')).toMatchObject({ short: '提倡者', shortVerb: '提倡' });
+  });
+
+  it('CompositeDictionary：用户词书给了 short 时不混入打包词典的 shortVerb', async () => {
+    const packaged = new PackagedDictionary(async (p): Promise<DictShardFile> => (p === 'a' ? { advocate: { s: '提倡者', v: '提倡' } } : {}));
+    const meta = localBookMeta({ id: 'local:2', name: 't', format: 'txt', wordCount: 1, createdAt: 0, updatedAt: 0 });
+    const user = new UserBooksDictionary([createUserWordBook(meta, { advocate: { word: 'advocate', trans: '拥护者' } })]);
+    const many = await new CompositeDictionary([user, packaged]).lookupMany(['advocate']);
+    expect(many.get('advocate')).toMatchObject({ short: '拥护者' });
+    expect(many.get('advocate')?.shortVerb).toBeUndefined();
+    expect((await new CompositeDictionary([packaged]).lookupMany(['advocate'])).get('advocate')?.shortVerb).toBe('提倡');
+  });
+});
