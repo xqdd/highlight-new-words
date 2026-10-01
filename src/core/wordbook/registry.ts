@@ -1,4 +1,4 @@
-import type { BookId } from '../settings/schema';
+import { MY_WORDS_BOOK_ID, type BookId } from '../settings/schema';
 import { fetchPackagedJson } from '../dict/packaged';
 import { getProviderInfo } from '../source/providers';
 import { parseBookId } from './ids';
@@ -44,7 +44,8 @@ export function sourceBookMeta(state: SourceBookState): BookMeta {
     kind: 'source',
     name: `${provider} · ${state.name}`,
     nameEn: state.name,
-    short: state.name.length <= 4 ? state.name : '生词本',
+    // 短标签（popup 本页生词的来源标签）：名称太长时用来源名（“欧路”），不用泛称“生词本”，避免与本地“我的生词本”混淆
+    short: state.name.length <= 4 ? state.name : provider.replace(/词典$/, ''),
     category: 'user',
     level: 0,
     size: state.wordCount,
@@ -63,7 +64,8 @@ export function localBookMeta(meta: LocalBookMeta): BookMeta {
     kind: 'local',
     name: meta.name,
     nameEn: meta.name,
-    short: meta.name.length <= 4 ? meta.name : '导入',
+    // “我的生词本”是卡片加词时自动创建的，不是导入的，短标签用“本地”
+    short: meta.id === MY_WORDS_BOOK_ID ? '本地' : meta.name.length <= 4 ? meta.name : '导入',
     category: 'user',
     level: 1,
     size: meta.wordCount,

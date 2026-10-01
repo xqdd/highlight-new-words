@@ -74,8 +74,9 @@ export class PackagedDictionary implements Dictionary {
     const w = word.toLowerCase();
     const s = dictShardOf(w);
     const [short, full] = await Promise.all([this.shard(s), this.shard(`full/${s}`)]);
-    const e = short[w];
-    return e ? unpackDictEntry(w, e, full[w]) : undefined;
+    // 分片是普通对象，按页面单词取值必须用 Object.hasOwn，否则 constructor/toString 会取到 Object.prototype 上的函数
+    const e = Object.hasOwn(short, w) ? short[w] : undefined;
+    return e ? unpackDictEntry(w, e, Object.hasOwn(full, w) ? full[w] : undefined) : undefined;
   }
 
   async lookupMany(words: Iterable<string>): Promise<Map<string, DictEntry>> {
@@ -92,7 +93,7 @@ export class PackagedDictionary implements Dictionary {
       [...byShard].map(async ([s, list]) => {
         const data = await this.shard(s);
         for (const w of list) {
-          const e = data[w];
+          const e = Object.hasOwn(data, w) ? data[w] : undefined;
           if (e) out.set(w, unpackDictEntry(w, e));
         }
       }),

@@ -6,10 +6,16 @@
 #       口径来源：高频词本身就是独立词条、词义常与词根分化（normal 正常的 / norm 标准），词书只收词根时还原过去会显示词根释义
 #       （见 docs/architecture.md「词形还原」与 build-lemma-data.mjs#derivationAllowedByFrequency）。这 38 词原为 deriv，
 #       口径调整后整体改到 deriv-hf；deriv 中保留的是低频派生与高频透明后缀（-ly 副词、-ness/-ful/-less）。
+#       keep 中的“同形高频词条”（ground、wedding、clothes、bit 等）：变形本身是高频独立词条（COCA ≤ 5000）且比原形常用，产品口径不做屈折还原
+#       （见 build-lemma-data.mjs#commonHeadwordHomograph）。bit 原为 irr-verb（bite），按该口径改到 keep。
+#       同一口径还有分级版：变形本身的 CEFR 级别低于原形（bound B1 / bind B2+、frustrated / frustrate），选高档时它已属“已会”，不做屈折还原。
 walked	walk	verb
 studies	study	verb
 studied	study	verb
 studying	study	verb
+grinding	grind	verb	ground
+grinds	grind	verb	ground
+falls	fall	verb	fell
 stopped	stop	verb
 stopping	stop	verb
 planned	plan	verb
@@ -159,7 +165,6 @@ sped	speed	irr-verb
 slid	slide	irr-verb
 hid	hide	irr-verb
 hidden	hide	irr-verb
-bit	bite	irr-verb
 bitten	bite	irr-verb
 lit	light	irr-verb
 won	win	irr-verb
@@ -358,6 +363,15 @@ evening	evening	keep	even
 ceiling	ceiling	keep	ceil
 string	string	keep
 spring	spring	keep
+ground	ground	keep	grind
+wedding	wedding	keep	wed
+clothes	clothes	keep	clothe
+advertising	advertising	keep	advertise
+statistics	statistics	keep	statistic
+headquarters	headquarters	keep	headquarter
+bound	bound	keep	bind
+frustrated	frustrated	keep	frustrate
+bit	bit	keep	bite
 thing	thing	keep
 king	king	keep
 bus	bus	keep

@@ -66,8 +66,19 @@ const ABBREVIATIONS = [
   'alloc', 'dealloc', 'free', 'sizeof', 'nullptr', 'stmt', 'expr', 'ast', 'tok', 'lex', 'ptr', 'bufs', 'calc',
 ];
 
+/**
+ * 高频编程术语（data 集成审计第 1 轮）：本身是普通英语词，但在代码里几乎总是术语义，按日常义高亮会误译
+ * （heap 一堆、listener 听众、handler 处理者、render 使变得、attribute 归于）。只在代码本体（标识符）中视为熟词，
+ * 注释、字符串与正文里的同名单词照常按词书判断并给出常用义
+ */
+const PROGRAMMING_TERMS = [
+  'prototype', 'stack', 'heap', 'queue', 'node', 'handler', 'listener', 'render', 'attribute', 'instance', 'array',
+  'query', 'token', 'buffer', 'pointer', 'iterator', 'closure', 'payload', 'schema', 'parser', 'parse', 'scope',
+  'thread', 'socket', 'cursor', 'boolean', 'invoke', 'dispatch', 'emit', 'subscriber', 'observer', 'wrapper',
+];
+
 /** 小写编程熟词集合（只读） */
-export const CODE_KNOWN_WORDS: ReadonlySet<string> = new Set([...KEYWORDS, ...ABBREVIATIONS].map((w) => w.toLowerCase()));
+export const CODE_KNOWN_WORDS: ReadonlySet<string> = new Set([...KEYWORDS, ...ABBREVIATIONS, ...PROGRAMMING_TERMS].map((w) => w.toLowerCase()));
 
 /**
  * 是否为编程熟词（大小写不敏感）。engine 在代码上下文中对拆分后的每个子词调用。

@@ -100,6 +100,67 @@ describe('DataLemmatizer', () => {
     expect(knownRoot.match('normal')?.lemma).toBe('normal');
   });
 
+  it('Object.prototype 同名单词（constructor/__proto__/toString…）不抛错，constructor 按词书正常匹配', () => {
+    // 修复前 normalizeSurface 用普通对象查缩写表，constructor 取到 Object.prototype.constructor，随后 endsWith 抛 TypeError，整页不高亮
+    const PROTO_WORDS = ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf', 'isPrototypeOf', 'Constructors'];
+    const plain = new DataLemmatizer();
+    const book = createSetWordBook(meta('b'), ['constructor', 'construct']);
+    for (const l of [lem, plain]) {
+      const m = new WordMatcher({ lemmatizer: l, books: [book], known: new Set() });
+      for (const w of PROTO_WORDS) {
+        expect(normalizeSurface(w), w).toBe(w.toLowerCase());
+        const c = l.candidates(w);
+        expect(c[0], w).toBe(w.toLowerCase());
+        expect(c.every((x) => typeof x === 'string'), w).toBe(true);
+        expect(() => m.match(w), w).not.toThrow();
+      }
+      expect(m.match('constructor')?.lemma).toBe('constructor');
+      expect(m.match('constructors')?.lemma).toBe('constructor');
+      expect(m.match('toString')).toBeNull();
+    }
+  });
+
+  it('常用独立词条不借更罕见的屈折原形命中（ground ↛ grind、wedding ↛ wed）', () => {
+    // 默认六级收了 grind 而没有 ground：修复前 ground 高亮成 grind，行内译文“地面”与卡片“grind 磨碎”不一致，点“认识”会把 grind 记成熟词
+    const pairs: [string, string][] = [
+      ['ground', 'grind'],
+      ['wedding', 'wed'],
+      ['clothes', 'clothe'],
+      ['advertising', 'advertise'],
+      ['statistics', 'statistic'],
+      ['headquarters', 'headquarter'],
+    ];
+    const book = createSetWordBook(meta('cet6'), pairs.map(([, root]) => root));
+    const m = new WordMatcher({ lemmatizer: lem, books: [book], known: new Set() });
+    for (const [w, root] of pairs) {
+      expect(m.match(w), w).toBeNull();
+      expect(lem.candidates(w), w).not.toContain(root);
+      // 卡片词形口径（analyze 的屈折原形）与匹配一致：没有屈折原形，卡片用页面词形自身
+      expect(lem.analyze(w).inflections, w).toEqual([]);
+    }
+    // 真正的变形照常还原：grinding/grinds -> grind（不再经由 ground），原形更常用的 used/found/left 不受影响
+    expect(m.match('grinding')?.lemma).toBe('grind');
+    expect(lem.candidates('grinding')).not.toContain('ground');
+    expect(lem.candidates('grinds')).toEqual(['grinds', 'grind']);
+    expect(lem.analyze('used').inflections).toContain('use');
+    expect(lem.analyze('found').inflections).toContain('find');
+    expect(lem.analyze('left').inflections).toContain('leave');
+  });
+
+  it('级别低于原形的变形不借原形命中（选 B2 时 bound ↛ bind）', () => {
+    // bound 在 B1+ 词书（级别 B1），bind 只在 B2+：选 B2 时 bound 属“已会”，修复前却按 bind 高亮成“必定的”，点“认识”记成 bind
+    const b2 = createSetWordBook(meta('cefr-b2'), ['bind', 'frustrate']);
+    const m = new WordMatcher({ lemmatizer: lem, books: [b2], known: new Set() });
+    for (const [w, root] of [['bound', 'bind'], ['frustrated', 'frustrate']] as const) {
+      expect(m.match(w), w).toBeNull();
+      expect(lem.analyze(w).inflections, w).toEqual([]);
+      expect(lem.candidates(w), w).not.toContain(root);
+    }
+    // 原形自身的其他变形照常还原
+    expect(m.match('binds')?.lemma).toBe('bind');
+    expect(m.match('binding')?.lemma).toBe('bind');
+  });
+
   it('init 前退化为规则还原；数据加载失败不抛错', async () => {
     const plain = new DataLemmatizer();
     expect(plain.candidates('walked')).toContain('walk');

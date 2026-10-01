@@ -179,6 +179,27 @@ describe('public/data 产物', () => {
     expect(bookWords('ielts').has('cities')).toBe(false);
   });
 
+  it('高频词的屈折形式不作为独立生词（found←find、means←mean、times←time），独立词条保留', () => {
+    // 审计：词表把屈折形式当独立词条，页面上多为屈折用法却按罕见义误译（found=创立、times=乘以、provided=假如）。
+    // 原形不在本书（低于本书起点或在词频阈值内）时，屈折形式也不收；原形也不在书中，所以页面上整体不高亮
+    const DROPPED: Record<string, string[]> = {
+      cet6: ['found', 'means', 'remains', 'understanding', 'willing', 'learning', 'saving', 'concerning'],
+      'cefr-b2': ['times', 'known', 'expected', 'moving', 'growing', 'related', 'existing', 'proposed', 'found', 'means'],
+      'coca-5k': ['times', 'remains', 'paid', 'moving', 'lasting', 'stuck', 'worn', 'known', 'expected'],
+      cet4: ['provided', 'found', 'means', 'setting'],
+    };
+    for (const [id, words] of Object.entries(DROPPED)) {
+      const book = bookWords(id);
+      expect(words.filter((w) => book.has(w)), id).toEqual([]);
+    }
+    // 真正独立的词条：没有原形（statistics、headquarters）、比原形常见（media）、或词汇化复数（goods）
+    for (const w of ['media', 'statistics', 'headquarters']) expect(bookWords('cet6').has(w), w).toBe(true);
+    for (const w of ['media', 'statistics', 'headquarters', 'goods']) expect(bookWords('cet4').has(w), w).toBe(true);
+    for (const w of ['media', 'statistics', 'headquarters']) expect(bookWords('cefr-b2').has(w), w).toBe(true);
+    // 原形也在本书时屈折形式照常保留（不误伤）：B2 中原形与派生形式都是生词
+    expect(bookWords('cefr-b2').has('vulnerable')).toBe(true);
+  });
+
   it('词典覆盖所有内置词书的词，行内短释义 ≤ 8 字且不带词性', () => {
     const missing: string[] = [];
     let noShort = 0;
@@ -293,6 +314,12 @@ describe('行内短释义质量', () => {
       thousand: '千', million: '百万', billion: '十亿', trillion: '万亿',
       // 领域误义：utilities 不是“实用程序”，projections 不是“投影”
       utility: '公用事业', projection: '预测', stack: '堆', spectrum: '光谱', persist: '持续', soar: '飙升', bulk: '大部分',
+      // data 集成审计第 1 轮：现代常用义（submit 曾为“服从”、legacy“遗赠”、attribute“归于”、render“使变得”），
+      // 以及行内括注实测的非常用义（volatile 挥发性的、linger 消磨、prone 俯卧的、resilient 弹回的、densely 浓密地）
+      submit: '提交', legacy: '遗产', attribute: '属性', render: '呈现', volatile: '易变的', linger: '逗留', prone: '易于',
+      resilient: '有韧性的', dense: '密集的', densely: '密集地',
+      reassurance: '安慰', scarce: '稀缺的', grid: '网格', planner: '规划者', valuation: '估值', incremental: '渐进的', snippet: '片段',
+      eventual: '最终的',
     };
     const wrong = Object.entries(MUST).filter(([w, s]) => dictEntry(w)?.s !== s).map(([w]) => `${w}=${dictEntry(w)?.s}`);
     expect(wrong).toEqual([]);
@@ -399,6 +426,11 @@ describe('编程熟词（v8 代码块）', () => {
     const { isCodeKnownWord } = await import('@/core/dict/code-words');
     for (const w of ['defaults', 'modules', 'imports', 'callbacks', 'Exported', 'returning', 'foo', 'tsx']) expect(isCodeKnownWord(w), w).toBe(true);
     for (const w of ['cases', 'element', 'premises']) expect(isCodeKnownWord(w), w).toBe(w === 'cases');
+  });
+  it('高频编程术语在代码本体中视为熟词（Object.prototype、eventListener、renderItem）', async () => {
+    const { isCodeKnownWord } = await import('@/core/dict/code-words');
+    const TERMS = ['prototype', 'stack', 'heap', 'queue', 'node', 'handler', 'listener', 'render', 'attribute', 'instance', 'array', 'query', 'token'];
+    for (const w of [...TERMS, 'Listeners', 'handlers', 'rendered', 'rendering', 'attributes', 'nodes']) expect(isCodeKnownWord(w), w).toBe(true);
   });
 
 });

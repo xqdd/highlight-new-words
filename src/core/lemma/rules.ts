@@ -13,13 +13,14 @@
 
 /** 缩写后缀：isn't -> is、we've -> we（can't/won't 等特殊形式单独处理） */
 const CONTRACTION_SUFFIXES = ["n't", "'re", "'ve", "'ll", "'m", "'d"];
-const SPECIAL_CONTRACTIONS: Record<string, string> = {
-  "can't": 'can',
-  "won't": 'will',
-  "shan't": 'shall',
-  "ain't": 'be',
-  cannot: 'can',
-};
+// 用 Map 而不是普通对象：页面单词 constructor/toString/__proto__ 会命中 Object.prototype 上的属性
+const SPECIAL_CONTRACTIONS: ReadonlyMap<string, string> = new Map([
+  ["can't", 'can'],
+  ["won't", 'will'],
+  ["shan't", 'shall'],
+  ["ain't", 'be'],
+  ['cannot', 'can'],
+]);
 
 /**
  * 规范化页面单词：小写、统一撇号，去掉所有格（'s、s'）与缩写后缀。
@@ -27,7 +28,7 @@ const SPECIAL_CONTRACTIONS: Record<string, string> = {
  */
 export function normalizeSurface(surface: string): string {
   let w = surface.toLowerCase().replace(/[’‘`]/g, "'");
-  const special = SPECIAL_CONTRACTIONS[w];
+  const special = SPECIAL_CONTRACTIONS.get(w);
   if (special) return special;
   if (w.endsWith("'s")) return w.slice(0, -2);
   // 复数所有格 students'（分词器通常不会带出结尾撇号，这里兼容直接调用）

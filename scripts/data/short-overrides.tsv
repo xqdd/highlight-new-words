@@ -453,7 +453,7 @@ versus	对抗
 cluster	群集
 stem	源于
 counsel	劝告
-render	使变得
+render	呈现
 rip	撕裂
 leap	跳跃
 twist	扭曲
@@ -814,3 +814,26 @@ quiz	小测验
 wave	波浪
 boogie	布吉舞
 canvass	拉票
+# data 集成审计第 1 轮：六级高频词的现代常用义（submit 表单/论文/申请都用“提交”），网页/技术语境与通用义兼顾
+# （attribute 名词“属性”比动词“归于”常见；render 取“呈现”兼顾渲染与“使成为”；array/heap 保留通用义，代码本体中由编程熟词跳过），
+# 以及审计实测的非常用义（volatile 挥发性的、linger 消磨、prone 俯卧的、resilient 弹回的、dense 浓厚的）
+submit	提交
+legacy	遗产
+attribute	属性
+volatile	易变的
+linger	逗留
+prone	易于
+resilient	有韧性的
+dense	密集的
+densely	密集地
+# article.html 词后括号模式抽样复核（B2 以上常见词）：取现代常用义
+reassurance	安慰
+thoughtfully	深思熟虑地
+scarce	稀缺的
+brighten	变亮
+grid	网格
+planner	规划者
+valuation	估值
+incremental	渐进的
+snippet	片段
+eventual	最终的

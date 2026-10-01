@@ -334,8 +334,33 @@ const catalog = [];
 const bookWords = new Map();
 /** 嵌套词书（级别、词频是包含关系）：数据文件只存本书比 extendsId 多出的词，加载时由 registry 合并，体积减少约 70% */
 const bookExtends = new Map();
+/**
+ * 词汇化的屈折形式与同形异义词：页面上多为独立义，即使原形更常见也保留
+ * （goods 货物、customs 海关、shorts 短裤、stranger 陌生人 ≠ 更奇怪、wound 伤口 ≠ wind 的过去式）。
+ * 原形比自身罕见的（media、data）或没有原形的（statistics、headquarters）不需要列在这里
+ */
+const LEXICALIZED_FORMS = new Set(['goods', 'customs', 'shorts', 'tights', 'stranger', 'wound']);
+/**
+ * 高频词的屈折形式（found←find、means←mean、times←time、known←know）：CEFR-J/考试词表把它们当独立词条收录，
+ * 但页面上多数只是原形的屈折用法，单独高亮会按罕见义误译（found=创立、times=乘以）。
+ * 规则：原形比它更常见（COCA 排名更靠前）时，只有原形也在同一本书里才收录它——原形低于本书起点（级别书/考试书）
+ * 或在词频书阈值内，就视为“已会”，不单独高亮。包含关系（B2 ⊇ C1、5k ⊇ 8k）在过滤后仍成立：
+ * 原形不在大书里，必然也不在小书里
+ */
+function isCommonInflectionOutside(w, bookSet) {
+  const base = lemmaOf.get(w);
+  if (!base || LEXICALIZED_FORMS.has(w) || bookSet.has(base)) return false;
+  return rankOf(base) < rankOf(w);
+}
+/** 每本书去掉的屈折形式（--report 输出，便于复核） */
+const droppedInflections = new Map();
 function addBook(meta, words, extendsId) {
-  const list = [...new Set(words)].filter((w) => WORD_RE.test(w) && !NOT_WORDS.has(w)).sort();
+  const candidates = [...new Set(words)].filter((w) => WORD_RE.test(w) && !NOT_WORDS.has(w));
+  const candidateSet = new Set(candidates);
+  const dropped = candidates.filter((w) => isCommonInflectionOutside(w, candidateSet));
+  const droppedSet = new Set(dropped);
+  const list = candidates.filter((w) => !droppedSet.has(w)).sort();
+  droppedInflections.set(meta.id, dropped.sort());
   bookWords.set(meta.id, list);
   if (extendsId) {
     const parent = new Set(bookWords.get(extendsId));
@@ -842,7 +867,7 @@ stats.totals = {
   dictFull: sum((k) => k.startsWith('dict/full/')),
   all: sum(() => true),
 };
-if (REPORT) fs.writeFileSync(REPORT, JSON.stringify(stats, null, 1));
+if (REPORT) fs.writeFileSync(REPORT, JSON.stringify({ ...stats, droppedInflections: Object.fromEntries(droppedInflections) }, null, 1));
 if (AUDIT) fs.writeFileSync(AUDIT, ['word\trank\tshort\tflags\tfirst_line', ...auditRows.sort((a, b) => Number(a.split('\t')[1]) - Number(b.split('\t')[1]))].join('\n') + '\n');
 console.log(JSON.stringify(stats.totals));
 console.log(Object.entries(stats.books).map(([k, v]) => `${k}=${v}`).join(' '));

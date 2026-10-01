@@ -151,19 +151,22 @@ function inflOf(w) {
   // 变形本身比原形还常用且语义无关时，多半是同形异义词：number ↛ numb、feed ↛ fee、species ↛ specie
   // 但 -ed/-ing 形容词（polished、thrilling）比原形常用很正常，只有它自己也有变形（feed -> fed）时才算同形异义
   const homograph = (l) =>
-    !!own && !MANUAL_INFLECTIONS[w] && rankOf(w) < rankOf(l) && (isBase.has(w) || !/(?:ed|ing)$/.test(w));
+    !!own && !Object.hasOwn(MANUAL_INFLECTIONS, w) && rankOf(w) < rankOf(l) && (isBase.has(w) || !/(?:ed|ing)$/.test(w));
   r = [...(infl.get(w) ?? [])].filter(
     (l) =>
       V.has(l) &&
-      (!!MANUAL_INFLECTIONS[w] ||
+      !commonHeadwordHomograph(w, l) &&
+      (Object.hasOwn(MANUAL_INFLECTIONS, w) ||
         mentionsWord(own, l) ||
         // 名词化 -ing 只需弱证据（following 追随者 / follow）；同形常用词要求正常语义证据（feed 用餐 / fee 费用 只共享“用”）
         ((!nounIng || weaklyRelated(w, l)) && (!homograph(l) || semanticallyRelated(w, l, true)))),
   );
+  // 原形本身又是另一个原形的变形、且与 w 没有规则屈折关系时，多半是词形表噪声：grinding ↛ ground（ground 是 grind 的过去式），只保留 grind
+  r = r.filter((l) => !r.some((m) => m !== l && infl.get(l)?.has(m)) || inflectionRuleCandidates(w).includes(l));
   if (infl.has(w) && r.length < infl.get(w).size) droppedInfl.push(`${w}>${[...infl.get(w)].filter((l) => !r.includes(l)).join('/')}`);
   if (r.length === 0 && !infl.has(w) && !nounIng && /(?:s|ed|ing)$/.test(w)) {
     r = inflectionRuleCandidates(w).filter(
-      (c) => V.has(c) && (!infl.has(c) || isBase.has(c)) && (!own || semanticallyRelated(w, c, true)),
+      (c) => V.has(c) && (!infl.has(c) || isBase.has(c)) && !commonHeadwordHomograph(w, c) && (!own || semanticallyRelated(w, c, true)),
     );
     if (r.length) ruleInfl.push(`${w}>${r.join('/')}`);
   }
@@ -172,6 +175,34 @@ function inflOf(w) {
   return r;
 }
 const ruleInfl = [];
+/**
+ * 常用独立词条与更罕见原形的同形：变形本身是高频词条（rank ≤ HIGH_FREQ_RANK）且比原形更常用时，页面上的它几乎总是
+ * 独立词义（ground 地面 ↛ grind、wedding 婚礼 ↛ wed、clothes 衣服 ↛ clothe、advertising 广告 ↛ advertise、
+ * statistics 统计数据 ↛ statistic），不做屈折还原。即使释义写了“grind的过去式”也一样：否则词书只收原形时，
+ * 页面上的常用词会借原形高亮，卡片显示原形释义，点“认识”还会把原形记成熟词。
+ * 原形更常用的正常变形（used/use、found/find、left/leave、better/good）不受影响。
+ */
+function commonHeadwordHomograph(w, l) {
+  if (Object.hasOwn(MANUAL_INFLECTIONS, w) || !info.get(w)?.trans) return false;
+  if (rankOf(w) <= HIGH_FREQ_RANK && rankOf(w) < rankOf(l)) return true;
+  // 分级口径：变形本身的 CEFR 级别低于原形（bound B1 / bind B2+），选 B2 时 bound 已属“已会”却会借 bind 高亮成“必定的”
+  const lw = cefrLevel.get(w);
+  return lw !== undefined && lw < (cefrLevel.get(l) ?? 0);
+}
+/**
+ * 词 -> CEFR 级别（2..6），取自已生成的级别词书 public/data/books/cefr-*.json（包含体系：B1+ ⊇ B2+，级别 = 所在最高档）。
+ * 只有词书收录的词才有级别；A1 词与词表外的词不在其中，由上面的词频口径兜底。
+ * 依赖 scripts/data/build-data.mjs 的产物，缺文件时该口径不生效。
+ */
+const cefrLevel = new Map();
+{
+  const dir = path.resolve(import.meta.dirname, '../../public/data/books');
+  for (const [lv, name] of [[2, 'a2'], [3, 'b1'], [4, 'b2'], [5, 'c1'], [6, 'c2']]) {
+    const f = path.join(dir, `cefr-${name}.json`);
+    if (!fs.existsSync(f)) { console.warn('缺少级别词书，跳过分级同形口径:', f); continue; }
+    for (const w of JSON.parse(fs.readFileSync(f, 'utf8')).words) cefrLevel.set(w, lv);
+  }
+}
 /** 文本中是否作为英文单词出现（ECDICT 变形词条的中文释义常写“find的过去式”） */
 const mentionsWord = (text, word) => !!text && new RegExp(`(^|[^a-z])${word}([^a-z]|$)`).test(text.replaceAll('\\n', ' '));
 
