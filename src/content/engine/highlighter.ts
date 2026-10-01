@@ -1,6 +1,7 @@
 import type { MatchResult } from '@/core/match/matcher';
 import { tokenize, type Token } from '@/core/text/tokenize';
 import { isCodeKnownWord } from '@/core/dict/code-words';
+import { isHyphenPrefix } from '@/core/dict/hyphen';
 import { tokenizeCode } from './code';
 import { ATTR_BOOK, ATTR_BOOKS, ATTR_CODE, ATTR_LEMMA, ATTR_LOW_CONFIDENCE, ATTR_TR_TEXT, TAG_MARK, TAG_TRANSLATION, TAG_WORD } from './dom';
 
@@ -42,9 +43,15 @@ export function highlightTextNode(node: Text, match: MatchFn, onLeftover?: (t: T
   const hits: { start: number; end: number; m: MatchResult; lowConf: boolean }[] = [];
   for (let i = 0; i < tokens.length; i++) {
     const tk = tokens[i]!;
+    // 分词只认 ASCII 字母：与非 ASCII 字母/数字相连的片段（Tomás 的 Tom、naïve 的 na、COVID19）不是完整英文词，整体跳过
+    if (!code && touchesForeignChar(node.data, tk.start, tk.end)) continue;
     // 代码本体中的编程熟词（关键字、内置类型、常见缩写，清单见 core/dict/code-words）不高亮；注释和字符串照常
     if (code === 'identifier' && isCodeKnownWord(tk.word)) continue;
+    // 连字符复合词的构词前缀（auto-generated 的 auto、vice-president 的 vice）不单独高亮，否则会按独立词误译（汽车、恶习）
+    if (!code && node.data[tk.end] === '-' && /[A-Za-z]/.test(node.data[tk.end + 1] ?? '') && isHyphenPrefix(tk.word)) continue;
     const m = match(tk.word);
+    // 代码本体中编程熟词的屈折形式（defaults、modules）同样跳过
+    if (m && code === 'identifier' && isCodeKnownWord(m.lemma)) continue;
     if (m) hits.push({ start: tk.start, end: tk.end, m, lowConf: !code && isLowConfidence(node, tokens, i) });
   }
   if (hits.length === 0) return [];
@@ -76,6 +83,14 @@ export function highlightTextNode(node: Text, match: MatchFn, onLeftover?: (t: T
   fragmentsOf.set(node, fragments);
   for (const f of fragments) ownerOf.set(f, node);
   return marks.reverse();
+}
+
+/** 词内字符：任意语言的字母、组合附加符号（e + ◌́）、数字 */
+const WORD_CHAR = /[\p{L}\p{M}\p{N}]/u;
+
+/** ASCII 分词得到的片段前后是否紧贴其他词内字符（说明它只是更长单词的一部分） */
+function touchesForeignChar(text: string, start: number, end: number): boolean {
+  return (start > 0 && WORD_CHAR.test(text[start - 1]!)) || (end < text.length && WORD_CHAR.test(text[end]!));
 }
 
 /** 句子结束/开始标记：其后的大写词视为句首 */

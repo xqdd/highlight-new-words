@@ -41,6 +41,11 @@ export const ATTR_CODE = 'data-hnw-code';
  * 仍然高亮，但不显示行内译文（卡片照常可看完整释义）。
  */
 export const ATTR_LOW_CONFIDENCE = 'data-hnw-lowconf';
+/**
+ * hnw-mark 上的标记：行内译文密度控制省略了这个词的括注（同段重复出现的词条、窄屏上每段超出密度上限的较常见词）。
+ * 仍然高亮，悬停/卡片照常可看释义。
+ */
+export const ATTR_NO_GLOSS = 'data-hnw-nogloss';
 /** hnw-tr 上的标记：模糊自测模式下已点开 */
 export const ATTR_REVEALED = 'data-hnw-revealed';
 /** hnw-mark 上的标记：卡片当前锚定的单词（激活态，由 card 分片设置并提供样式） */

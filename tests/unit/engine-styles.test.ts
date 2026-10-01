@@ -105,14 +105,30 @@ describe('v5 样式契约', () => {
     }
   });
 
-  it('页面 CSS：深色上下文压低半透明背景、链接内文字色样式改为保留链接色 + 浅底', () => {
+  it('页面 CSS：深色上下文暖色底改为文字色 + 下划线、冷色底压低不透明度；链接内保留链接色与下划线、只用底色', () => {
     const s = createDefaultSettings();
     s.style.themeId = 'highlighter';
     const css = buildPageCss(s);
-    expect(css).toMatch(/hnw-mark:where\(\[data-hnw-dark\]\)>hnw-w\{background-image:linear-gradient\(to bottom, transparent 52%, rgba\(255, 213, 0, 0\.32\)/);
+    // 荧光黄在深色页上不再铺暗橄榄色带
+    expect(css).toContain('hnw-mark:where([data-hnw-dark])>hnw-w{background-color:transparent;background-image:none;box-shadow:none;color:rgb(255, 213, 0);text-decoration-line:underline');
+    // 深色链接里补回浅底
+    expect(css).toContain('hnw-mark:where([data-hnw-link][data-hnw-dark])>hnw-w{background-color:color-mix(in srgb,rgb(255, 213, 0) 24%,transparent)}');
+    // 标题里的底色降级为下划线
+    expect(css).toContain(':is(h1,h2,h3,h4,h5,h6) hnw-mark>hnw-w{background-color:transparent;background-image:none;box-shadow:none;text-decoration-line:underline');
+    // 冷色半透明底在深色页上保留（不改成文字色）
+    s.style.themeId = 'pill';
+    expect(buildPageCss(s)).not.toContain('hnw-mark:where([data-hnw-dark])>hnw-w{background-color:transparent');
     s.style.themeId = 'bold-accent';
     const css2 = buildPageCss(s);
-    expect(css2).toContain('hnw-mark:where([data-hnw-link])>hnw-w{color:inherit;background-color:color-mix(in srgb,#c2410c 18%,transparent)}');
+    expect(css2).toContain('hnw-mark:where([data-hnw-link])>hnw-w{color:inherit;text-decoration-line:none;outline:none;background-color:color-mix(in srgb,#c2410c 20%,transparent)}');
+    s.style.themeId = 'wavy-line';
+    // 装饰线类样式在链接里同样让位：去掉自身波浪线，改用同色浅底
+    expect(buildPageCss(s)).toContain('hnw-mark:where([data-hnw-link])>hnw-w{color:inherit;text-decoration-line:none;outline:none;background-color:color-mix(in srgb,#f43f5e 20%,transparent)}');
+    // 代码中装饰线收为 1px 直线；链接、标题、密度省略的不显示括注
+    expect(css2).toContain('hnw-mark[data-hnw-code]>hnw-w{text-decoration-style:solid!important;text-decoration-thickness:1px!important');
+    expect(css2).toContain('html[data-hnw-tr="after"] hnw-mark[data-hnw-link]>hnw-tr');
+    expect(css2).toContain('html[data-hnw-tr="after"] :is(h1,h2,h3,h4,h5,h6) hnw-mark>hnw-tr');
+    expect(css2).toContain('html[data-hnw-tr="after"] hnw-mark[data-hnw-nogloss]>hnw-tr');
     // 按词书覆盖的 v5 字段也能生效
     s.style.perBook.cet6 = { mark: { underline: 'wavy', underlineColor: '#f43f5e', italic: true } };
     expect(resolveMarkStyle(s, 'cet6').italic).toBe(true);

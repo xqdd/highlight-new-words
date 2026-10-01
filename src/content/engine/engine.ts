@@ -1,3 +1,4 @@
+import { collocationShort } from '@/core/dict/collocation';
 import type { Dictionary } from '@/core/dict/types';
 import type { MatchResult, WordMatcher } from '@/core/match/matcher';
 import type { CodeBlockSettings, InlineTranslationMode } from '@/core/settings/schema';
@@ -7,6 +8,7 @@ import {
   ATTR_IN_LINK,
   ATTR_LEMMA,
   ATTR_LOW_CONFIDENCE,
+  ATTR_NO_GLOSS,
   ATTR_ON_DARK,
   ATTR_REVEALED,
   ATTR_TIGHT,
@@ -51,6 +53,11 @@ const SLICE_MAX_MS = 12;
  * 让首屏标注尽量赶在首次绘制/用户阅读之前；预算仍远低于 50ms 长任务线。
  */
 const FIRST_SLICE_MS = 24;
+/**
+ * 首屏预隐藏期间（见 prehide.ts）额外的同步处理预算：页面此时不可见，允许比常规切片长，
+ * 争取在显示前处理完视口内的全部文本（维基桌面首屏约需 10–20ms，首个切片已处理大部分）。
+ */
+const PRIME_SLICE_MS = 16;
 const REPORT_DELAY_MS = 400;
 /** 页面明暗主题切换（html/body 的 class/style 等属性变化）后，重新判断深色上下文的防抖时间 */
 const THEME_RECHECK_MS = 300;
@@ -66,6 +73,13 @@ const TIGHT_MAX_DEPTH = 6;
 /** 视为“按钮类控件”的标签与 role：标签文字一般不换行、宽度由内容决定，插入占位译文会撑宽控件 */
 const CONTROL_TAGS = new Set(['BUTTON', 'SUMMARY']);
 const CONTROL_ROLES = new Set(['button', 'tab', 'menuitem', 'menuitemradio', 'menuitemcheckbox', 'option', 'switch']);
+/** 标题：只标记、不插行内译文（样式见 style.ts） */
+const HEADING_SELECTOR = 'h1,h2,h3,h4,h5,h6';
+/** 窄屏（手机）判定宽度与括注密度：每段约每 GLOSS_CHARS_NARROW 个字符最多一个括注（390px 宽约 1.5 行） */
+const NARROW_MAX_PX = 600;
+const GLOSS_CHARS_NARROW = 70;
+/** 动词变形词尾（-s 与名词复数同形，不算） */
+const VERB_INFLECTION = /(?:ing|ed)$/;
 
 /**
  * 高亮引擎：初次全量扫描 + MutationObserver 增量处理 + 行内翻译填充。
@@ -87,6 +101,10 @@ export class HighlightEngine {
   private processed = new WeakSet<Text>();
   private readonly lemmas = new Set<string>();
   private readonly translations = new Map<string, string | null>();
+  /** 词条 -> 词频排名（越大越罕见；密度控制时优先给罕见词保留括注） */
+  private readonly ranks = new Map<string, number>();
+  /** 词条 -> 动词短释义（DictEntry.shortVerb：short 取的是名词/形容词义时才有，如 advocate 提倡者 / 提倡） */
+  private readonly verbTranslations = new Map<string, string>();
   /** 乐观移除（标记熟词）的词条：在 matcher 更新前也不再高亮，rebuild 时清空 */
   private readonly suppressed = new Set<string>();
   /** 元素 -> 是否深色上下文 的缓存（页面主题切换时整体重算） */
@@ -104,6 +122,11 @@ export class HighlightEngine {
   private themeRecheck?: () => void;
   private scheduled = false;
   private stopped = true;
+  /** 页面仍在解析（engine 可在 DOMContentLoaded 之前启动，见 app.ts 的 firstScreenParsed） */
+  private parsing = false;
+  /** 解析期间暂缓的文档末尾文本节点，DOMContentLoaded 后重新入队 */
+  private deferredUntilParsed: Text[] = [];
+  private onParsed?: () => void;
   private reportTimer?: ReturnType<typeof setTimeout>;
   private recountTimer?: ReturnType<typeof setTimeout>;
 
@@ -122,13 +145,49 @@ export class HighlightEngine {
         rootMargin: TRANSLATION_ROOT_MARGIN,
       });
     }
+    const doc = this.opts.root.ownerDocument;
+    this.parsing = doc.readyState === 'loading';
+    if (this.parsing) {
+      this.onParsed = () => {
+        this.parsing = false;
+        const deferred = this.deferredUntilParsed;
+        this.deferredUntilParsed = [];
+        for (const t of deferred) this.enqueue(t);
+      };
+      doc.addEventListener('DOMContentLoaded', this.onParsed, { once: true });
+    }
     this.enqueue(this.opts.root);
     this.drain(FIRST_SLICE_MS, true);
+  }
+
+  /**
+   * 首屏就绪（预研要求：降低“词后”模式 CLS）：在页面预隐藏期间调用。
+   * 继续同步处理队列（预算 PRIME_SLICE_MS），再批量查释义、立即写入视口内 mark 的译文（不走懒插入）。
+   * 返回后调用方显示页面：首屏的括注/注解在首次可见时已在位，不会产生布局推移。
+   * 视口外的 mark 照常懒插入（屏外推移不计入 CLS）。
+   */
+  async primeFirstScreen(): Promise<void> {
+    if (this.stopped) return;
+    if (this.hasPending()) this.drain(PRIME_SLICE_MS, true);
+    const view = this.opts.root.ownerDocument.defaultView;
+    if (!view) return;
+    const vh = view.innerHeight;
+    // 先统一读位置（一次布局），只取视口内需要译文的 mark
+    const visible = [...this.opts.root.querySelectorAll<HTMLElement>(TAG_MARK)].filter((m) => {
+      if (!this.needsTranslation(m)) return false;
+      const r = m.getBoundingClientRect();
+      return r.bottom > 0 && r.top < vh && r.width > 0;
+    });
+    if (visible.length > 0) await this.fillTranslations(visible, true);
   }
 
   /** 停止并移除全部高亮（DOM 还原为高亮前的文本节点） */
   stop(): void {
     this.stopped = true;
+    if (this.onParsed) this.opts.root.ownerDocument.removeEventListener('DOMContentLoaded', this.onParsed);
+    this.onParsed = undefined;
+    this.parsing = false;
+    this.deferredUntilParsed = [];
     this.observer?.disconnect();
     this.observer = undefined;
     this.unwatchPageTheme();
@@ -162,6 +221,8 @@ export class HighlightEngine {
     this.stop();
     this.opts = { ...this.opts, matcher, dictionary };
     this.translations.clear();
+    this.ranks.clear();
+    this.verbTranslations.clear();
     this.start();
   }
 
@@ -234,7 +295,7 @@ export class HighlightEngine {
       this.markContexts(newMarks);
     });
     // 重做的切分组立即写入译文（取缓存），不走懒插入，避免同一段落的其他生词译文闪烁
-    void this.fillTranslations(newMarks, true);
+    void this.fillTranslations(newMarks.filter((m) => m.isConnected), true);
     this.recountLemmas();
   }
 
@@ -315,11 +376,16 @@ export class HighlightEngine {
     if (!first) this.scheduled = false;
     if (this.stopped) return;
     const deadline = performance.now() + (first ? budgetMs : Math.min(Math.max(budgetMs, SLICE_MIN_MS), SLICE_MAX_MS));
-    const newMarks: HTMLElement[] = [];
+    let newMarks: HTMLElement[] = [];
     this.withoutObserving(() => {
       let t: Text | null;
       while (performance.now() < deadline && (t = this.nextTextNode())) {
         if (!t.isConnected) continue;
+        // 页面仍在解析：文档末尾的文本节点可能还会被解析器追加文字（网络分块），解析完再处理
+        if (this.parsing && isAtDocumentEnd(t, this.opts.root)) {
+          this.deferredUntilParsed.push(t);
+          continue;
+        }
         newMarks.push(...this.highlight(t));
         // 原节点处理后只剩首个命中词之前的文字，记为已处理；内容被改写时会从集合移除
         this.processed.add(t);
@@ -327,6 +393,8 @@ export class HighlightEngine {
       // 一片中的写操作全部完成后再统一读取计算样式，只触发一次样式计算
       this.markContexts(newMarks);
     });
+    // markContexts 可能撤销了 flex/grid 直接子文本中的高亮（见 markContexts）
+    newMarks = newMarks.filter((m) => m.isConnected);
     if (newMarks.length > 0) {
       let changed = false;
       for (const m of newMarks) {
@@ -368,18 +436,48 @@ export class HighlightEngine {
     const flags = marks.map((m) => {
       const parent = m.parentElement;
       const code = m.hasAttribute(ATTR_CODE);
-      return { dark: this.isDarkContext(parent), link: !!parent?.closest('a'), tight: !code && this.isTightContext(parent) };
+      return {
+        dark: this.isDarkContext(parent),
+        link: !!parent?.closest('a'),
+        tight: !code && this.isTightContext(parent),
+        heading: !!parent?.closest(HEADING_SELECTOR),
+        spaceLost: !code && this.isFlexItemBoundary(m, parent),
+      };
     });
     const ruby = this.opts.inlineTranslation === 'ruby';
+    const undo = new Set<Text>();
     marks.forEach((m, i) => {
       const f = flags[i]!;
+      if (f.spaceLost) {
+        const owner = ownerTextOf(m);
+        if (owner) undo.add(owner);
+        return;
+      }
       m.toggleAttribute(ATTR_ON_DARK, f.dark);
       m.toggleAttribute(ATTR_IN_LINK, f.link);
       m.toggleAttribute(ATTR_TIGHT, f.tight);
-      if (ruby && !f.tight && !m.hasAttribute(ATTR_CODE) && !m.hasAttribute(ATTR_LOW_CONFIDENCE)) {
+      // 链接、标题、低置信度、受限容器、代码中不显示占位译文，不预留
+      if (ruby && !f.tight && !f.link && !f.heading && !m.hasAttribute(ATTR_CODE) && !m.hasAttribute(ATTR_LOW_CONFIDENCE)) {
         reserveTranslationSlot(m);
       }
     });
+    // flex/grid 容器的直接子文本被切开后，每段文字成为独立的 flex 项目，切口处的空格被折叠
+    // （“Print subscriptions” 显示成 “Printsubscriptions”）：撤销这段文字的高亮，保持原样
+    for (const owner of undo) restoreGroup(owner);
+  }
+
+  /**
+   * mark 的父元素是 flex/grid 容器，且 mark 紧邻的文字片段在切口处有空白：空白会随 flex 项目边缘被折叠。
+   * 只在读阶段调用（getComputedStyle 在一片写完后统一计算一次）。
+   */
+  private isFlexItemBoundary(m: Element, parent: Element | null): boolean {
+    if (!parent) return false;
+    const view = parent.ownerDocument.defaultView;
+    const display = view?.getComputedStyle(parent).display ?? '';
+    if (!/flex|grid/.test(display)) return false;
+    const prev = m.previousSibling;
+    const next = m.nextSibling;
+    return (prev?.nodeType === Node.TEXT_NODE && /\s$/.test((prev as Text).data)) || (next?.nodeType === Node.TEXT_NODE && /^\s/.test((next as Text).data));
   }
 
   /**
@@ -489,8 +587,15 @@ export class HighlightEngine {
     }
     if (missing.size > 0) {
       const found = await this.opts.dictionary.lookupMany(missing);
-      for (const lemma of missing) this.translations.set(lemma, found.get(lemma)?.short ?? null);
+      for (const lemma of missing) {
+        const e = found.get(lemma);
+        this.translations.set(lemma, e?.short ?? null);
+        if (e?.rank) this.ranks.set(lemma, e.rank);
+        if (e?.shortVerb) this.verbTranslations.set(lemma, e.shortVerb);
+      }
     }
+    const mode = this.opts.inlineTranslation;
+    if (mode === 'after' || mode === 'ruby') this.thinGlosses(targets);
     const io = immediate ? undefined : this.translationObserver;
     const now: HTMLElement[] = [];
     for (const m of targets) {
@@ -502,13 +607,71 @@ export class HighlightEngine {
     this.applyTranslations(now);
   }
 
-  /** mark 的短释义：优先页面词形自己的词条，没有再用原形（见 translationKeys） */
-  private translationOf(m: Element): string | null {
-    for (const key of translationKeys(m)) {
-      const tr = this.translations.get(key);
-      if (tr) return tr;
+  /**
+   * 行内括注密度控制（评审反馈：手机首屏几乎每行 2–3 个括注，噪声大）。按段落整体重算（无状态，重做切分组后结果一致）：
+   * - 同一段落里同一词条只在第一次出现时显示括注
+   * - 窄屏（≤600px）每段最多 max(1, 字数/70) 个括注，超出时优先保留词频更低（更难）的词
+   * 被省略的 mark 加 data-hnw-nogloss（CSS 隐藏其占位译文），仍然高亮，悬停/卡片照常可看释义。
+   * 链接、标题、低置信度、受限容器、代码中的 mark 本来就不显示括注，不参与计数。
+   */
+  private thinGlosses(marks: HTMLElement[]): void {
+    const view = this.opts.root.ownerDocument.defaultView;
+    const narrow = !!view && view.innerWidth <= NARROW_MAX_PX;
+    const blocks = new Set<Element>();
+    for (const m of marks) {
+      const b = blockOf(m);
+      if (b) blocks.add(b);
     }
-    return null;
+    for (const block of blocks) {
+      const all = [...block.querySelectorAll<HTMLElement>(TAG_MARK)].filter(
+        (m) =>
+          !m.hasAttribute(ATTR_LOW_CONFIDENCE) &&
+          !m.hasAttribute(ATTR_TIGHT) &&
+          !m.hasAttribute(ATTR_CODE) &&
+          !m.hasAttribute(ATTR_IN_LINK) &&
+          !m.parentElement?.closest(HEADING_SELECTOR) &&
+          !!this.translationOf(m),
+      );
+      const seen = new Set<string>();
+      const firsts: HTMLElement[] = [];
+      for (const m of all) {
+        const lemma = m.getAttribute(ATTR_LEMMA)!;
+        if (!seen.has(lemma)) {
+          seen.add(lemma);
+          firsts.push(m);
+        }
+      }
+      let keep = new Set(firsts);
+      if (narrow) {
+        const budget = Math.max(1, Math.round((block.textContent?.length ?? 0) / GLOSS_CHARS_NARROW));
+        if (firsts.length > budget) {
+          const rarity = (m: HTMLElement) => this.ranks.get(m.getAttribute(ATTR_LEMMA)!) ?? Number.MAX_SAFE_INTEGER;
+          keep = new Set([...firsts].sort((a, b) => rarity(b) - rarity(a)).slice(0, budget));
+        }
+      }
+      for (const m of all) m.toggleAttribute(ATTR_NO_GLOSS, !keep.has(m));
+    }
+  }
+
+  /**
+   * mark 的短释义：相邻词构成固定搭配时用搭配义（core/dict/collocation）；否则优先页面词形自己的词条，没有再用原形（见 translationKeys）；
+   * 页面词形是动词变形（-ing/-ed）而原形的首选义项不是动词时，改用原形的动词释义（advocating → 提倡，而不是“提倡者”）。
+   */
+  private translationOf(m: Element): string | null {
+    const keys = translationKeys(m);
+    const lemma = keys[keys.length - 1]!;
+    // 固定搭配中的义项优先（vicious cycle → 恶性的，concrete structures → 混凝土）
+    const colloc = collocationOf(m, lemma);
+    if (colloc) return colloc;
+    if (keys.length > 1) {
+      const own = this.translations.get(keys[0]!);
+      if (own) return own;
+      if (VERB_INFLECTION.test(keys[0]!)) {
+        const verb = this.verbTranslations.get(lemma);
+        if (verb) return verb;
+      }
+    }
+    return this.translations.get(lemma) ?? null;
   }
 
   private applyTranslations(marks: Iterable<Element>): void {
@@ -617,9 +780,43 @@ export class HighlightEngine {
   }
 }
 
+/** 文本节点之后（root 范围内）是否再没有任何节点：解析中的文档里，只有这个位置的文本还可能被追加 */
+function isAtDocumentEnd(t: Text, root: Node): boolean {
+  for (let n: Node | null = t; n && n !== root; n = n.parentNode) if (n.nextSibling) return false;
+  return true;
+}
+
 /** mark 所在的段落级容器（分帧写入译文的单位） */
 function blockOf(m: Element): Element | null {
   return m.parentElement?.closest('p,li,dd,dt,td,th,h1,h2,h3,h4,h5,h6,blockquote,figcaption,div,section,article') ?? null;
+}
+
+/**
+ * 固定搭配义：取 mark 左右紧邻的单词（同一父元素内、中间只有空白，不跨标点），
+ * 邻词按小写和去掉复数词尾（-s/-es）两种形式查 collocationShort。
+ */
+function collocationOf(m: Element, lemma: string): string | undefined {
+  const prev = adjacentWord(m, true);
+  const next = adjacentWord(m, false);
+  if (!prev && !next) return undefined;
+  const forms = (w: string | undefined) => (w ? [...new Set([w, w.replace(/es$/, ''), w.replace(/s$/, '')])] : [undefined]);
+  for (const p of forms(prev)) for (const n of forms(next)) {
+    const hit = collocationShort(lemma, p, n);
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** mark 前（prev=true）或后紧邻的单词（小写）；中间出现非空白字符（标点等）或跨出父元素时返回 undefined */
+function adjacentWord(m: Element, prev: boolean): string | undefined {
+  let text = '';
+  for (let n = prev ? m.previousSibling : m.nextSibling, i = 0; n && i < 4; n = prev ? n.previousSibling : n.nextSibling, i++) {
+    const t = n.nodeType === Node.TEXT_NODE ? (n as Text).data : n.nodeName === TAG_MARK.toUpperCase() ? markSurface(n as Element) : (n.textContent ?? '');
+    text = prev ? t + text : text + t;
+    if (/[A-Za-z]/.test(t)) break;
+  }
+  const hit = prev ? /([A-Za-z]+)\s+$/.exec(text) : /^\s+([A-Za-z]+)/.exec(text);
+  return hit?.[1]!.toLowerCase();
 }
 
 /**

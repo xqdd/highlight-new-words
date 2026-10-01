@@ -1,11 +1,12 @@
 import type { MarkStyle, Settings } from '@/core/settings/schema';
-import { isTextOnlyStyle, markStyleParts, resolveMarkStyle, resolveTranslationStyle } from '@/core/theme/resolve';
+import { markStyleParts, resolveMarkStyle, resolveTranslationStyle } from '@/core/theme/resolve';
 import { DARK_PAGE_BG, LIGHT_PAGE_BG, ensureContrast, isOpaque, parseColor } from './color';
 import {
   ATTR_BOOK,
   ATTR_CODE,
   ATTR_IN_LINK,
   ATTR_LOW_CONFIDENCE,
+  ATTR_NO_GLOSS,
   ATTR_ON_DARK,
   ATTR_REVEALED,
   ATTR_TIGHT,
@@ -86,7 +87,16 @@ function styleRules(sel: string, attrSel: (attr: string) => string, style: MarkS
     }
     // 半透明背景在深色页上压暗：浅色文字压在高不透明度的亮色底上对比度不足
     const bg = dimmedBackground(style);
-    if (bg) {
+    if (style.background && isWarmHue(style.background)) {
+      // 暖色底（荧光黄、杏色）在深色页上发脏：改为提亮的同色文字 + 同色下划线
+      const solid = opaqueColor(style.background);
+      const text = ensureContrast(solid, DARK_PAGE_BG, 4.5) ?? solid;
+      dark.push('background-color:transparent', 'background-image:none', 'box-shadow:none');
+      if (!style.color) dark.push(`color:${text}`);
+      if (style.underline === 'none') {
+        dark.push('text-decoration-line:underline', 'text-decoration-style:solid', `text-decoration-color:${text}`, 'text-decoration-thickness:1.5px', 'text-underline-offset:3px');
+      }
+    } else if (bg) {
       if ((style.backgroundKind ?? 'block') === 'marker') {
         dark.push(`background-image:${markStyleParts({ ...style, background: bg, backgroundOpacity: 1 }).bgImage}`);
       } else {
@@ -96,13 +106,59 @@ function styleRules(sel: string, attrSel: (attr: string) => string, style: MarkS
     }
     if (light.length > 0) out.push(`${sel}:not([${ATTR_ON_DARK}])>${W}{${light.join(';')}}`);
     if (dark.length > 0) out.push(`${darkSel}>${W}{${dark.join(';')}}`);
+    // 深色上下文的悬停只叠淡色（不带回亮色页的马克笔色带）；:hover 让特异性与常规悬停规则相同、靠后生效
+    if (bgImage) out.push(`@media (hover:hover){${darkSel}:hover>${W}{background-image:${tint}}}`);
   }
-  if (isTextOnlyStyle(style)) {
-    // 链接内：保留站点链接色（链接身份不丢），用主题色浅底表示生词，避免“彩色字像链接”的混淆
-    const tintBg = `color-mix(in srgb,${style.color} 18%,transparent)`;
-    out.push(`${attrSel(ATTR_IN_LINK)}>${W}{color:inherit;background-color:${tintBg}}`);
+  // 链接内：保留站点链接的颜色与下划线（链接身份不丢），生词改用不冲突的通道——只用底色。
+  // 自带背景的样式保留背景；没有背景的（文字色/装饰线/边框）改为主题色浅底。
+  // 自身装饰线去掉（链接的下划线由 <a> 传递绘制，不受影响），避免两条线叠在一起或切断链接下划线
+  const accent = style.underline !== 'none' && style.underlineColor ? style.underlineColor : style.color || style.borderColor || style.underlineColor;
+  if (!style.background && accent) {
+    out.push(`${attrSel(ATTR_IN_LINK)}>${W}{color:inherit;text-decoration-line:none;outline:none;background-color:color-mix(in srgb,${accent} 20%,transparent)}`);
+  } else {
+    out.push(`${attrSel(ATTR_IN_LINK)}>${W}{color:inherit;text-decoration-line:none;outline:none}`);
+    // 深色上下文的暖色底已改为文字色 + 下划线（见上），链接里这两样都让给链接，补回一层浅底
+    if (style.background && isWarmHue(style.background)) {
+      out.push(`${attrSel(`${ATTR_IN_LINK}][${ATTR_ON_DARK}`)}>${W}{background-color:color-mix(in srgb,${opaqueColor(style.background)} 24%,transparent)}`);
+    }
+  }
+  // 标题：大字号上的整块底色/马克笔太重，降级为同色下划线（自带装饰线的保留原装饰线）
+  if (style.background) {
+    const solid = opaqueColor(style.background);
+    const line = style.underline === 'none' ? `;text-decoration-line:underline;text-decoration-style:solid;text-decoration-color:${solid};text-decoration-thickness:max(2px,.07em);text-underline-offset:.14em` : '';
+    out.push(`${HEADINGS} ${sel}>${W}{background-color:transparent;background-image:none;box-shadow:none${line}}`);
   }
   return out;
+}
+
+/** 标题元素（行内译文不插入、底色类样式降级为下划线） */
+const HEADINGS = ':is(h1,h2,h3,h4,h5,h6)';
+
+/** 颜色去掉透明度（作为线色使用）；解析不了的写法原样返回 */
+function opaqueColor(color: string): string {
+  const c = parseColor(color);
+  return c ? `rgb(${c.r}, ${c.g}, ${c.b})` : color;
+}
+
+/**
+ * 暖色（红-橙-黄-黄绿，色相 < 75° 或 > 330°）：半透明暖色底叠在深色页上会变成暗橄榄/脏棕色，
+ * 深色上下文改用“提亮的同色文字 + 同色下划线”，不再铺底。冷色（青/蓝/紫）半透明底在深色页上仍干净，保留。
+ */
+function isWarmHue(color: string): boolean {
+  const c = parseColor(color);
+  if (!c) return false;
+  const r = c.r / 255;
+  const g = c.g / 255;
+  const b = c.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max - min < 0.15) return false; // 灰色系不算
+  let h: number;
+  if (max === r) h = ((g - b) / (max - min)) * 60;
+  else if (max === g) h = ((b - r) / (max - min)) * 60 + 120;
+  else h = ((r - g) / (max - min)) * 60 + 240;
+  if (h < 0) h += 360;
+  return h < 75 || h > 330;
 }
 
 /** 深色上下文下的半透明背景色：不透明度超过上限时按比例压低；无需调整返回 null */
@@ -166,8 +222,15 @@ function translationRules(settings: Settings): string[] {
       `${M}[${ATTR_CODE}]>${TR}::before{content:attr(${ATTR_TR_TEXT})}`,
     );
   }
-  // 低置信度（专有名词/界面标签）：不显示占位译文，悬停模式仍可看
-  out.push(`${mode('after')} ${M}[${ATTR_LOW_CONFIDENCE}]>${TR},${mode('ruby')} ${M}[${ATTR_LOW_CONFIDENCE}]>${TR}{display:none}`);
+  // 不显示占位译文的位置（悬停模式仍可看，卡片照常）：
+  // - 低置信度（专有名词/界面标签）
+  // - 链接内：括注会切断链接下划线、改变链接文字
+  // - 标题：大字号里的括注很突兀，标题统一只标记
+  // - 密度控制省略的（data-hnw-nogloss，见 engine 的 thinGlosses）
+  const noGloss = [`${M}[${ATTR_LOW_CONFIDENCE}]`, `${M}[${ATTR_IN_LINK}]`, `${HEADINGS} ${M}`, `${M}[${ATTR_NO_GLOSS}]`];
+  out.push(`${[mode('after'), mode('ruby')].flatMap((p) => noGloss.map((x) => `${p} ${x}>${TR}`)).join(',')}{display:none}`);
+  // 代码中的装饰线：代码行距紧凑，波浪线/粗线/大偏移会压到下一行，统一收为 1px 直线、贴近基线
+  out.push(`${M}[${ATTR_CODE}]>${W}{text-decoration-style:solid!important;text-decoration-thickness:1px!important;text-underline-offset:1px!important}`);
   // 模糊自测：译文模糊且可点按（engine 拦截点按，切换 data-hnw-revealed，不触发卡片/链接）
   if (t.blur) {
     const quiz = [mode('after'), mode('ruby')].map((p) => `${p} ${M}:not([${ATTR_TIGHT}]):not([${ATTR_CODE}])>${TR}:not([${ATTR_REVEALED}])`).join(',');
