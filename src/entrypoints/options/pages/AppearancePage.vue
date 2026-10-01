@@ -1,9 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { INLINE_MODE_LABELS, INLINE_MODE_ORDER, INLINE_TRANSLATION_NAME } from '@/core/settings/inline-translation-labels';
-import type { InlineTranslationMode } from '@/core/settings/schema';
-import { resolveCardStyle, resolveMarkStyle, resolveTranslationStyle } from '@/core/theme/resolve';
-import { CUSTOM_THEME_ID, type MarkStyle } from '@/core/theme/themes';
+import type { InlineTranslationMode, Settings } from '@/core/settings/schema';
+import {
+  applyTranslationPreset,
+  matchTranslationPreset,
+  resolveCardStyle,
+  resolveMarkStyle,
+  resolveTranslationStyle,
+  resolveTranslationStyleOf,
+  translationLookDecls,
+} from '@/core/theme/resolve';
+import {
+  CUSTOM_THEME_ID,
+  TRANSLATION_BRACKETS,
+  TRANSLATION_PRESETS,
+  type MarkStyle,
+  type TranslationBracket,
+  type TranslationPreset,
+} from '@/core/theme/themes';
 import AppIcon from '@/ui/components/AppIcon.vue';
 import BottomSheet from '@/ui/components/BottomSheet.vue';
 import MarkPreview from '@/ui/components/MarkPreview.vue';
@@ -37,7 +52,7 @@ import { showToast } from '../lib/toast';
 /**
  * 外观页（v5）：吸顶实时预览（真实句子 + 多本词书 + 行内译文 + 链接，亮/暗网页切换）→ 预设画廊（组合预设带缩略与说明、我的样式、
  * 单色样式）→ 样式编辑器（装饰线 / 文字 / 背景 / 边框四个维度，可另存为“我的样式”）→ 按词书设置（跟随全局 / 只换颜色 /
- * 独立样式）→ 行内译文（模式 + 颜色/浓淡/字号/模糊自测）→ 释义卡片（电脑端打开方式 v11、卡片颜色；标题与卡片首次提示里的“设置 › 释义卡片”一致）。
+ * 独立样式）→ 行内译文（模式 + 译文样式预设 + 括号/颜色/底色/浓淡/字号/斜体/加粗/模糊自测）→ 释义卡片（电脑端打开方式 v11、卡片颜色；标题与卡片首次提示里的“设置 › 释义卡片”一致）。
  * 对标：沉浸式翻译的译文样式列表、Relingo 的分组设置与实时预览、Burning Vocabulary 的预设色块。
  */
 const { settings, books } = useOptions();
@@ -109,9 +124,31 @@ const INLINE_MODE_DESC: Record<InlineTranslationMode, string> = {
   hover: '指到生词时浮出，不占位置；触屏设备上没有悬停，请点按单词查看卡片',
 };
 const INLINE_MODES = INLINE_MODE_ORDER.map((value) => ({ value, label: INLINE_MODE_LABELS[value], desc: INLINE_MODE_DESC[value] }));
-function patchTr(p: Partial<{ blur: boolean; color: string; opacity: number; fontScale: number; oncePerParagraph: boolean }>) {
+function patchTr(p: Partial<Settings['inlineTranslation']>) {
   settings.value.inlineTranslation = { ...settings.value.inlineTranslation, ...p };
 }
+/** 当前译文样式匹配的预设（归一化比较），没有匹配时界面显示“自定义” */
+const trPreset = computed(() => matchTranslationPreset(settings.value.inlineTranslation));
+const TR_BRACKET_OPTIONS: { value: TranslationBracket; label: string }[] = [
+  { value: 'paren', label: '( )' },
+  { value: 'fullwidth', label: '（ ）' },
+  { value: 'square', label: '[ ]' },
+  { value: 'lenticular', label: '【 】' },
+  { value: 'none', label: '无' },
+];
+/** 预设卡片的示例译文：按当前模式解析预设样式，词后显示带括号，词上/词下小字不带（与页面渲染一致） */
+const TR_SAMPLE_WORD = 'skeptical';
+const TR_SAMPLE_TEXT = '怀疑的';
+function trSample(p: TranslationPreset) {
+  const r = resolveTranslationStyleOf({ mode: settings.value.inlineTranslation.mode, ...p.style });
+  const [open, close] = TRANSLATION_BRACKETS[r.bracket];
+  const ruby = r.mode === 'ruby' || r.mode === 'below';
+  const decls = [`font-size:${ruby ? `max(${r.fontScale}em,10px)` : `${r.fontScale}em`}`, `opacity:${r.opacity}`, ...translationLookDecls(r)];
+  if (r.color) decls.push(`color:${r.color}`);
+  if (!ruby) decls.push(`margin-inline-start:${r.bracket === 'none' || r.background ? '.25em' : '.1em'}`);
+  return { ruby, below: r.mode === 'below', text: ruby ? TR_SAMPLE_TEXT : `${open}${TR_SAMPLE_TEXT}${close}`, style: decls.join(';') };
+}
+const trSamples = computed(() => TRANSLATION_PRESETS.map((p) => ({ preset: p, sample: trSample(p) })));
 
 // ---------- 锚点不被吸顶预览遮住（#109） ----------
 /**
@@ -282,16 +319,50 @@ const cardColor = computed({
       </button>
     </div>
     <template v-if="settings.inlineTranslation.mode !== 'off'">
-      <span class="lbl">译文颜色</span>
-      <ColorRow :model-value="tr.color" label="译文颜色" empty-label="跟随正文颜色" @update:model-value="(c: string) => patchTr({ color: c })" />
-      <label class="slider">
-        <span>浓淡 {{ Math.round(tr.opacity * 100) }}%</span>
-        <input type="range" min="0.2" max="1" step="0.05" :value="tr.opacity" @input="patchTr({ opacity: Number(($event.target as HTMLInputElement).value) })" />
-      </label>
-      <label class="slider">
-        <span>字号 {{ Math.round(tr.fontScale * 100) }}%</span>
-        <input type="range" min="0.5" max="1" step="0.05" :value="tr.fontScale" @input="patchTr({ fontScale: Number(($event.target as HTMLInputElement).value) })" />
-      </label>
+      <template v-if="settings.inlineTranslation.mode !== 'hover'">
+        <span class="lbl">译文样式 · {{ trPreset?.name ?? '自定义' }}</span>
+        <div class="tr-gallery" role="radiogroup" aria-label="译文样式预设">
+          <button
+            v-for="{ preset: p, sample } in trSamples"
+            :key="p.id"
+            type="button"
+            role="radio"
+            class="tr-preset"
+            :aria-checked="trPreset?.id === p.id"
+            :title="p.desc"
+            @click="applyTranslationPreset(settings, p.id)"
+          >
+            <span class="tr-paper">
+              <ruby v-if="sample.ruby" :class="{ below: sample.below }">{{ TR_SAMPLE_WORD }}<rt :style="sample.style">{{ sample.text }}</rt></ruby>
+              <template v-else>{{ TR_SAMPLE_WORD }}<span class="tr-gloss" :style="sample.style">{{ sample.text }}</span></template>
+            </span>
+            <span class="tr-name">{{ p.name }}</span>
+          </button>
+        </div>
+        <span class="lbl">括号</span>
+        <SegmentedControl
+          :model-value="tr.bracket"
+          :options="TR_BRACKET_OPTIONS"
+          aria-label="译文括号"
+          @update:model-value="(v: TranslationBracket) => patchTr({ bracket: v })"
+        />
+        <p v-if="settings.inlineTranslation.mode !== 'after'" class="muted small">词上/词下小字不加括号；按钮等放不下小字、改为附在词后时使用。</p>
+        <span class="lbl">译文颜色</span>
+        <ColorRow :model-value="tr.color" label="译文颜色" empty-label="跟随正文颜色" @update:model-value="(c: string) => patchTr({ color: c })" />
+        <span class="lbl">译文底色</span>
+        <ColorRow :model-value="tr.background" label="译文底色" empty-label="无底色" alpha :default-alpha="0.16" @update:model-value="(c: string) => patchTr({ background: c })" />
+        <label class="slider">
+          <span>浓淡 {{ Math.round(tr.opacity * 100) }}%</span>
+          <input type="range" min="0.2" max="1" step="0.05" :value="tr.opacity" @input="patchTr({ opacity: Number(($event.target as HTMLInputElement).value) })" />
+        </label>
+        <label class="slider">
+          <span>字号 {{ Math.round(tr.fontScale * 100) }}%</span>
+          <input type="range" min="0.5" max="1" step="0.05" :value="tr.fontScale" @input="patchTr({ fontScale: Number(($event.target as HTMLInputElement).value) })" />
+        </label>
+        <ToggleSwitch :model-value="tr.italic" label="斜体" @update:model-value="(v: boolean) => patchTr({ italic: v })" />
+        <ToggleSwitch :model-value="tr.bold" label="加粗" @update:model-value="(v: boolean) => patchTr({ bold: v })" />
+      </template>
+      <p v-else class="muted small">悬停浮层使用固定的深底浅字样式；译文样式在词后、词上、词下模式中生效。</p>
       <ToggleSwitch
         :model-value="tr.blur"
         label="模糊自测"
@@ -458,6 +529,18 @@ section.section { scroll-margin-top: var(--anchor-offset, 72px); }
 .mode[aria-checked='true'] .radio { border: 5px solid var(--accent); }
 @media (max-width: 720px) { .modes { grid-template-columns: 1fr 1fr; } }
 .lbl { font-size: 13px; font-weight: 600; color: var(--text-2); }
+/* 译文样式预设：小卡片网格，手机 2 列，示例在白纸上按预设样式渲染 */
+.tr-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+@media (max-width: 480px) { .tr-gallery { grid-template-columns: 1fr 1fr; gap: 6px; } }
+.tr-preset { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 12px; border: 1.5px solid var(--border);
+  background: var(--surface); cursor: pointer; color: var(--text); min-width: 0; }
+.tr-preset[aria-checked='true'] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.tr-paper { display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 8px; background: #fff; color: #1f2328;
+  font: 15px/1.3 Georgia, 'Times New Roman', serif; white-space: nowrap; overflow: hidden; border: 1px solid rgba(127, 127, 127, .18); }
+.tr-paper ruby.below { ruby-position: under; }
+.tr-paper rt { line-height: 1.2; }
+.tr-gloss { display: inline-block; line-height: 1; white-space: nowrap; }
+.tr-name { font-size: 12px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slider { display: grid; grid-template-columns: 7.5em 1fr; align-items: center; gap: 10px; min-height: var(--tap); font-size: 13px; }
 .slider input { width: 100%; accent-color: var(--accent); }
 

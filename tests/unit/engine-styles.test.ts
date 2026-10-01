@@ -5,8 +5,15 @@ import { createSetWordBook } from '@/core/wordbook/registry';
 import type { Dictionary } from '@/core/dict/types';
 import { createDefaultSettings } from '@/core/settings/defaults';
 import { normalizeSettings } from '@/core/settings/migrate';
-import { BUILTIN_THEMES, V5_PRESET_IDS, findTheme } from '@/core/theme/themes';
-import { applyThemePreset, markStyleToCss, resolveMarkStyle, resolveTranslationStyle } from '@/core/theme/resolve';
+import { BUILTIN_THEMES, TRANSLATION_PRESETS, V5_PRESET_IDS, findTheme } from '@/core/theme/themes';
+import {
+  applyThemePreset,
+  applyTranslationPreset,
+  markStyleToCss,
+  matchTranslationPreset,
+  resolveMarkStyle,
+  resolveTranslationStyle,
+} from '@/core/theme/resolve';
 import { DARK_PAGE_BG, LIGHT_PAGE_BG, contrast, ensureContrast, parseColor } from '@/content/engine/color';
 import { tokenizeCode } from '@/content/engine/code';
 import { HighlightEngine } from '@/content/engine/engine';
@@ -145,11 +152,72 @@ describe('v5 样式契约', () => {
   it('译文样式：颜色/透明度/字号可调，有缺省值并夹在合理范围', () => {
     const s = createDefaultSettings();
     s.inlineTranslation = { mode: 'after', color: '#64748b', opacity: 0.05, fontScale: 2 };
-    expect(resolveTranslationStyle(s)).toEqual({ mode: 'after', blur: false, color: '#64748b', opacity: 0.2, fontScale: 1 });
+    expect(resolveTranslationStyle(s)).toEqual({
+      mode: 'after',
+      blur: false,
+      color: '#64748b',
+      opacity: 0.2,
+      fontScale: 1,
+      bracket: 'paren',
+      background: '',
+      italic: false,
+      bold: false,
+    });
     const css = buildPageCss(s);
     expect(css).toContain('font-size:1em;line-height:1;opacity:0.2;color:#64748b;');
     s.inlineTranslation = { mode: 'ruby' };
     expect(resolveTranslationStyle(s)).toMatchObject({ opacity: 0.7, fontScale: 0.55 });
+  });
+
+  it('译文括号：各选项生成对应 content，none 不加括号；缺省仍是半角括号且不追加底色/斜体/加粗', () => {
+    const s = createDefaultSettings();
+    s.inlineTranslation = { mode: 'after' };
+    const base = buildPageCss(s);
+    expect(base).toContain('html[data-hnw-tr="after"] hnw-tr::before{content:"(" attr(data-tr) ")"}');
+    expect(base).toContain('vertical-align:baseline}');
+    expect(base).not.toContain('font-style:italic');
+    const cases: [NonNullable<typeof s.inlineTranslation.bracket>, string][] = [
+      ['fullwidth', '"（" attr(data-tr) "）"'],
+      ['square', '"[" attr(data-tr) "]"'],
+      ['lenticular', '"【" attr(data-tr) "】"'],
+      ['none', 'attr(data-tr)'],
+    ];
+    for (const [bracket, content] of cases) {
+      s.inlineTranslation = { mode: 'after', bracket };
+      const css = buildPageCss(s);
+      expect(css).toContain(`html[data-hnw-tr="after"] hnw-tr::before{content:${content}}`);
+      // 受限容器中 ruby 退回的词后括注同样使用所选括号
+      s.inlineTranslation = { mode: 'ruby', bracket };
+      expect(buildPageCss(s)).toContain(`hnw-mark[data-hnw-tight]>hnw-tr[data-tr]::before{content:${content}}`);
+    }
+    s.inlineTranslation = { mode: 'after', background: 'rgba(20, 184, 166, 0.14)', italic: true, bold: true, color: '#64748b' };
+    const look = buildPageCss(s);
+    expect(look).toContain('background:rgba(20, 184, 166, 0.14);padding:0 .3em;border-radius:.3em;font-style:italic;font-weight:700');
+    // 深色上下文提亮译文颜色
+    expect(look).toMatch(/hnw-mark\[data-hnw-dark\]>hnw-tr\{color:rgb\(/);
+  });
+
+  it('译文样式预设：应用后匹配该预设，经典清回缺省，微调后为自定义', () => {
+    expect(new Set(TRANSLATION_PRESETS.map((p) => p.id)).size).toBe(TRANSLATION_PRESETS.length);
+    const s = createDefaultSettings();
+    s.inlineTranslation = { mode: 'after', blur: true, oncePerParagraph: false, opacity: 0.4 };
+    expect(matchTranslationPreset(s.inlineTranslation)).toBeUndefined();
+    for (const p of TRANSLATION_PRESETS) {
+      applyTranslationPreset(s, p.id);
+      expect(matchTranslationPreset(s.inlineTranslation)?.id).toBe(p.id);
+      // 预设不改模式、模糊自测与同段只显示一次
+      expect(s.inlineTranslation).toMatchObject({ mode: 'after', blur: true, oncePerParagraph: false });
+    }
+    applyTranslationPreset(s, 'classic');
+    expect(s.inlineTranslation.opacity).toBeUndefined();
+    expect(s.inlineTranslation.bold).toBeUndefined();
+    // 显式写成模式缺省值、颜色大小写不同也视为匹配
+    s.inlineTranslation = { mode: 'ruby', color: '', opacity: 0.7, bracket: 'paren' };
+    expect(matchTranslationPreset(s.inlineTranslation)?.id).toBe('classic');
+    s.inlineTranslation = { mode: 'after', color: '#6B7280', opacity: 0.9, bracket: 'square' };
+    expect(matchTranslationPreset(s.inlineTranslation)?.id).toBe('square-gray');
+    s.inlineTranslation = { ...s.inlineTranslation, italic: true };
+    expect(matchTranslationPreset(s.inlineTranslation)).toBeUndefined();
   });
 
   it('旧设置缺少 v5/v8 字段时 normalizeSettings 补齐默认值', () => {

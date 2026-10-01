@@ -1,5 +1,6 @@
 import type { MarkStyle, Settings } from '@/core/settings/schema';
-import { markStyleParts, resolveMarkStyle, resolveTranslationStyle } from '@/core/theme/resolve';
+import { markStyleParts, resolveMarkStyle, resolveTranslationStyle, translationLookDecls } from '@/core/theme/resolve';
+import { TRANSLATION_BRACKETS } from '@/core/theme/themes';
 import { DARK_PAGE_BG, LIGHT_PAGE_BG, ensureContrast, isOpaque, parseColor } from './color';
 import {
   ATTR_BOOK,
@@ -182,6 +183,13 @@ function dimmedBackground(style: MarkStyle): string | null {
 function translationRules(settings: Settings): string[] {
   const t = resolveTranslationStyle(settings);
   const color = t.color ? `color:${t.color};` : '';
+  // 底色/斜体/加粗（缺省为空，CSS 与无这些字段时一致），追加在各模式规则末尾
+  const look = translationLookDecls(t).map((d) => `;${d}`).join('');
+  // 词后显示（after 模式、受限容器中的 ruby 退回）：不加括号或带底色时，与单词的间距稍放大，避免译文贴着单词
+  const afterLook = look + (t.bracket === 'none' || t.background ? ';margin-inline-start:.25em' : '');
+  // 词后显示的括号；ruby/below 的词上/词下小字不加括号
+  const [open, close] = TRANSLATION_BRACKETS[t.bracket];
+  const glossContent = t.bracket === 'none' ? `attr(${ATTR_TR_TEXT})` : `"${open}" attr(${ATTR_TR_TEXT}) "${close}"`;
   const out: string[] = [];
   // 默认隐藏；文字来自属性（::before），不进入页面文本，复制/查找/页面脚本都读不到
   out.push(
@@ -193,8 +201,8 @@ function translationRules(settings: Settings): string[] {
   // mark 不换行：词与括注始终在同一行（否则括注会单独掉到下一行，mark 的包围盒变成两行高）
   out.push(
     `${mode('after')} ${M}{white-space:nowrap}`,
-    `${mode('after')} ${TR}{display:inline-block;margin-inline-start:.1em;font-size:${t.fontScale}em;line-height:1;opacity:${t.opacity};${color}white-space:nowrap;vertical-align:baseline}`,
-    `${mode('after')} ${TR}::before{content:"(" attr(${ATTR_TR_TEXT}) ")"}`,
+    `${mode('after')} ${TR}{display:inline-block;margin-inline-start:.1em;font-size:${t.fontScale}em;line-height:1;opacity:${t.opacity};${color}white-space:nowrap;vertical-align:baseline${afterLook}}`,
+    `${mode('after')} ${TR}::before{content:${glossContent}}`,
   );
   // 词上注音：原生 CSS ruby（Chromium 121+ display:ruby），注解居中不拉伸字距；
   // 行内有注解时浏览器只在需要处增加行高，注解永远不会与上一行文字重叠。
@@ -204,7 +212,7 @@ function translationRules(settings: Settings): string[] {
     `${RUBY} ${M}{display:ruby}`,
     `${mode('below')} ${M}{ruby-position:under}`,
     `${RUBY} ${W}{display:ruby-base}`,
-    `${RUBY} ${TR}{display:ruby-text;ruby-align:center;text-align:center;font-size:max(${t.fontScale}em,10px);line-height:1.2;opacity:${t.opacity};${color}white-space:nowrap}`,
+    `${RUBY} ${TR}{display:ruby-text;ruby-align:center;text-align:center;font-size:max(${t.fontScale}em,10px);line-height:1.2;opacity:${t.opacity};${color}white-space:nowrap${look}}`,
     `${RUBY} ${TR}:not([${ATTR_TR_TEXT}])::before{content:"\\a0"}`,
   );
   // 不占位的浮层：悬停模式、代码中的浮动标注、同段重复词的悬停兜底共用。绝对定位在单词上方，不参与布局
@@ -220,12 +228,19 @@ function translationRules(settings: Settings): string[] {
     `${RUBY} ${M}[${ATTR_TIGHT}]>${W},${RUBY} ${M}[${ATTR_CODE}]>${W}{display:inline}`,
     // 受限容器中的 ruby 译文改为附在词后的括注（与词后模式同样式），照常显示
     `${RUBY} ${M}[${ATTR_TIGHT}]{white-space:nowrap}`,
-    `${RUBY} ${M}[${ATTR_TIGHT}]>${TR}{display:inline-block;margin-inline-start:.1em;font-size:${t.fontScale}em;line-height:1;opacity:${t.opacity};${color}white-space:nowrap;vertical-align:baseline}`,
-    `${RUBY} ${M}[${ATTR_TIGHT}]>${TR}[${ATTR_TR_TEXT}]::before{content:"(" attr(${ATTR_TR_TEXT}) ")"}`,
+    `${RUBY} ${M}[${ATTR_TIGHT}]>${TR}{display:inline-block;margin-inline-start:.1em;font-size:${t.fontScale}em;line-height:1;opacity:${t.opacity};${color}white-space:nowrap;vertical-align:baseline${afterLook}}`,
+    `${RUBY} ${M}[${ATTR_TIGHT}]>${TR}[${ATTR_TR_TEXT}]::before{content:${glossContent}}`,
     `${mode('hover')} ${TR}{display:none}`,
     `@media (hover:hover){${mode('hover')} ${hoverable}{${float}}}`,
     `${mode('hover')} ${TR}::before{content:attr(${ATTR_TR_TEXT})}`,
   );
+  // 深色上下文（mark 带 data-hnw-dark）：用户设了译文颜色时按正文标准 4.5:1 提亮，避免深色页上看不清。
+  // 实心底色（标签底不透明）时文字色由用户自行搭配底色，不随页面明暗调整（同生词样式的处理）。
+  // 放在受限容器规则之后：特异性相同时靠后生效
+  if (t.color && !isOpaque(t.background)) {
+    const d = ensureContrast(t.color, DARK_PAGE_BG, 4.5);
+    if (d) out.push(`${mode('after')} ${M}[${ATTR_ON_DARK}]>${TR},${RUBY} ${M}[${ATTR_ON_DARK}]>${TR}{color:${d}}`);
+  }
   // 代码：永远不显示占位译文；浮动小标注模式下常显（不占位，复制代码不会带出）
   out.push(`${M}[${ATTR_CODE}]>${TR}{display:none!important}`);
   if (settings.code?.enabled && settings.code.display === 'float') {

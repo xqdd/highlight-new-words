@@ -2,11 +2,15 @@ import type { BookId, Settings } from '../settings/schema';
 import {
   CUSTOM_THEME_ID,
   DEFAULT_THEME_ID,
+  TRANSLATION_PRESETS,
   TRANSLATION_STYLE_DEFAULTS,
   findTheme,
   type CardStyle,
   type InlineTranslationMode,
   type MarkStyle,
+  type TranslationBracket,
+  type TranslationPreset,
+  type TranslationStyle,
 } from './themes';
 
 function themeMark(settings: Settings, themeId: string): MarkStyle {
@@ -111,10 +115,18 @@ export interface ResolvedTranslationStyle {
   color: string;
   opacity: number;
   fontScale: number;
+  bracket: TranslationBracket;
+  background: string;
+  italic: boolean;
+  bold: boolean;
 }
 
 export function resolveTranslationStyle(settings: Settings): ResolvedTranslationStyle {
-  const t = settings.inlineTranslation;
+  return resolveTranslationStyleOf(settings.inlineTranslation);
+}
+
+/** 按模式补齐缺省值（不依赖完整 Settings：选项页的预设卡片示例、预设匹配判定也用它） */
+export function resolveTranslationStyleOf(t: { mode: InlineTranslationMode } & TranslationStyle): ResolvedTranslationStyle {
   const key = t.mode === 'off' ? 'after' : t.mode;
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
   return {
@@ -123,7 +135,58 @@ export function resolveTranslationStyle(settings: Settings): ResolvedTranslation
     color: t.color ?? TRANSLATION_STYLE_DEFAULTS.color,
     opacity: clamp(t.opacity ?? TRANSLATION_STYLE_DEFAULTS.opacity[key], 0.2, 1),
     fontScale: clamp(t.fontScale ?? TRANSLATION_STYLE_DEFAULTS.fontScale[key], 0.5, 1),
+    bracket: t.bracket ?? 'paren',
+    background: t.background ?? '',
+    italic: !!t.italic,
+    bold: !!t.bold,
   };
+}
+
+/**
+ * 译文的外观声明（底色、斜体、加粗），追加在各模式的字号/透明度/颜色声明之后。
+ * 字段都为缺省时返回空数组，保证旧设置生成的 CSS 与新增这些字段之前完全一致。
+ * 带底色时加少量水平内边距与圆角（标签/胶囊效果），不加垂直内边距，避免撑高行距。
+ */
+export function translationLookDecls(t: ResolvedTranslationStyle): string[] {
+  const decls: string[] = [];
+  if (t.background) decls.push(`background:${t.background}`, 'padding:0 .3em', 'border-radius:.3em');
+  if (t.italic) decls.push('font-style:italic');
+  if (t.bold) decls.push('font-weight:700');
+  return decls;
+}
+
+/** 译文预设可改动的样式字段（预设只动这些，不动 mode/blur/oncePerParagraph） */
+const TRANSLATION_PRESET_FIELDS = ['color', 'opacity', 'fontScale', 'bracket', 'background', 'italic', 'bold'] as const;
+
+/**
+ * 选择译文样式预设：先清掉全部样式字段（回到按模式的缺省值），再写入预设的字段。
+ * 所以“经典括号”会把用户调过的浓淡、字号等清回缺省。替换整个 inlineTranslation 对象（options 中为响应式对象）。
+ */
+export function applyTranslationPreset(settings: Settings, presetId: string): Settings {
+  const preset = TRANSLATION_PRESETS.find((p) => p.id === presetId);
+  if (!preset) return settings;
+  const next = { ...settings.inlineTranslation };
+  for (const f of TRANSLATION_PRESET_FIELDS) delete next[f];
+  settings.inlineTranslation = { ...next, ...preset.style };
+  return settings;
+}
+
+/**
+ * 当前译文样式匹配哪个预设：双方都按当前模式补齐缺省值后逐字段比较（颜色忽略大小写、数值容差 0.001），
+ * 所以“没写 opacity”与“opacity 恰为模式缺省值”视为相同。没有匹配返回 undefined（界面显示“自定义”）。
+ */
+export function matchTranslationPreset(t: { mode: InlineTranslationMode } & TranslationStyle): TranslationPreset | undefined {
+  const cur = resolveTranslationStyleOf(t);
+  return TRANSLATION_PRESETS.find((p) => {
+    const want = resolveTranslationStyleOf({ mode: t.mode, ...p.style });
+    return TRANSLATION_PRESET_FIELDS.every((f) => {
+      const a = cur[f];
+      const b = want[f];
+      if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 0.001;
+      if (typeof a === 'string' && typeof b === 'string') return a.toLowerCase() === b.toLowerCase();
+      return a === b;
+    });
+  });
 }
 
 /**

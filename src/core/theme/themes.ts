@@ -66,7 +66,27 @@ export interface TranslationStyle {
   opacity?: number;
   /** 字号相对正文的比例 0.5–1 */
   fontScale?: number;
+  /** 括号（词后显示时使用：after 模式、ruby/below 在受限容器中退回的词后括注；词上/词下小字不加括号），缺省 paren */
+  bracket?: TranslationBracket;
+  /** 译文底色（标签/胶囊效果），空串=无；带底色时加少量水平内边距与圆角 */
+  background?: string;
+  /** 斜体 */
+  italic?: boolean;
+  /** 加粗 */
+  bold?: boolean;
 }
+
+/** 译文括号：半角 ( ) / 全角（ ）/ 方括号 [ ] / 方头括号【 】/ 不加括号 */
+export type TranslationBracket = 'paren' | 'fullwidth' | 'square' | 'lenticular' | 'none';
+
+/** 各括号选项的左右括号字符 */
+export const TRANSLATION_BRACKETS: Record<TranslationBracket, readonly [string, string]> = {
+  paren: ['(', ')'],
+  fullwidth: ['（', '）'],
+  square: ['[', ']'],
+  lenticular: ['【', '】'],
+  none: ['', ''],
+};
 
 export interface CardStyle {
   background: string;
@@ -341,3 +361,27 @@ export const TRANSLATION_STYLE_DEFAULTS = {
 export function findTheme(id: string): HighlightTheme | undefined {
   return BUILTIN_THEMES.find((t) => t.id === id);
 }
+
+/** 译文样式预设：只携带样式字段（不改 mode/blur/oncePerParagraph），选用见 resolve.ts#applyTranslationPreset */
+export interface TranslationPreset {
+  id: string;
+  name: string;
+  desc: string;
+  style: Pick<TranslationStyle, 'color' | 'opacity' | 'fontScale' | 'bracket' | 'background' | 'italic' | 'bold'>;
+}
+
+/**
+ * 内置译文样式预设（参考沉浸式翻译、Relingo 的译文样式）。
+ * 不设字号：各模式字号缺省值差异很大（词后 0.88、词上/词下 0.55），统一比例会让某一种模式失真，字号留给用户微调。
+ * 颜色避开常见链接蓝；深色上下文中 engine 会把译文颜色提亮到 4.5:1（见 engine/style.ts），半透明底色在深浅页面都可读。
+ */
+export const TRANSLATION_PRESETS: readonly TranslationPreset[] = [
+  { id: 'classic', name: '经典括号', desc: '跟随正文色、半透明，半角括号', style: { color: '' } },
+  { id: 'fullwidth', name: '全角括号', desc: '中文全角括号，更贴合中文排版', style: { color: '', bracket: 'fullwidth' } },
+  { id: 'square-gray', name: '方括号灰字', desc: '灰色译文配方括号，像词典注释', style: { color: '#6b7280', opacity: 0.9, bracket: 'square' } },
+  { id: 'lenticular', name: '方头括号', desc: '【 】醒目分隔，琥珀色译文', style: { color: '#b45309', opacity: 0.9, bracket: 'lenticular' } },
+  { id: 'color-plain', name: '彩色无括号', desc: '赭石色译文紧跟单词，不加括号', style: { color: '#c2410c', opacity: 1, bracket: 'none' } },
+  { id: 'tag', name: '标签', desc: '浅青底圆角 + 同色字，像小标签', style: { color: '#0f766e', opacity: 1, bracket: 'none', background: 'rgba(20, 184, 166, 0.14)' } },
+  { id: 'italic-soft', name: '斜体低调', desc: '灰蓝斜体，安静不抢眼', style: { color: '#64748b', opacity: 0.9, bracket: 'none', italic: true } },
+  { id: 'bold', name: '醒目加粗', desc: '玫红加粗译文，扫读一眼就看到', style: { color: '#be123c', opacity: 1, bold: true } },
+];
