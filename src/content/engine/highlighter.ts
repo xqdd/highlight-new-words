@@ -124,7 +124,8 @@ const INLINE_TAGS = new Set(['A', 'SPAN', 'EM', 'STRONG', 'B', 'I', 'U', 'S', 'S
  * 大小写置信度（预研要求）：首字母大写却不在句首的词多为专有名词或界面标签（“Premium”“Apple”“Bill”），
  * 短释义很可能不对。以下情况判为低置信度：
  * - 首字母大写（含全大写），且前面最近的非空白字符不是句末/引号/括号等分隔符；
- * - 整个文本节点只有这一个大写词（导航、按钮、标签等单独成段的词）。
+ * - 整个文本节点只有这一个大写词（导航、按钮、标签等单独成段的词）；
+ * - 在句首，但后面隔着空白紧跟另一个大写词（United States、New York 这类多词专有名词的开头，常见于表头、链接）。
  * 句首的普通大写词（The 后面的句子开头）不受影响。
  */
 function isLowConfidence(node: Text, tokens: Token[], index: number): boolean {
@@ -133,7 +134,12 @@ function isLowConfidence(node: Text, tokens: Token[], index: number): boolean {
   if (c < 65 || c > 90) return false;
   if (tokens.length === 1 && node.data.trim().length === tk.word.length) return true;
   const prev = precedingChar(node, tk.start);
-  return prev !== '' && !SENTENCE_BREAK.test(prev);
+  if (prev !== '' && !SENTENCE_BREAK.test(prev)) return true;
+  const next = tokens[index + 1];
+  // 单字母的 I 不算（“Then I went”）
+  if (!next || next.word.length < 2 || !/^\s+$/.test(node.data.slice(tk.end, next.start))) return false;
+  const nc = next.word.charCodeAt(0);
+  return nc >= 65 && nc <= 90;
 }
 
 /** 位置 offset 之前最近的非空白字符；跨越行内元素向前找，遇到块级边界返回 ''（视为段首） */

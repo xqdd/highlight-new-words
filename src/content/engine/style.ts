@@ -234,10 +234,10 @@ function translationRules(settings: Settings): string[] {
   }
   // 不显示占位译文的位置（悬停模式仍可看，卡片照常）：
   // - 低置信度（专有名词/界面标签）
-  // - 链接内：括注会切断链接下划线、改变链接文字
   // - 标题：大字号里的括注很突兀，标题统一只标记
   // - 密度控制省略的（data-hnw-nogloss，见 engine 的 thinGlosses）
-  const noGloss = [`${M}[${ATTR_LOW_CONFIDENCE}]`, `${M}[${ATTR_IN_LINK}]`, `${HEADINGS} ${M}`, `${M}[${ATTR_NO_GLOSS}]`];
+  // 链接内的词照常显示：维基等页面大量生词在链接里，隐藏后行内译文形同缺失
+  const noGloss = [`${M}[${ATTR_LOW_CONFIDENCE}]`, `${HEADINGS} ${M}`, `${M}[${ATTR_NO_GLOSS}]`];
   out.push(`${[mode('after'), mode('ruby')].flatMap((p) => noGloss.map((x) => `${p} ${x}>${TR}`)).join(',')}{display:none}`);
   // 桌面端兜底：上述不显示括注的 mark 悬停时复用受限容器的不占位浮层显示短释义（触屏没有悬停，点按照常打开卡片）。
   // 只对已有释义的（带 data-tr）生效，ruby 占位注解不弹空浮层；模糊自测不作用于浮层（浮层本就需要悬停才出现）

@@ -958,7 +958,8 @@ export class ShadowCardView implements CardView {
     if (!btn || !data || btn.hasAttribute('disabled')) return;
     switch (btn.dataset.act) {
       case 'speak':
-        this.actions.speak(data.lemma);
+        // 读页面上的实际词形（ran 读 ran 而不是 run），卡片标题展示的原形只用于释义和词书匹配
+        this.actions.speak(data.surface);
         break;
       case 'close':
         this.close();

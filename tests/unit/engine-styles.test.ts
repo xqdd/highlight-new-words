@@ -124,9 +124,9 @@ describe('v5 样式契约', () => {
     s.style.themeId = 'wavy-line';
     // 装饰线类样式在链接里同样让位：去掉自身波浪线，改用同色浅底
     expect(buildPageCss(s)).toContain('hnw-mark:where([data-hnw-link])>hnw-w{color:inherit;text-decoration-line:none;outline:none;background-color:color-mix(in srgb,#f43f5e 20%,transparent)}');
-    // 代码中装饰线收为 1px 直线；链接、标题、密度省略的不显示括注
+    // 代码中装饰线收为 1px 直线；标题、密度省略的不显示括注，链接内照常显示
     expect(css2).toContain('hnw-mark[data-hnw-code]>hnw-w{text-decoration-style:solid!important;text-decoration-thickness:1px!important');
-    expect(css2).toContain('html[data-hnw-tr="after"] hnw-mark[data-hnw-link]>hnw-tr');
+    expect(css2).not.toContain('html[data-hnw-tr="after"] hnw-mark[data-hnw-link]>hnw-tr');
     expect(css2).toContain('html[data-hnw-tr="after"] :is(h1,h2,h3,h4,h5,h6) hnw-mark>hnw-tr');
     expect(css2).toContain('html[data-hnw-tr="after"] hnw-mark[data-hnw-nogloss]>hnw-tr');
     // 按词书覆盖的 v5 字段也能生效
@@ -225,6 +225,16 @@ describe('大小写置信度', () => {
     const em = highlightTextNode(p3!.querySelector('em')!.firstChild as Text, match);
     expect(em[0]!.hasAttribute('data-hnw-lowconf')).toBe(true);
   });
+
+  it('句首紧跟另一个大写词判为低置信度（多词专有名词），后面是单字母 I 不算', () => {
+    document.body.innerHTML = `<p>Premium Senate seat</p><p>Meticulous I am. Abandon ship.</p>`;
+    const [p1, p2] = document.querySelectorAll('p');
+    expect(highlightTextNode(p1!.firstChild as Text, match).map((m) => [m.textContent, m.hasAttribute('data-hnw-lowconf')])).toEqual([['Premium', true]]);
+    expect(highlightTextNode(p2!.firstChild as Text, match).map((m) => [m.textContent, m.hasAttribute('data-hnw-lowconf')])).toEqual([
+      ['Meticulous', false],
+      ['Abandon', false],
+    ]);
+  });
 });
 
 describe('受限容器、链接与译文', () => {
@@ -232,15 +242,15 @@ describe('受限容器、链接与译文', () => {
     lookup: async (w) => ({ word: w, short: w === 'committee' ? '委员会' : 'v. 放弃' }),
     lookupMany: async (ws) => new Map([...ws].filter((w) => w !== 'nothing').map((w) => [w, { word: w, short: w === 'committee' ? 'n. 委员会' : 'v. 放弃' }])),
   };
-  it('nowrap / ellipsis / 按钮中的 mark 标记为受限；链接内标记 data-hnw-link', async () => {
+  it('nowrap / ellipsis / 按钮中的 mark 标记为受限，行内 nowrap 不算；链接内标记 data-hnw-link', async () => {
     document.body.innerHTML = `<div style="white-space:nowrap">abandon a</div><div style="text-overflow:ellipsis;overflow:hidden">abandon b</div>
-      <button>abandon c</button><p>free <a href="#">abandon</a> d</p>`;
+      <button>abandon c</button><p>free <a href="#">abandon</a> d</p><p>list <span style="white-space:nowrap"><a href="#">abandon</a></span> e</p>`;
     const engine = new HighlightEngine({ root: document.body, matcher: matcher(), dictionary: dict, inlineTranslation: 'after' });
     engine.start();
     await flush();
     const marks = [...document.querySelectorAll('hnw-mark')];
-    expect(marks.map((m) => m.hasAttribute('data-hnw-tight'))).toEqual([true, true, true, false]);
-    expect(marks.map((m) => m.hasAttribute('data-hnw-link'))).toEqual([false, false, false, true]);
+    expect(marks.map((m) => m.hasAttribute('data-hnw-tight'))).toEqual([true, true, true, false, false]);
+    expect(marks.map((m) => m.hasAttribute('data-hnw-link'))).toEqual([false, false, false, true, true]);
     engine.stop();
   });
 

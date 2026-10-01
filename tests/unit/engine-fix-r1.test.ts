@@ -153,11 +153,11 @@ describe('E5 桌面端不显示括注的 mark 悬停兜底浮层', () => {
     return splitSelectors(rule.replace(/^@media \(hover:hover\)\{/, '').split('{')[0]!).map((x) => x.replace(':hover', ''));
   }
 
-  it('链接、标题、低置信度、密度省略的 mark 都有译文并命中悬停浮层规则；普通 mark 不命中', async () => {
+  it('标题、低置信度、密度省略的 mark 都有译文并命中悬停浮层规则；链接内与普通 mark 不命中', async () => {
     const css = buildPageCss(settings());
     const sels = fallbackSelectors(css);
     document.documentElement.setAttribute('data-hnw-tr', 'after');
-    document.body.innerHTML = `<h2>abandon</h2><p>we <a href="#">abandon</a> it. Then Premise holds and abandon x abandon y</p>`;
+    document.body.innerHTML = `<h2>abandon</h2><p>we <a href="#">premise</a> it. Then Premise holds and abandon x abandon y</p>`;
     const matcher = new WordMatcher({ lemmatizer: { candidates: (w) => [w.toLowerCase()] }, books: [bookOf(['abandon', 'premise'])], known: new Set() });
     engine = new HighlightEngine({ root: document.body, matcher, dictionary: dictOf({ abandon: { short: 'v. 放弃' }, premise: { short: 'n. 前提' } }), inlineTranslation: 'after' });
     engine.start();
@@ -171,7 +171,8 @@ describe('E5 桌面端不显示括注的 mark 悬停兜底浮层', () => {
       const tr = m.querySelector('hnw-tr')!;
       expect(tr.getAttribute('data-tr')).toBeTruthy();
       const hit = sels.some((s) => tr.matches(s));
-      expect(hit, `${kinds[i]} 是否命中兜底浮层`).toBe(kinds[i] !== 'normal');
+      // 链接内照常显示括注，不走兜底浮层
+      expect(hit, `${kinds[i]} 是否命中兜底浮层`).toBe(kinds[i] !== 'normal' && kinds[i] !== 'link');
     }
     document.documentElement.removeAttribute('data-hnw-tr');
   });

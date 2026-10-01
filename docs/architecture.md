@@ -221,15 +221,15 @@ flowchart LR
   - `data-hnw-active`：卡片锚定单词，由 card 分片设置并提供样式。
   - `<html data-hnw-tr="off|after|ruby|hover">` 控制行内翻译：`after` 为词后灰色括注 `(译)`（inline-block，mark 不换行，词与括注总在同一行）；`ruby` 为原生 CSS ruby（`display:ruby`，注解居中、最小 10px，只在需要的行增加行高、不与上一行重叠）；`hover` 为悬停时在单词上方浮现的小标签（绝对定位，不占位）。样式由 `buildPageCss` 生成。
   - mark 上的上下文标记（engine 第二阶段新增，均在每片“先写后读”的读阶段统一计算）：
-    - `data-hnw-link`：位于链接内。所有样式在链接里都保留站点链接的颜色与下划线（去掉自身文字色、装饰线、边框），生词只用底色表示：自带背景的保留背景，其余改为主题色浅底；`after`/`ruby` 不显示括注（括注会切断链接下划线），悬停模式与卡片照常。
+    - `data-hnw-link`：位于链接内。所有样式在链接里都保留站点链接的颜色与下划线（去掉自身文字色、装饰线、边框），生词只用底色表示：自带背景的保留背景，其余改为主题色浅底；`after`/`ruby` 与正文一样显示括注（维基等页面大量生词在链接里）。
     - `data-hnw-nogloss`（engine 第二阶段第 2 轮）：行内括注密度控制省略的 mark（同一段落同一词条只给第一次出现加括注；窄屏 ≤600px 每段最多 max(1, 字数/70) 个，优先保留词频更低的词）。仍高亮，CSS 隐藏其占位译文。
     - 标题（h1–h6 内）：`after`/`ruby` 不显示括注，底色/马克笔/胶囊类样式降级为同色下划线（CSS 按祖先选择器实现，没有单独属性）。
-    - `data-hnw-tight`：受限容器（按钮类控件、`white-space:nowrap/pre`、`text-overflow:ellipsis`、line-clamp、`overflow:hidden` 且只有一行高）。`after`/`ruby` 的译文在这里退化为悬停浮层，不撑破容器、不改布局（不做导航/正文区域识别，所有可见文本统一处理）。浮层会被 `overflow:hidden` 容器裁掉，此时靠卡片查看。受限容器中的生词装饰线贴近基线（偏移 1px），波浪线/双下划线降为实线，避免被容器底边裁成零星的点。
+    - `data-hnw-tight`：受限容器（按钮类控件、非行内容器的 `white-space:nowrap/pre`（行内元素的 nowrap 不算，如维基导航框列表项）、`text-overflow:ellipsis`、line-clamp、`overflow:hidden` 且只有一行高）。`after`/`ruby` 的译文在这里退化为悬停浮层，不撑破容器、不改布局（不做导航/正文区域识别，所有可见文本统一处理）。浮层会被 `overflow:hidden` 容器裁掉，此时靠卡片查看。受限容器中的生词装饰线贴近基线（偏移 1px），波浪线/双下划线降为实线，避免被容器底边裁成零星的点。
     - `data-hnw-code="identifier|prose"`：代码中的生词（prose = 注释和字符串），永远不插入占位译文。
     - `data-hnw-lowconf`：低置信度。首字母大写却不在句首（如 “Upgrade to Premium”），或文本节点只有这一个大写词（导航、按钮等标签），多为专有名词或界面标签。照常高亮，但不显示 `after`/`ruby` 译文。
   - `hnw-tr[data-hnw-revealed]`：模糊自测中已点开的译文。engine 在 window 捕获阶段拦截对模糊译文的点按/悬停，不触发卡片和链接。
   - 行内释义依次查页面词形、屈折原形（`WordMatcher#inflectionOf`）、匹配原形的词条。派生词在词典中一般有独立词条（committee=委员会），用原形会译错（commit）；派生词的屈折变化借词根命中时（projections 命中 project），取屈折原形 projection 的释义；动词释义（`shortVerb`）同样取屈折原形的。
-  - 不显示括注的 mark（链接、标题、低置信度、密度控制省略）：桌面端（`(hover:hover)`）悬停时复用受限容器的浮层显示短释义；触屏不变，点按打开卡片。
+  - 不显示括注的 mark（标题、低置信度、密度控制省略）：桌面端（`(hover:hover)`）悬停时复用受限容器的浮层显示短释义；触屏不变，点按打开卡片。
   - 页面删除含 mark 的子树、或删除/改写原文本节点导致切分组被还原/丢弃时，engine 对移出文档的 mark 调 `unobserve`，懒插入观察者不长期持有已删除节点。
   - 复制不带译文：译文只存在于 `::before`、浮层与 ruby 注解中，也不进入 textContent（已在 Chromium 中用 Selection 验证正文和代码）。
 - 扫描：`createTextWalker` 用 TreeWalker，跳过 script/style/code/pre/textarea/input/select/svg/contenteditable、在线编辑器（`.monaco-editor`/`.CodeMirror`/`.cm-editor`/`.ace_editor`）及自身节点；engine 逐个 `nextNode()` 边取边处理，可在任意节点处让出主线程。
@@ -574,3 +574,4 @@ stdout 输出每页统计 JSON（高亮数、不同词条数、行内翻译数�
 - WebDAV 只用本地 docker（bytemark/webdav，Apache mod_dav）实测，坚果云/Nextcloud 未实测（是否支持 LOCK 未验证）。并发写入：支持 LOCK 时真实两 profile 并发 0/72 轮丢失；不支持 LOCK（用拒绝 LOCK 的代理模拟）时写后回读校验 + 复查 0/20 轮丢失，对方 PUT 比本机回读还慢落地时远端会暂时缺本机的词，5–15s 复查补推；复查前 SW 被回收时由持久化的 `recheckAt` 在下次 SW 启动时立即补做（合并幂等，不会永久丢失本机数据）。
 - storage.sync 的防抖/退避计时器在 SW 被回收后丢失，未推送的改动在 SW 下次启动时由启动同步补推（没有使用 alarms 权限）。
 - 徽章：background 在 URL（不含 hash）变化时清零（含 SPA 路由），依赖内容脚本在路由切换后按页面实际高亮重新全量上报。
+- TODO 更多发音来源：目前只有浏览器/系统语音（`chrome.tts`、Web Speech），手机上取决于系统语音引擎，部分国产系统英文语音缺失或较差。可选方案：有道真人发音 `https://dict.youdao.com/dictvoice?audio=<词>&type=1|2`（英/美，非官方接口，2026-10 实测可用）作为可选来源，默认仍用系统语音，失败时回退。页面 CSP 会拦截外站音频，Chrome/Edge 需用 offscreen 文档播放（新增 `offscreen` 权限，Edge Android 支持情况待实测），隐私政策要补充“开启后朗读的单词会发送给有道”。

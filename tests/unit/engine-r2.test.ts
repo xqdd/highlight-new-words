@@ -42,14 +42,14 @@ describe('分词：非 ASCII 字母', () => {
 });
 
 describe('行内括注：链接、标题与密度控制', () => {
-  it('链接与标题内的 mark 带标记、ruby 模式不预留占位注解', async () => {
+  it('标题内的 mark 在 ruby 模式不预留占位注解；链接内与正文一样预留', async () => {
     document.body.innerHTML = '<h2>The premise</h2><p>See <a href="#">abandon</a> and premise.</p>';
     const engine = startEngine('ruby');
     const [h, a, p] = [...document.querySelectorAll('hnw-mark')];
     expect(a!.hasAttribute('data-hnw-link')).toBe(true);
     expect(h!.querySelector('hnw-tr')).toBeNull();
-    expect(a!.querySelector('hnw-tr')).toBeNull();
-    // 正文 mark 在创建的同一帧预留注解
+    // 链接内、正文 mark 都在创建的同一帧预留注解
+    expect(a!.querySelector('hnw-tr')).not.toBeNull();
     expect(p!.querySelector('hnw-tr')).not.toBeNull();
     engine.stop();
   });

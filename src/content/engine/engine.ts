@@ -521,8 +521,8 @@ export class HighlightEngine {
         m.toggleAttribute(ATTR_ON_DARK, ctx.dark);
         m.toggleAttribute(ATTR_IN_LINK, ctx.link);
         m.toggleAttribute(ATTR_TIGHT, ctx.tight);
-        // 链接、标题、低置信度、受限容器、代码中不显示占位译文，不预留
-        if (ruby && !ctx.tight && !ctx.link && !ctx.heading && !m.hasAttribute(ATTR_CODE) && !m.hasAttribute(ATTR_LOW_CONFIDENCE)) {
+        // 标题、低置信度、受限容器、代码中不显示占位译文，不预留（链接内照常显示，见 style.ts 的 noGloss）
+        if (ruby && !ctx.tight && !ctx.heading && !m.hasAttribute(ATTR_CODE) && !m.hasAttribute(ATTR_LOW_CONFIDENCE)) {
           reserveTranslationSlot(m);
         }
       }
@@ -541,8 +541,8 @@ export class HighlightEngine {
 
   /**
    * 受限容器（预研要求）：占位译文会撑破或改变布局的位置，译文退化为悬停浮层。
-   * 从父元素向上检查：按钮类控件；不换行（white-space nowrap/pre、text-wrap-mode nowrap）；text-overflow:ellipsis；
-   * line-clamp；块级盒 overflow hidden/clip 且高度只有一行（固定高度的单行容器）。
+   * 从父元素向上检查：按钮类控件（行内元素也算）；非行内容器的不换行（white-space nowrap/pre、text-wrap-mode nowrap）、
+   * text-overflow:ellipsis、line-clamp，以及 overflow hidden/clip 且高度只有一行（固定高度的单行容器）。
    * 只看行内祖先、第一个非行内容器及其父级（flex 项目常把约束放在父级）。结果按元素缓存。
    */
   private isTightContext(el: Element | null): boolean {
@@ -558,6 +558,9 @@ export class HighlightEngine {
         break;
       }
       const cs = view.getComputedStyle(cur);
+      // 行内元素的 nowrap 只让这一小段不在内部折行，所在的块照常换行，加括注不会撑破布局
+      // （维基导航框 hlist 每一项都是行内 nowrap）；ellipsis、line-clamp、overflow 对行内元素本就不生效
+      if (cs.display === 'inline' || cs.display === 'contents') continue;
       const ws = cs.whiteSpace;
       if (ws === 'nowrap' || ws === 'pre' || cs.getPropertyValue('text-wrap-mode') === 'nowrap' || cs.textOverflow === 'ellipsis') {
         tight = true;
@@ -568,7 +571,6 @@ export class HighlightEngine {
         tight = true;
         break;
       }
-      if (cs.display === 'inline' || cs.display === 'contents') continue;
       blocksSeen++;
       const clips = (v: string) => v === 'hidden' || v === 'clip';
       if (clips(cs.overflowY) || clips(cs.overflowX)) {
@@ -687,7 +689,6 @@ export class HighlightEngine {
           !m.hasAttribute(ATTR_LOW_CONFIDENCE) &&
           !m.hasAttribute(ATTR_TIGHT) &&
           !m.hasAttribute(ATTR_CODE) &&
-          !m.hasAttribute(ATTR_IN_LINK) &&
           !m.parentElement?.closest(HEADING_SELECTOR) &&
           !!this.translationOf(m),
       );
