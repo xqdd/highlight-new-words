@@ -285,7 +285,7 @@ describe('YouTube 字幕译文模式', () => {
     dec3.destroy();
   });
 
-  it('同文整窗重建：沿用旧窗口的标注节点与译文模式（新窗口第一帧就有注解），文本不同或自动字幕不沿用', async () => {
+  it('同文整窗重建：沿用旧窗口的标注节点与译文模式（新窗口第一帧就有注解），文本不同不沿用', async () => {
     const settings = createDefaultSettings();
     const player = buildPlayer(['The deadline was looming']);
     const container = player.querySelector('.ytp-caption-window-container')!;
@@ -311,6 +311,38 @@ describe('YouTube 字幕译文模式', () => {
     const w2 = rebuild('Something else entirely');
     await Promise.resolve();
     expect(w2.querySelector('hnw-mark')).toBeNull();
+    dec.destroy();
+  });
+
+  it('自动生成字幕换行重建字幕行：留下的那一行沿用旧标注节点（不闪烁），roll-up 窗口不设译文模式', async () => {
+    const settings = createDefaultSettings();
+    const player = buildPlayer(['to play test, see sneak peeks', 'help with voice acting'], true);
+    const container = player.querySelector('.ytp-caption-window-container')!;
+    const win = player.querySelector<HTMLElement>('.caption-window')!;
+    const [seg1, seg2] = [...player.querySelectorAll<HTMLElement>('.ytp-caption-segment')] as [HTMLElement, HTMLElement];
+    markWord(seg1, 'sneak', 'sneak');
+    const acting = markWord(seg2, 'acting', 'act');
+    const dec = new CaptionDecorator(ctxWith(settings, { act: '表演' }));
+    dec.attach(container);
+    dec.process();
+    await flush();
+    // m.youtube.com 实测：换行时移除窗口内全部字幕行，再逐词重建（每个词一个文本节点），留下的那一行文本不变
+    const captionsText = win.querySelector('.captions-text')!;
+    const line = document.createElement('span');
+    line.className = 'caption-visual-line';
+    const seg = document.createElement('span');
+    seg.className = 'ytp-caption-segment';
+    for (const w of ['help', ' with', ' voice', ' acting']) seg.append(w);
+    line.append(seg);
+    captionsText.replaceChildren(line);
+    await Promise.resolve();
+    expect(seg.querySelector('hnw-mark')).toBe(acting);
+    expect(seg.textContent).toBe('help with voice acting');
+    // 之后逐词追加的文本节点照常留在字幕段末尾
+    seg.append(' and');
+    expect(seg.textContent).toBe('help with voice acting and');
+    await Promise.resolve();
+    expect(win.hasAttribute(ATTR_YT_GM)).toBe(false);
     dec.destroy();
   });
 

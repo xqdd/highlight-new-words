@@ -2,7 +2,7 @@
  * YouTube 播放器 DOM 约定（选择器集中在此，YouTube 改版时只改这里）。
  * 结构（桌面与 m.youtube.com 一致，2026-10 实测）：
  * `#movie_player > .ytp-caption-window-container > .caption-window[.ytp-caption-window-rollup] > .captions-text > .caption-visual-line > .ytp-caption-segment`
- * - 人工字幕（pop-on）每条整窗重建；自动生成字幕（roll-up）窗口带 `ytp-caption-window-rollup`，高度固定、overflow:hidden，逐词原位追加
+ * - 人工字幕（pop-on）每条整窗重建；自动生成字幕（roll-up）窗口带 `ytp-caption-window-rollup`，高度固定、overflow:hidden，逐词追加，换行上滚时整行移除再重新插入（见 captions.ts#carryOver）
  * - 自动字幕开头的 “English (auto-generated) / Click ⚙ for settings” 提示是一个单独的 `ytp-caption-window-top` 窗口
  * - 侧栏推荐位的悬停预览播放器也是 `.html5-video-player`，但 id 不是 movie_player
  */

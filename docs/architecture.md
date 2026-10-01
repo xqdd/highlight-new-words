@@ -518,7 +518,7 @@ flowchart LR
   - 暂停：`PauseController` 只恢复由扩展发起、且期间用户没有自己操作过的暂停；广告中不暂停。
   - 字幕生词直接查词（`zone.ts`）：用 `registerCardTriggerZone` 按坐标命中字幕中的 `hnw-mark`（字幕上压着控件层时 pointerover 拿不到单词）；鼠标按 `settings.card.trigger` 照常触发，暂停与否都可以；触屏只在暂停时响应，m.youtube.com 播放器在 touchend 上 preventDefault 不产生 click，因此在 window 捕获阶段的 touchstart/touchend 自行判断短按并吞掉这次触摸。
   - 全屏切换：`fullscreenchange` 后立即与 250ms、800ms 各重绑一次字幕容器并重新处理，不等 1 秒轮询。
-  - 同文整窗重建：YouTube 在尺寸变化、进出全屏等时机会把同一条字幕整窗重建，新窗口要等 engine 空闲处理才重新标注，中间几帧没有注解。`CaptionDecorator` 在 MutationObserver 回调（早于绘制）里把刚移除的旧字幕段中 engine 生成的节点整体移到文本相同的新字幕段，并带上窗口译文模式；移动的是 engine 自己的节点，切分记录随节点保留，标熟词还原照常工作（roll-up 字幕不沿用）。
+  - 同文重建沿用标注：YouTube 会把同一行字幕连同节点一起重建，新节点要等 engine 空闲处理才重新标注，中间几帧没有高亮和注解（看起来在闪）。人工字幕在尺寸变化、进出全屏等时机整窗重建；自动生成字幕（roll-up）每次换行上滚时移除窗口内全部字幕行再逐词重新插入（2026-10 m.youtube.com 实测）。`CaptionDecorator` 在 MutationObserver 回调（早于绘制）里把刚移除的旧窗口/旧行中 engine 生成的节点整体移到文本相同的新字幕段，整窗重建时并带上窗口译文模式（roll-up 窗口不设模式，只高亮）；移动的是 engine 自己的节点，切分记录随节点保留，标熟词还原照常工作。
   - 卡片避让字幕（PC 浮层）：`zone.ts` 通过 card 的 `registerCardPlacer` 接管字幕生词的卡片位置，卡片与整块字幕（含注解）不相交：优先放在字幕块上方并留 8px，放不下时放播放器侧边，再不行放字幕块侧边（全屏）。
   - 桌面悬停暂停（`HoverPause`，默认关）：控件自动隐藏时字幕上压着不可见的控件层，用几何判断指针是否在字幕段包围盒内；热区 = 暂停时字幕位置（向下补 80px，覆盖控件出现后字幕上移前的位置）∪ 当前字幕 ∪ 卡片 ∪ 字幕面板，离开 300ms 后恢复；暂停后 800ms 内点在原字幕位置上的控件栏被吞掉，避免误点进度条。
 - 卡片触发方式（card v11 注）：字幕中的高亮词是页面 `hnw-mark`，自动遵守 `settings.card.trigger`（悬停 / 修饰键 + 悬停 / 点击，触屏点按）；字幕面板等 Shadow DOM 内的单词按钮、被控件层盖住的字幕可通过 `registerCardTriggerZone` 接入同一套触发逻辑（见 4.5“卡片触发方式”），“悬停字幕自动暂停”仍由 `youtube.hoverPause` 单独控制。

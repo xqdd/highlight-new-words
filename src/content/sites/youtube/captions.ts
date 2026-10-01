@@ -14,7 +14,7 @@ import {
   isAutoCaptionHint,
 } from './dom';
 
-/** 旧字幕窗口保留多久以供同文重建沿用（ms）：重建的移除与插入通常在同一任务内，留一点余量 */
+/** 旧字幕窗口/字幕行保留多久以供同文重建沿用（ms）：重建的移除与插入通常在同一任务内，留一点余量 */
 const CARRY_OVER_MS = 500;
 /** 窗口标记：after 放不下已退回 above */
 const ATTR_FIT_FALLBACK = 'data-hnw-yt-fit';
@@ -103,8 +103,8 @@ export class CaptionDecorator {
   private observer: MutationObserver | null = null;
   private container: Element | null = null;
   private scheduled = false;
-  /** 最近被 YouTube 移除的、带标注的字幕窗口（同文重建时沿用其中的标注节点） */
-  private removedWindows: Array<{ win: HTMLElement; at: number }> = [];
+  /** 最近被 YouTube 移除的、带标注的字幕窗口或字幕行（同文重建时沿用其中的标注节点） */
+  private removedCaptions: Array<{ el: HTMLElement; at: number }> = [];
   /** 短释义缓存：查词键 -> 注解（null 表示无释义） */
   private readonly glossCache = new Map<string, string | null>();
 
@@ -130,41 +130,49 @@ export class CaptionDecorator {
   }
 
   /**
-   * 同文重建沿用标注：YouTube 在尺寸变化、进出全屏、控件显隐等时机会把**同一条**字幕整窗重建（实测手机全屏后截图时也会触发），
-   * 新窗口要等 engine 的空闲处理（最长 200ms）才重新标注，这一两帧里字幕没有高亮和注解（评审截到的“全屏字幕丢失标注”）。
+   * 同文重建沿用标注：YouTube 会把**同一行**字幕连同节点一起重建，新节点要等 engine 的空闲处理（最长 200ms，手机上播放时空闲更少）
+   * 才重新标注，这期间字幕没有高亮和注解。两种重建：
+   * - 人工字幕（pop-on）：尺寸变化、进出全屏、控件显隐等时机整窗重建同一条字幕（实测手机全屏后截图时也会触发，评审截到的“全屏字幕丢失标注”）
+   * - 自动生成字幕（roll-up，桌面与 m.youtube.com 同一套播放器脚本）：窗口不重建，但每次换行上滚时把窗口内所有 caption-visual-line
+   *   移除再逐词重新插入（2026-10 m.youtube.com 实测：一次 mutation 批次里移除 3 行、插入 2 行，留下来的那一行文本不变），
+   *   留在屏幕上的那一行的高亮被清掉再补回，每次换行生词都闪一下（用户在手机 Edge 上反馈的“高亮单词闪烁”）。
    * 这里在 MutationObserver 回调（早于下一帧绘制）中把刚被移除的旧字幕段里 engine 生成的节点（原文本节点 + 高亮片段）
-   * 整体移到文本相同的新字幕段中，并带上窗口的译文模式，新窗口第一帧就有标注。
-   * 移动的是 engine 自己的节点，切分记录（WeakMap）随节点保留，之后标熟词还原、重新高亮都照常工作；engine 随后扫描新窗口时，
-   * 这些节点已处理过，不会重复标注。自动生成字幕（roll-up）会原位改写文本节点，不沿用。
+   * 整体移到文本相同的新字幕段中（整窗重建时并带上窗口的译文模式），新字幕段第一帧就有标注。
+   * 移动的是 engine 自己的节点，切分记录（WeakMap）随节点保留，之后标熟词还原、重新高亮都照常工作；engine 随后扫描新字幕段时，
+   * 这些节点已处理过，不会重复标注。roll-up 之后逐词追加的文本节点追加在字幕段末尾，由 engine 照常增量处理。
    */
   private carryOver(records: MutationRecord[]): void {
     const now = performance.now();
-    this.removedWindows = this.removedWindows.filter((r) => now - r.at < CARRY_OVER_MS);
-    const added: HTMLElement[] = [];
+    this.removedCaptions = this.removedCaptions.filter((r) => now - r.at < CARRY_OVER_MS);
+    const addedSegments: HTMLElement[] = [];
     for (const r of records) {
+      // 被移除的整窗（pop-on）或整行（roll-up 换行），只留带标注的
       for (const n of r.removedNodes) {
-        if (n instanceof HTMLElement && n.classList.contains('caption-window') && n.querySelector(TAG_MARK)) this.removedWindows.push({ win: n, at: now });
+        if (n instanceof HTMLElement && n.querySelector(TAG_MARK)) this.removedCaptions.push({ el: n, at: now });
       }
       for (const n of r.addedNodes) {
-        if (n instanceof HTMLElement && n.classList.contains('caption-window') && !n.classList.contains(ROLLUP_CLASS)) added.push(n);
+        if (!(n instanceof HTMLElement)) continue;
+        if (n.classList.contains(CAPTION_SEGMENT_CLASS)) addedSegments.push(n);
+        else addedSegments.push(...n.querySelectorAll<HTMLElement>(`.${CAPTION_SEGMENT_CLASS}`));
       }
     }
-    if (added.length === 0 || this.removedWindows.length === 0) return;
-    for (const win of added) {
-      if (!win.isConnected) continue;
-      for (const seg of win.querySelectorAll<HTMLElement>(`.${CAPTION_SEGMENT_CLASS}`)) {
-        if (seg.querySelector(TAG_MARK)) continue;
-        const text = seg.textContent;
-        for (const old of this.removedWindows) {
-          const from = [...old.win.querySelectorAll<HTMLElement>(`.${CAPTION_SEGMENT_CLASS}`)].find((o) => o.textContent === text && o.querySelector(TAG_MARK));
-          if (!from) continue;
-          seg.replaceChildren(...from.childNodes);
+    if (addedSegments.length === 0 || this.removedCaptions.length === 0) return;
+    for (const seg of addedSegments) {
+      if (!seg.isConnected || seg.querySelector(TAG_MARK)) continue;
+      const text = seg.textContent;
+      for (const old of this.removedCaptions) {
+        const from = [...old.el.querySelectorAll<HTMLElement>(`.${CAPTION_SEGMENT_CLASS}`)].find((o) => o.textContent === text && o.querySelector(TAG_MARK));
+        if (!from) continue;
+        seg.replaceChildren(...from.childNodes);
+        // 整窗重建（pop-on）时沿用窗口译文模式；roll-up 窗口不设模式（只高亮），换行时窗口本身也没有重建
+        const win = seg.closest<HTMLElement>('.caption-window');
+        if (win && !win.classList.contains(ROLLUP_CLASS) && old.el.classList.contains('caption-window')) {
           for (const a of [ATTR_YT_GM, ATTR_FIT_FALLBACK]) {
-            const v = old.win.getAttribute(a);
+            const v = old.el.getAttribute(a);
             if (v !== null && !win.hasAttribute(a)) win.setAttribute(a, v);
           }
-          break;
         }
+        break;
       }
     }
   }
@@ -261,7 +269,7 @@ export class CaptionDecorator {
   destroy(): void {
     this.observer?.disconnect();
     this.observer = null;
-    this.removedWindows = [];
+    this.removedCaptions = [];
     this.container?.querySelectorAll(`[${ATTR_YT_GM}]`).forEach((w) => w.removeAttribute(ATTR_YT_GM));
     this.container = null;
     this.ctx.doc.getElementById(YT_STYLE_ID)?.remove();
