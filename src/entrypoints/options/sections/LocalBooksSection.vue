@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue';
 import { IMPORT_FORMATS, type ImportResult } from '@/core/import/types';
+import { countPhraseEntries } from '@/core/import/parse';
 import { deleteLocalBook, renameLocalBook, saveLocalBook } from '@/core/wordbook/user-store';
 import type { BookMeta } from '@/core/wordbook/types';
 import AppIcon from '@/ui/components/AppIcon.vue';
@@ -47,7 +48,10 @@ async function onConfirm(result: ImportResult, opts: { name: string; targetId: s
       words: result.words,
     });
     if (!isBookEnabled(settings.value, meta.id)) toggleBook(settings.value, meta.id, true);
-    showToast(`${opts.targetId ? '已覆盖' : '已导入'}“${meta.name}”，共 ${formatCount(meta.wordCount)} 词，已启用`);
+    // 短语（give up、well-known）不会在页面上高亮，结果提示里一并说明（导入预览中有完整说明）
+    const phrases = countPhraseEntries(result.words);
+    const phraseTip = phrases ? `；其中 ${phrases} 个短语不会在页面上高亮` : '';
+    showToast(`${opts.targetId ? '已覆盖' : '已导入'}“${meta.name}”，共 ${formatCount(meta.wordCount)} 词，已启用${phraseTip}`);
   } catch (err) {
     showToast('导入失败：' + errorText(err), { tone: 'error' });
   }

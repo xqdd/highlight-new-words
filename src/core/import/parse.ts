@@ -26,6 +26,24 @@ export function parseWordList(input: ImportInput): ImportResult {
   return { format, ...PARSERS[format](text) };
 }
 
+/**
+ * 页面上不会被高亮的“短语”条目：含空格或连字符（give up、well-known）。
+ * engine 只按单个英文单词（连续 ASCII 字母）匹配，多词条目整体永远不会命中，导入时据此提示用户（#38）。
+ */
+export function isPhraseEntry(word: string): boolean {
+  return /[\s-]/.test(word.trim());
+}
+
+/** 导入结果中短语条目的数量（导入预览与结果提示用） */
+export function countPhraseEntries(words: readonly UserWord[]): number {
+  return words.reduce((n, w) => n + (isPhraseEntry(w.word) ? 1 : 0), 0);
+}
+
+/** 短语提示文案；没有短语时为空串 */
+export function phraseNotice(count: number): string {
+  return count > 0 ? `${count} 个短语不会在页面上高亮（含空格或连字符的词条，如 give up、well-known；目前只按单个单词匹配）` : '';
+}
+
 /** 按扩展名 + 内容嗅探识别格式 */
 export function detectImportFormat(text: string, fileName = ''): ImportFormat {
   const ext = fileName.toLowerCase().split('.').pop() ?? '';

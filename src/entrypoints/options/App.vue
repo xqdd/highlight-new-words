@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch, watchEffect, type Ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect, type Ref } from 'vue';
 import type { Settings } from '@/core/settings/schema';
 import AppIcon, { type IconName } from '@/ui/components/AppIcon.vue';
 import ToggleSwitch from '@/ui/components/ToggleSwitch.vue';
@@ -62,15 +62,25 @@ function navigate(page: string, anchor?: string) {
   else onHash();
 }
 
-// 切页回到顶部；有锚点时滚动到锚点
+/**
+ * 切页回到顶部；有锚点时滚动到锚点（#30/#64/#109）：
+ * - immediate：首次打开 options.html#sync/webdav 也要定位；页面要等设置加载完才渲染，所以同时监听 settings 是否就绪；
+ * - 等分组页渲染完成再滚：nextTick（DOM 已更新）+ rAF（布局完成）。外观页的实时预览（LivePreview）在 AppearancePage 同步挂载，
+ *   此时已就位，被锚点定位的小节由外观页设置 scroll-margin-top = 吸顶预览区高度，不会被盖住；
+ * - 用瞬时滚动而不是 smooth：smooth 在跨页长距离时要滚很久才到（约 2 秒），手机上页内跳转还可能被后续布局打断而停在原处。
+ */
+async function scrollToRoute(r: { page: string; anchor?: string }) {
+  await nextTick();
+  await new Promise((res) => requestAnimationFrame(res));
+  if (r.anchor) document.getElementById(r.anchor)?.scrollIntoView({ block: 'start' });
+  else window.scrollTo({ top: 0 });
+}
 watch(
-  route,
-  async (r) => {
-    await new Promise((res) => requestAnimationFrame(res));
-    if (r.anchor) document.getElementById(r.anchor)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    else window.scrollTo({ top: 0 });
+  [route, () => !!settings.value],
+  ([r, ready]) => {
+    if (ready) void scrollToRoute(r);
   },
-  { flush: 'post' },
+  { flush: 'post', immediate: true },
 );
 
 const current = computed(() => NAV.find((n) => n.id === route.value.page));

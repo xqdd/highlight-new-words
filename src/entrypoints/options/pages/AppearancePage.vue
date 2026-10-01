@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import type { InlineTranslationMode } from '@/core/settings/schema';
 import { resolveCardStyle, resolveMarkStyle, resolveTranslationStyle } from '@/core/theme/resolve';
 import { CUSTOM_THEME_ID, type MarkStyle } from '@/core/theme/themes';
@@ -30,6 +30,7 @@ import {
   type BookStyleMode,
 } from '../lib/appearance';
 import { useOptions } from '../lib/context';
+import { prehideNote, setPrehide } from '../lib/performance';
 import { showToast } from '../lib/toast';
 
 /**
@@ -103,11 +104,39 @@ const INLINE_MODES: { value: InlineTranslationMode; label: string; desc: string 
   { value: 'off', label: '不显示', desc: '只标记生词，点按或悬停看释义' },
   { value: 'after', label: '词后括号', desc: '生词后附简短中文' },
   { value: 'ruby', label: '词上方', desc: '小字释义在生词上方' },
-  { value: 'hover', label: '悬停显示', desc: '指到生词时浮出，不占位置' },
+  { value: 'hover', label: '悬停显示', desc: '指到生词时浮出，不占位置；触屏设备上没有悬停，请点按单词查看卡片' },
 ];
 function patchTr(p: Partial<{ blur: boolean; color: string; opacity: number; fontScale: number }>) {
   settings.value.inlineTranslation = { ...settings.value.inlineTranslation, ...p };
 }
+
+// ---------- 锚点不被吸顶预览遮住（#109） ----------
+/**
+ * 吸顶预览区（手机上还要加顶栏，即 sticky top）会盖住锚点定位的小节标题：量出“预览区底边到视口顶”的距离，
+ * 写到父容器的 --anchor-offset，本页各小节用它作 scroll-margin-top。预览高度随译文模式、窗口宽度变化，用 ResizeObserver 跟踪。
+ */
+const dock = ref<HTMLElement>();
+let dockObserver: ResizeObserver | undefined;
+/** 预览区的父容器（main.content），卸载时 dock ref 可能已清空，所以挂载时记下 */
+let dockParent: HTMLElement | null = null;
+function updateAnchorOffset() {
+  const el = dock.value;
+  if (!el || !dockParent) return;
+  const stickyTop = parseFloat(getComputedStyle(el).top) || 0;
+  dockParent.style.setProperty('--anchor-offset', `${Math.ceil(stickyTop + el.offsetHeight + 12)}px`);
+}
+onMounted(() => {
+  dockParent = dock.value?.parentElement ?? null;
+  updateAnchorOffset();
+  dockObserver = new ResizeObserver(updateAnchorOffset);
+  if (dock.value) dockObserver.observe(dock.value);
+  window.addEventListener('resize', updateAnchorOffset);
+});
+onUnmounted(() => {
+  dockObserver?.disconnect();
+  window.removeEventListener('resize', updateAnchorOffset);
+  dockParent?.style.removeProperty('--anchor-offset');
+});
 
 // ---------- 卡片颜色（高级） ----------
 type CardField = 'background' | 'color' | 'accent';
@@ -126,7 +155,7 @@ const cardColor = computed({
 </script>
 
 <template>
-  <div class="preview-dock">
+  <div ref="dock" class="preview-dock">
     <LivePreview :settings="settings" :books="books" />
   </div>
 
@@ -236,6 +265,16 @@ const cardColor = computed({
       />
       <p class="muted small">单行标题、按钮、导航等放不下的位置，译文会自动改为悬停显示，不会撑破排版。</p>
     </template>
+    <!-- 高级：首屏预隐藏（settings.performance.prehide，默认关）。不只与译文有关（粗体/斜体样式同样会改变排版），所以不随译文模式隐藏 -->
+    <details class="advanced" :open="settings.performance.prehide">
+      <summary>高级</summary>
+      <ToggleSwitch
+        :model-value="settings.performance.prehide"
+        label="加载时先隐藏页面，避免译文插入造成跳动（会让页面稍晚显示）"
+        :description="prehideNote(settings)"
+        @update:model-value="(v: boolean) => setPrehide(settings, v)"
+      />
+    </details>
   </SettingsSection>
 
   <SettingsSection id="card" title="释义卡片" description="生词的释义卡片怎样打开；手机、平板上始终点按生词打开">
@@ -308,6 +347,8 @@ const cardColor = computed({
 </template>
 
 <style scoped>
+/* 本页小节（SettingsSection 根元素）按吸顶预览区高度留出锚点位置；选择器加元素名，优先于 SettingsSection 自带的 72px */
+section.section { scroll-margin-top: var(--anchor-offset, 72px); }
 .preview-dock { position: sticky; top: 0; z-index: 5; padding: 0 0 4px; background: var(--bg); }
 @media (max-width: 899px) { .preview-dock { top: 56px; margin: 0 -12px; padding: 0 12px 6px; } }
 @media (min-width: 900px) { .preview-dock { padding-top: 8px; margin-top: -8px; } }

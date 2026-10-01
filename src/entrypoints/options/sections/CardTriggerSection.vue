@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import type { CardModifierKey } from '@/core/settings/schema';
+import type { CardHoverDelay, CardModifierKey } from '@/core/settings/schema';
 import { resolveMarkStyle } from '@/core/theme/resolve';
 import MarkPreview from '@/ui/components/MarkPreview.vue';
 // 修饰键选项、显示名与平台换算复用 card 的纯函数（与卡片首次提示同一套文案）
 import { effectiveModifier, isMacPlatform, modifierChoices, modifierLabel, modifierShort } from '@/content/card/trigger-config';
+import { CARD_TRIGGER_MODES, HOVER_DELAY_OPTIONS, delaySeconds, modifierKeyNote, showsHoverDelay, type DesktopMode } from '../lib/card-trigger';
 import { useOptions } from '../lib/context';
 
 /**
@@ -21,7 +22,6 @@ const touchQuery = matchMedia('(hover: none) and (pointer: coarse)');
 const touchOnly = ref(touchQuery.matches);
 const onTouchChange = () => (touchOnly.value = touchQuery.matches);
 
-type DesktopMode = 'hover' | 'modifier' | 'click';
 /** auto 是旧默认值，行为与 hover 相同，界面上合并为“鼠标悬停” */
 const mode = computed<DesktopMode>({
   get: () => (settings.value.card.trigger === 'auto' ? 'hover' : (settings.value.card.trigger as DesktopMode)),
@@ -38,27 +38,26 @@ const keyShort = computed(() => modifierShort(modifier.value, mac));
 /** “新标签打开链接”在 mac 上是 ⌘+点击，其他系统是 Ctrl+点击 */
 const newTabKey = mac ? '⌘' : 'Ctrl';
 
-const MODES = computed(() => [
-  { value: 'hover' as const, label: '鼠标悬停', desc: '指针停在生词上片刻即弹出，默认方式' },
-  { value: 'modifier' as const, label: '按住修饰键 + 悬停', desc: `按住 ${keyShort.value} 时才弹出，平时移动鼠标不打扰阅读` },
-  { value: 'click' as const, label: '点击', desc: '点一下生词才弹出，适合不想被悬停打断的场景' },
-]);
+/** 选项卡副标题是固定文案，不随所选修饰键变化（具体键只在下方键选择区与说明中出现） */
+const MODES = CARD_TRIGGER_MODES;
+
+/** 悬停延迟（settings.card.hoverDelay，card 修复轮新增）：悬停与“修饰键 + 悬停”移入单词时生效，“试一试”演示用同一延迟 */
+const hoverDelay = computed<CardHoverDelay>({
+  get: () => settings.value.card.hoverDelay,
+  set: (v) => (settings.value.card.hoverDelay = v),
+});
+/** 演示里“指针已在单词上再按修饰键”的延迟，与 card trigger 的 KEY_SHOW_DELAY 一致 */
+const KEY_SHOW_DELAY = 180;
 
 /** 当前方式的一句话说明（含与链接、常用快捷键的关系） */
 const summary = computed(() => {
-  if (mode.value === 'hover') return '把鼠标移到生词上约 0.1 秒弹出释义，移开后自动关闭；链接照常点击打开。';
+  if (mode.value === 'hover') return `把鼠标移到生词上约 ${delaySeconds(hoverDelay.value)}弹出释义，移开后自动关闭；链接照常点击打开。`;
   if (mode.value === 'click')
     return `点击生词弹出释义。链接里的生词第一次点击只弹释义，再点一次才打开链接；按住 ${newTabKey} 点击则直接在新标签打开。`;
   return `按住 ${keyShort.value} 再把鼠标移到生词上查看释义；先移上去再按 ${keyShort.value} 也可以。不按键时悬停不弹出。`;
 });
 /** 修饰键与浏览器常用操作的关系：查词只需“按住 + 悬停”，不必点击，所以不会触发这些操作 */
-const keyNote = computed(() => {
-  const k = modifier.value;
-  if (k === 'ctrl' || k === 'meta')
-    return `${keyShort.value}+点击链接会在新标签打开。查词时只需按住 ${keyShort.value} 悬停、不要点击，链接不受影响。`;
-  if (k === 'shift') return 'Shift+点击链接会在新窗口打开，拖选文字时按住 Shift 会扩展选区；查词时只需按住悬停、不要点击。';
-  return mac ? '⌥ 不会与网页里的链接点击冲突，推荐使用。' : 'Alt 不会与链接点击冲突，推荐使用。';
-});
+const keyNote = computed(() => modifierKeyNote(modifier.value, mac));
 
 // ---------- 试一试：按当前方式就地演示 ----------
 const demoMark = computed(() => resolveMarkStyle(settings.value));
@@ -76,7 +75,12 @@ const activeKey = modifier;
 function onKey(e: KeyboardEvent) {
   if (e.key !== KEY_NAME[activeKey.value]) return;
   keyHeld.value = e.type === 'keydown';
-  if (keyHeld.value && mode.value === 'modifier' && demoHover.value) demoOpen.value = demoHover.value;
+  // 指针已在单词上再按下修饰键：与 card 一致，180ms 后打开
+  const word = demoHover.value;
+  if (keyHeld.value && mode.value === 'modifier' && word && demoOpen.value !== word) {
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => (demoOpen.value = word), KEY_SHOW_DELAY);
+  }
 }
 const releaseKeys = () => (keyHeld.value = false);
 onMounted(() => {
@@ -103,12 +107,11 @@ function onEnter(word: 'serendipity' | 'exhibition', e: PointerEvent) {
   if (e.pointerType !== 'mouse') return;
   clearTimeout(leaveTimer);
   demoHover.value = word;
-  if (mode.value === 'hover') {
+  // 悬停与“按着修饰键移入”都按所选悬停延迟打开（与页面上的卡片一致）
+  const held = { alt: e.altKey, ctrl: e.ctrlKey, shift: e.shiftKey, meta: e.metaKey }[activeKey.value] || keyHeld.value;
+  if (mode.value === 'hover' || (mode.value === 'modifier' && held)) {
     clearTimeout(hoverTimer);
-    hoverTimer = setTimeout(() => (demoOpen.value = word), 100);
-  } else if (mode.value === 'modifier') {
-    const held = { alt: e.altKey, ctrl: e.ctrlKey, shift: e.shiftKey, meta: e.metaKey }[activeKey.value];
-    if (held || keyHeld.value) demoOpen.value = word;
+    hoverTimer = setTimeout(() => (demoOpen.value = word), hoverDelay.value);
   }
 }
 function onLeave(e: PointerEvent) {
@@ -186,10 +189,27 @@ const demoHint = computed(() => {
           @click="modifier = k"
         >
           <kbd>{{ modifierLabel(k, mac) }}</kbd>
-          <span v-if="k === 'alt'" class="rec">推荐</span>
         </button>
       </div>
-      <p class="note" :class="{ warn: activeKey !== 'alt' }">{{ keyNote }}</p>
+      <p class="note">{{ keyNote }}</p>
+    </div>
+
+    <div v-if="showsHoverDelay(mode)" class="delay">
+      <span class="lbl">悬停延迟</span>
+      <div class="delays" role="radiogroup" aria-label="悬停延迟">
+        <button
+          v-for="d in HOVER_DELAY_OPTIONS"
+          :key="d.value"
+          type="button"
+          role="radio"
+          class="keycap"
+          :aria-checked="hoverDelay === d.value"
+          @click="hoverDelay = d.value"
+        >
+          {{ d.label }}
+        </button>
+      </div>
+      <p class="note">指针在生词上停留多久才弹出。越慢越不容易误触，扫过段落时不会接连弹出卡片。</p>
     </div>
 
     <p class="summary">{{ summary }}</p>
@@ -237,9 +257,9 @@ const demoHint = computed(() => {
 .keycap[aria-checked='true'] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 kbd { font-family: inherit; font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--surface-2);
   border: 1px solid var(--border); border-bottom-width: 2px; white-space: nowrap; }
-.rec { font-size: 11px; color: var(--accent); font-weight: 600; }
 .note { margin: 0; font-size: 12px; color: var(--text-2); }
-.note.warn { color: var(--warn); }
+.delay { display: flex; flex-direction: column; gap: 8px; }
+.delays { display: flex; flex-wrap: wrap; gap: 8px; }
 .summary { margin: 0; font-size: 13px; }
 .demo { position: relative; padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--border); background: var(--bg); }
 .demo-hint { font-size: 12px; }

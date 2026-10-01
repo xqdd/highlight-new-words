@@ -22,6 +22,8 @@ const STATES = [YD0, YD12, MASTERED, EU1];
 describe('options：单词操作目标', () => {
   it('按角色与能力列出目标：只读熟词本置灰并给出原因，“我的生词本”未创建时也可选', () => {
     const s = createDefaultSettings();
+    // 欧路默认关闭；来源关闭时的置灰说明见 options-fix.test.ts（O6），这里先打开以校验能力相关的原因
+    s.sources.eudic!.enabled = true;
     const o = wordActionOptions(s, [] as BookMeta[], STATES);
     expect(o.addTargets.map((x) => x.id)).toEqual([MY_WORDS_BOOK_ID, YD0.id, YD12.id, EU1.id]);
     expect(o.addTargets.find((x) => x.id === YD12.id)).toMatchObject({ disabled: true, note: '只能加入默认分组' });

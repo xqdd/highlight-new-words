@@ -26,7 +26,7 @@ const { settings } = useOptions();
           ]"
         />
       </SettingRow>
-      <SettingRow label="代码中的译文" :description="settings.code.display === 'hover' ? '代码里不显示译文，悬停或点按生词看卡片' : '在生词上方浮出小字译文，不占位置、不影响对齐'" stack>
+      <SettingRow label="代码中的译文" :description="settings.code.display === 'hover' ? '代码里不显示译文，悬停或点按生词看卡片' : '在生词上方浮出小字译文，不占位置、不影响对齐，但会遮挡上一行代码'" stack>
         <SegmentedControl
           v-model="settings.code.display"
           :options="[

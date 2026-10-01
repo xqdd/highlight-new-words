@@ -36,13 +36,23 @@ export function canAddSourceBook(state: SourceBookState): boolean {
   return !!state.canAdd && !state.orphaned;
 }
 
-function sourceOption(state: SourceBookState, ok: boolean, fallbackReason: string): TargetOption {
+/** 所属来源已关闭时的说明（写入类 / 移除类目标） */
+export const SOURCE_OFF_WRITE_NOTE = '来源已关闭，不会写入';
+export const SOURCE_OFF_REMOVE_NOTE = '来源已关闭，不会从中移除';
+
+/**
+ * 来源词书的一个选项。所属来源关闭（settings.sources[id].enabled=false）时优先置灰并注明“来源已关闭”：
+ * 关闭来源后 sourceBooks 索引仍保留缓存分组，不提示的话用户会以为仍会写入（#52）。已勾选的项由 TargetChecklist 保留勾选、可取消。
+ */
+function sourceOption(settings: Settings, state: SourceBookState, ok: boolean, fallbackReason: string, offNote: string): TargetOption {
+  const sourceOff = !settings.sources[state.providerId]?.enabled;
+  const usable = ok && !sourceOff;
   return {
     id: state.id,
     name: state.name,
     group: providerName(state.providerId),
-    disabled: !ok,
-    note: ok ? undefined : state.orphaned ? '远端已删除这个分组' : (state.readOnlyReason ?? fallbackReason),
+    disabled: !usable,
+    note: usable ? undefined : sourceOff ? offNote : state.orphaned ? '远端已删除这个分组' : (state.readOnlyReason ?? fallbackReason),
   };
 }
 
@@ -67,13 +77,16 @@ export function wordActionOptions(settings: Settings, books: BookMeta[], states:
   const knownBooks = sourcesByRole(settings, states, 'known');
   return {
     /** 加入生词本：写入哪些生词本 */
-    addTargets: [...localBookOptions(books), ...newBooks.map((s) => sourceOption(s, canAddSourceBook(s), '该来源不支持加词'))],
+    addTargets: [...localBookOptions(books), ...newBooks.map((s) => sourceOption(settings, s, canAddSourceBook(s), '该来源不支持加词', SOURCE_OFF_WRITE_NOTE))],
     /** 加入生词本时：从哪些熟词本移除 */
-    addRemoveFromKnown: [LOCAL_KNOWN_OPTION, ...knownBooks.map((s) => sourceOption(s, canDeleteSourceBook(s), '该熟词本只读，不能移除单词'))],
+    addRemoveFromKnown: [
+      LOCAL_KNOWN_OPTION,
+      ...knownBooks.map((s) => sourceOption(settings, s, canDeleteSourceBook(s), '该熟词本只读，不能移除单词', SOURCE_OFF_REMOVE_NOTE)),
+    ],
     /** 认识：写入哪些熟词本 */
-    knownTargets: [LOCAL_KNOWN_OPTION, ...knownBooks.map((s) => sourceOption(s, canAddSourceBook(s), '该熟词本只读，不能写入'))],
+    knownTargets: [LOCAL_KNOWN_OPTION, ...knownBooks.map((s) => sourceOption(settings, s, canAddSourceBook(s), '该熟词本只读，不能写入', SOURCE_OFF_WRITE_NOTE))],
     /** 认识时：从哪些生词本移除 */
-    knownRemoveFrom: [...localBookOptions(books), ...newBooks.map((s) => sourceOption(s, canDeleteSourceBook(s), '该来源不支持删词'))],
+    knownRemoveFrom: [...localBookOptions(books), ...newBooks.map((s) => sourceOption(settings, s, canDeleteSourceBook(s), '该来源不支持删词', SOURCE_OFF_REMOVE_NOTE))],
   };
 }
 

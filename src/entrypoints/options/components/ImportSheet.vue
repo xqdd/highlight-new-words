@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { parseWordList } from '@/core/import/parse';
+import { countPhraseEntries, parseWordList, phraseNotice } from '@/core/import/parse';
 import { IMPORT_FORMATS, type ImportFormatOption, type ImportResult } from '@/core/import/types';
 import type { BookMeta } from '@/core/wordbook/types';
 import BottomSheet from '@/ui/components/BottomSheet.vue';
@@ -48,6 +48,8 @@ const result = computed<ImportResult | { error: string } | null>(() => {
 const ok = computed(() => (result.value && 'words' in result.value ? result.value : null));
 const formatLabel = (v: string) => IMPORT_FORMATS.find((f) => f.value === v)?.label ?? v;
 const target = computed(() => props.localBooks?.find((b) => b.id === targetId.value));
+/** 短语条目（give up、well-known）不会在页面上高亮：只在导入词书时提示（熟词本里的短语本来就不影响高亮） */
+const phraseTip = computed(() => (props.mode === 'book' && ok.value ? phraseNotice(countPhraseEntries(ok.value.words)) : ''));
 
 function confirm() {
   if (!ok.value || ok.value.words.length === 0) return;
@@ -89,6 +91,7 @@ function confirm() {
         <span v-if="ok.skipped">跳过 {{ ok.skipped }} 行</span>
         <span>{{ ok.words.filter((w) => w.trans).length }} 个带释义</span>
       </div>
+      <p v-if="phraseTip" class="phrase" role="note">{{ phraseTip }}</p>
       <details v-if="ok.warnings.length" class="warns">
         <summary>{{ ok.warnings.length }} 条提示</summary>
         <ul><li v-for="(w, i) in ok.warnings" :key="i">{{ w }}</li></ul>
@@ -118,6 +121,7 @@ function confirm() {
 .field { display: flex; flex-direction: column; gap: 4px; }
 .stats { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 14px 0 8px; color: var(--text-2); }
 .stats b { color: var(--text); font-size: 18px; }
+.phrase { margin: 0 0 8px; font-size: 13px; color: var(--warn); }
 .warns { font-size: 13px; color: var(--warn); margin-bottom: 8px; }
 .warns ul { margin: 4px 0; padding-left: 18px; }
 .table { border: 1px solid var(--border); border-radius: 10px; max-height: 260px; overflow: auto; font-size: 13px; }
