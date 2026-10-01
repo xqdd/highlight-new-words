@@ -127,6 +127,88 @@ export interface WordActionPreview {
   needsConfirm: boolean;
 }
 
+/**
+ * 总状态（第二阶段 background 新增）：popup 顶部状态条、options 概览共用的“一句话状态”。
+ * 严重程度：error > busy > pending > never > ok > off；UI 按 level 选颜色/图标，text 直接展示。
+ */
+export type StatusLevel = 'error' | 'busy' | 'pending' | 'never' | 'ok' | 'off';
+
+/** 单个同步对象的状态：同步后端（storage.sync / WebDAV）或一个启用的来源（有道 / 欧路） */
+export interface StatusItem {
+  /** `storage-sync` / `webdav` / `source:<providerId>` */
+  id: string;
+  kind: 'backend' | 'source';
+  /** 显示名：“浏览器账号同步”“WebDAV”“有道”“欧路” */
+  name: string;
+  level: StatusLevel;
+  /** 一句中文说明（如“已同步 3 本生词本”“授权失效，请重新填写 token”“写入过于频繁，10:32 自动重试”） */
+  text: string;
+  /** 上次成功同步时间 ms，0=从未 */
+  lastSyncAt: number;
+  /** 自动重试时间（退避中） */
+  retryAt?: number;
+  /** 选项页对应位置（hash 路由，如 `#more/sync`、`#sources`），UI 可做“去处理”链接 */
+  href: string;
+}
+
+/** 权限状态：allSites=false 时内容脚本不注入、不会高亮（用户在扩展详情改成“点击时”或 Firefox 未授权） */
+export interface PermissionStatus {
+  allSites: boolean;
+  /** 已启用 WebDAV 时该服务器是否已授权访问；未启用为 undefined */
+  webdavOrigin?: boolean;
+  /** 有缺失权限时的中文提示 */
+  text?: string;
+}
+
+/** 升级提示：扩展从旧版本升级后由 background 写入 storage `updateNotice`，options/popup 展示简短“更新说明”后调用 dismissUpdateNotice */
+export interface UpdateNotice {
+  /** 升级前版本（manifest version） */
+  from: string;
+  to: string;
+  at: number;
+}
+
+export interface StatusSummary {
+  /** 全部 items 中最严重的级别；全部关闭时为 off */
+  level: StatusLevel;
+  /** 总述：“已全部同步”“欧路：授权失效”“正在同步…”“未开启任何同步” */
+  text: string;
+  /** 各 items 中最近一次成功同步时间 */
+  lastSyncAt: number;
+  items: StatusItem[];
+  permissions: PermissionStatus;
+  updateNotice?: UpdateNotice;
+  /** “立即同步全部”进度（background 第二阶段新增，可选）：running=true 进行中；result 为本次 SW 生命周期内最近一次完成的结果 */
+  syncAll?: SyncAllProgress;
+}
+
+/** “立即同步全部”进度 */
+export interface SyncAllProgress {
+  running: boolean;
+  startedAt: number;
+  result?: { ok: boolean; complete?: boolean; message: string; finishedAt: number };
+}
+
+/** syncAll 结果 */
+export interface SyncAllResult {
+  summary: StatusSummary;
+  /** 来源词书逐本结果（background=true 受理时为空） */
+  sources: SourceSyncResult[];
+  /**
+   * 汇总文案（toast 用）：“已同步：浏览器账号同步；等待同步：WebDAV（约 30 秒后自动完成）；仍在同步：欧路；失败：有道（登录已过期）”。
+   * 只要有启用项就不为空字符串。
+   */
+  message: string;
+  /** 没有失败/未完成项（等待中、进行中不算失败） */
+  ok: boolean;
+  /** 第二阶段新增：ok 且没有“等待同步/仍在同步”的项，即全部真正落盘；旧调用方可忽略 */
+  complete?: boolean;
+  /** 第二阶段新增：background=true 时为 true，表示已受理、同步在后台进行 */
+  accepted?: boolean;
+  startedAt?: number;
+  finishedAt?: number;
+}
+
 export interface BackgroundProtocol {
   /**
    * 朗读单词（遵循 settings.tts 的 voice/rate；force=true 时忽略自动发音开关，用于卡片上的发音按钮）。
@@ -175,8 +257,10 @@ export interface BackgroundProtocol {
    * 加入生词本（卡片收藏按钮、选中文本/右键菜单）：按 settings.wordActions.addTargets 写入（本地词书直接写；
    * 来源词书调用 provider.addWords，不支持加词的跳过并说明），按 addRemoveFromKnown 从熟词本移除该词（及同原形词形）。
    * “我的生词本”（MY_WORDS_BOOK_ID）不存在时自动创建并启用。trans/phonetic 可选，写入本地词书供释义显示。
+   * targets（card 第二阶段新增，可选）：卡片上临时选择的写入目标（含“撤销后重新加入”），传入时完全取代 addTargets：
+   * 未知 id 与本地熟词本过滤掉；只读目标（如欧路“已掌握”）跳过并在 added 中说明；空数组或过滤后为空视为非法（ok=false，不写入、不回退默认目标）。
    */
-  addWord(data: { word: string; lemma: string; trans?: string; phonetic?: string }): AddWordResult;
+  addWord(data: { word: string; lemma: string; trans?: string; phonetic?: string; targets?: BookId[] }): AddWordResult;
   /** 移出生词本（收藏按钮取消、撤销加入）：bookIds 不传则为 addTargets；10 分钟内撤销加入会把移出的熟词加回 */
   removeWord(data: { lemma: string; bookIds?: BookId[] }): RemoveWordResult;
   /** 执行 addWord / markKnown 前的预览（只读本地缓存），卡片在包含远端删除时据此弹确认 */
@@ -210,6 +294,17 @@ export interface BackgroundProtocol {
   /** 执行导入：merge 合并（与同步规则相同）/ overwrite 覆盖（本机多出的数据记删除墓碑） */
   importBackup(data: { content: string; mode: BackupImportMode }): BackupImportResult;
 
+  // ---- 总状态（第二阶段 background 新增） ----
+  /** 总状态：同步后端 + 启用来源 + 权限 + 升级提示（只读，不发网络请求） */
+  getStatusSummary(data: Record<string, never>): StatusSummary;
+  /**
+   * 立即同步全部：已启用的 storage.sync、WebDAV 与全部启用来源（并行，来源内部仍串行），返回汇总。
+   * background=true（第二阶段新增，可选）：立即返回已受理（accepted=true），同步在后台继续，调用方轮询 getStatusSummary 的 syncAll 字段。
+   */
+  syncAll(data: { background?: boolean }): SyncAllResult;
+  /** 用户已看过升级说明：清除 storage `updateNotice` */
+  dismissUpdateNotice(data: Record<string, never>): void;
+
   /** 内容脚本上报本 frame 已高亮的不同词条（全量，非增量），用于徽章计数 */
   reportPageWords(data: { lemmas: string[] }): void;
   /** popup 查询某标签页已高亮的不同词条（合并所有 frame） */
@@ -227,6 +322,11 @@ export interface PageState {
 export interface ContentProtocol {
   /** 查询页面状态（仅顶层 frame 应答） */
   getPageState(data: Record<string, never>): PageState;
+  /**
+   * 后台在页面上发起的单词操作结果（第二阶段 background 新增，可选实现）：右键菜单“加入生词本/标记为熟词”执行后
+   * 发给被点击的 frame，内容脚本可用卡片 toast 展示 message（未实现时后台只在徽章上闪一下 ✓/!）。
+   */
+  actionNotice(data: { action: 'add' | 'known'; word: string; lemma: string; ok: boolean; message: string }): void;
 }
 
 type Proto = object;

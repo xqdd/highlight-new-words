@@ -448,18 +448,49 @@ function addTargetsOf(settings: Settings): BookId[] {
 }
 
 /**
- * 加入生词本：写入 addTargets（本地直接写；来源调用 addWords，只读的跳过并说明），
+ * 卡片传入的 targets 只保留已知的生词本：存在的本地词书（“我的生词本”不存在时会自动创建，也保留）、
+ * 已登记的来源词书；本地熟词本与未知 id 过滤掉。只读来源（如欧路“已掌握”）保留，写入时跳过并在结果中说明。
+ */
+function knownAddTargets(targets: BookId[], ctx: ActionContext): BookId[] {
+  return [...new Set(targets)].filter((id) => {
+    if (id === LOCAL_KNOWN_BOOK_ID) return false;
+    const kind = parseBookId(id).kind;
+    if (kind === 'local') return id === MY_WORDS_BOOK_ID || !!ctx.locals.books[id];
+    if (kind === 'source') return !!ctx.sources.books[id];
+    return false;
+  });
+}
+
+/**
+ * 加入生词本：写入 addTargets（或卡片传入的 targets）（本地直接写；来源调用 addWords，只读的跳过并说明），
  * 再从 addRemoveFromKnown 移除该词（同原形开关控制是否移除屈折词形）。
  */
-export async function addWord(data: { word: string; lemma: string; trans?: string; phonetic?: string }): Promise<AddWordResult> {
+export async function addWord(data: {
+  word: string;
+  lemma: string;
+  trans?: string;
+  phonetic?: string;
+  targets?: BookId[];
+}): Promise<AddWordResult> {
   const target = data.lemma.trim().toLowerCase();
   const surface = data.word.trim().toLowerCase() || target;
   const ctx = await loadContext();
+  // 卡片临时选择的目标（含“撤销后重新加入”）完全取代默认 addTargets；空数组视为非法，不回退默认目标
+  let writeIds: BookId[];
+  if (data.targets) {
+    writeIds = knownAddTargets(data.targets, ctx);
+    if (!writeIds.length) {
+      const message = data.targets.length ? '所选生词本已不存在，未加入' : '未选择写入目标，未加入';
+      return { ok: false, lemma: target, added: [], removedKnown: [], message };
+    }
+  } else {
+    writeIds = addTargetsOf(ctx.settings);
+  }
   const entry: UserWord = { word: target, ...(data.trans ? { trans: data.trans } : {}), ...(data.phonetic ? { phonetic: data.phonetic } : {}) };
   const added: WordTargetResult[] = [];
   const sourceAdded: SourceRemovalTarget[] = [];
   const localAdded: { bookId: BookId; words: UserWord[] }[] = [];
-  for (const id of addTargetsOf(ctx.settings)) {
+  for (const id of writeIds) {
     const name = targetName(id, ctx);
     const kind = parseBookId(id).kind;
     if (kind === 'local') {

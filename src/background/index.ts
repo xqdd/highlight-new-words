@@ -6,8 +6,10 @@ import { watchCredentialChanges } from '@/core/sync/credentials';
 import { StorageSyncService } from '@/core/sync/service';
 import { WebDavSyncService } from '@/core/sync/webdav-service';
 import { getTabWords, reportFrameWords, setupBadge } from './badge';
+import { setupContextMenus } from './context-menu';
 import { addWord, getLemmatizer, getWordState, markKnown, previewWordAction, removeWord, unmarkKnown } from './known';
 import { autoSyncIfDue, deleteFromSources, recoverInterruptedSyncs, refreshSourceBooks, syncSourceBooks } from './sources/service';
+import { dismissUpdateNotice, getStatusSummary, recordUpdate, syncAll } from './status';
 import { speak } from './tts';
 
 /**
@@ -26,6 +28,8 @@ export function setupBackground(): void {
 
   const sync = new StorageSyncService();
   const webdav = new WebDavSyncService();
+
+  const statusSources = { getStorageSync: () => sync.getStatus(), getWebDav: () => webdav.getStatus() };
 
   handleBackgroundMessages({
     tts: ({ text, force }) => speak(text, force),
@@ -95,9 +99,29 @@ export function setupBackground(): void {
       if (sender.tab?.id !== undefined) await reportFrameWords(sender.tab.id, sender.frameId ?? 0, lemmas, sender.url);
     },
     getTabWords: async ({ tabId }) => ({ lemmas: await getTabWords(tabId) }),
+    getStatusSummary: async () => {
+      await ready;
+      return getStatusSummary(statusSources);
+    },
+    syncAll: async (data) => {
+      await ready;
+      const deps = { ...statusSources, syncStorage: () => sync.syncNow(), syncWebDav: () => webdav.syncNow(), syncSources: () => syncSourceBooks({}) };
+      return syncAll(deps, { background: !!data?.background });
+    },
+    dismissUpdateNotice: () => dismissUpdateNotice(),
   });
 
-  setupBadge();
+  // 徽章与右键菜单是可选能力（移动端可能缺 action/contextMenus）：单独兜底，失败不影响下面的同步初始化
+  for (const [name, setup] of [
+    ['徽章', setupBadge],
+    ['右键菜单', () => setupContextMenus(ready)],
+  ] as const) {
+    try {
+      setup();
+    } catch (e) {
+      console.warn(`[hnw] 初始化${name}失败`, e);
+    }
+  }
   // 同步后端监听须同步注册；首次同步等迁移完成后再执行
   watchCredentialChanges();
   sync.listen();
@@ -108,8 +132,9 @@ export function setupBackground(): void {
 
   // 启动事件只用于唤醒 SW（唤醒后上面的启动流程已执行），这里无需重复同步
   browser.runtime.onStartup.addListener(() => {});
-  // 首次安装打开选项页的使用引导（options 的 #welcome 路由）；升级与浏览器更新不打扰
-  browser.runtime.onInstalled.addListener(({ reason }) => {
+  // 首次安装打开选项页的使用引导（options 的 #welcome 路由）；升级不打开页面，只记录升级提示（options/popup 下次打开时展示简短“更新说明”）
+  browser.runtime.onInstalled.addListener(({ reason, previousVersion }) => {
     if (reason === 'install') void browser.tabs.create({ url: browser.runtime.getURL('/options.html#welcome' as '/') }).catch(() => {});
+    if (reason === 'update') void recordUpdate(previousVersion).catch(() => {});
   });
 }

@@ -21,10 +21,10 @@ export default defineConfig({
     name: '__MSG_appName__',
     description: '__MSG_appDesc__',
     default_locale: 'zh_CN',
-    // storage: 设置/生词本；tts: 发音；tabs: 徽章计数与当前页状态
+    // storage: 设置/生词本；tts: 发音；tabs: 徽章计数与当前页状态；contextMenus: 选中文本右键“加入生词本/标记为熟词”（background 第二阶段新增，无安装警告）
     // unlimitedStorage: 云端生词本与熟词本可能很大，超出 local 默认 10MB 配额
     // 不申请 cookies：有道/欧路请求用 fetch credentials:'include'，浏览器凭 host 权限自动带登录 cookie（background 第 3 轮实测去掉后同步正常）
-    permissions: ['storage', 'unlimitedStorage', 'tts', 'tabs'],
+    permissions: ['storage', 'unlimitedStorage', 'tts', 'tabs', 'contextMenus'],
     // 同步有道/欧路生词本需要跨域携带 cookie；内容脚本需在所有页面运行
     host_permissions: ['http://*/*', 'https://*/*', 'file://*/*'],
     icons: {

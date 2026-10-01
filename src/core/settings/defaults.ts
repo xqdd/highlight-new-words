@@ -42,7 +42,9 @@ export function createDefaultSettings(): Settings {
       },
       perBook: {},
     },
-    inlineTranslation: { mode: 'off' },
+    inlineTranslation: { mode: 'off', blur: false, color: '' },
+    code: { enabled: false, scope: 'comments', display: 'hover' },
+    youtube: { captions: true, autoPause: true, captionTranslation: 'off' },
     card: { trigger: 'auto' },
     tts: { enabled: true, voice: { lang: 'en' }, rate: 1 },
     // 旧版默认来源为有道

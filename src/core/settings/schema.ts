@@ -1,4 +1,4 @@
-import type { CardStyle, MarkStyle } from '../theme/themes';
+import type { CardStyle, InlineTranslationMode, MarkStyle, TranslationStyle } from '../theme/themes';
 
 /**
  * 设置契约（存储于 chrome.storage.local 的 `settings` 键，单对象）。
@@ -114,14 +114,47 @@ export interface SyncSettings {
  */
 export type CredentialId = string;
 
-/** 行内翻译模式：关闭 / 单词后括注 / 单词上方注音式(ruby) */
-export type InlineTranslationMode = 'off' | 'after' | 'ruby';
+/**
+ * 代码块中标注生词（v8，engine 第二阶段新增，默认关闭）。
+ * 作用于 pre、code（含行内 code）与常见语法高亮容器；在线编辑器（Monaco/CodeMirror/Ace 等）与可编辑区始终跳过。
+ * 代码中永远不插入占位的行内译文（词后括注/ruby），标识符按 camelCase/snake_case 等拆词后匹配。
+ */
+export interface CodeBlockSettings {
+  enabled: boolean;
+  /** 范围：comments=只处理注释和字符串（按语法高亮类名识别，识别不了的代码不处理；行内 code 不处理）；all=全部代码文本 */
+  scope: 'comments' | 'all';
+  /** 代码中的译文：hover=不显示，仅悬停/点按看卡片；float=单词上方浮动小标注（绝对定位，不占位） */
+  display: 'hover' | 'float';
+}
+
+/**
+ * YouTube 字幕（v9，youtube 模块新增）：只作用于主播放器 #movie_player 内的字幕，控件文字、章节标题、自动字幕提示不标注。
+ * 旧数据由 normalizeSettings 按默认值补齐。
+ */
+export interface YouTubeSettings {
+  /** 字幕中标注生词（默认开）；关闭后字幕保持原样，页面其他文字照常标注 */
+  captions: boolean;
+  /** 查词时自动暂停（默认开）：桌面鼠标进入字幕即暂停、离开字幕与卡片 300ms 后继续；手机点按生词暂停、关卡片继续。只恢复由扩展发起的暂停 */
+  autoPause: boolean;
+  /**
+   * 字幕内译文：off=不显示（默认；词后括注会撑破 YouTube 按像素计算的字幕宽度，字幕内一律不用）；
+   * above=单词上方小注解（不改变字幕宽度，字幕行向上留出注解高度）。自动生成字幕始终不显示译文。
+   */
+  captionTranslation: 'off' | 'above';
+}
 
 /** 扩展页面（popup/options）界面配色：auto 跟随系统 */
 export type UiTheme = 'auto' | 'light' | 'dark';
 
 /** 卡片触发方式：auto=桌面悬停+移动端点按 */
 export type CardTrigger = 'auto' | 'hover' | 'click';
+
+/** 用户另存的样式（Settings.style.saved 的一项） */
+export interface SavedMarkStyle {
+  id: string;
+  name: string;
+  mark: MarkStyle;
+}
 
 export interface BookStyleOverride {
   /** 为该词书单独指定主题 id；不填则用全局 themeId */
@@ -147,10 +180,20 @@ export interface Settings {
     custom: { mark: MarkStyle; card: CardStyle };
     /** 按词书覆盖样式 */
     perBook: Record<BookId, BookStyleOverride>;
+    /**
+     * 用户另存的样式（options 第二阶段新增，可选）：在预设或自定义基础上微调后“另存为”，出现在预设画廊“我的样式”中。
+     * 只是样式库：选用时把 mark 复制到 custom（全局）或 perBook（词书），渲染不读取本字段。
+     */
+    saved?: SavedMarkStyle[];
   };
+  /** 行内译文：模式 + 样式（v5 新增 blur/color/opacity/fontScale，可选，见 TranslationStyle） */
   inlineTranslation: {
     mode: InlineTranslationMode;
-  };
+  } & TranslationStyle;
+  /** 代码块中标注生词（v8，engine 新增） */
+  code: CodeBlockSettings;
+  /** YouTube 字幕标注与自动暂停（v9，youtube 模块新增） */
+  youtube: YouTubeSettings;
   card: {
     trigger: CardTrigger;
   };
@@ -184,4 +227,4 @@ export interface Settings {
   };
 }
 
-export type { MarkStyle, CardStyle };
+export type { MarkStyle, CardStyle, InlineTranslationMode, TranslationStyle };

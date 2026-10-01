@@ -19,8 +19,12 @@ export const STORAGE_KEYS = {
   webdavSyncState: 'webdavSyncState',
   /** WebDAV 本机持有的写锁令牌 WebDavHeldLock（SW 持锁时被回收，重启后据此 UNLOCK）；仅 background 写（第 5 轮新增） */
   webdavLock: 'webdavLock',
+  /** 升级提示 UpdateNotice（见 core/messaging/protocol.ts）：onInstalled reason=update 时写入，dismissUpdateNotice 清除；仅 background 写 */
+  updateNotice: 'updateNotice',
   /** 凭据随同步上传的版本戳：CredentialId -> { at 修改时间, h 值摘要 }（见 core/sync/credentials.ts）；仅 background 写 */
   syncCredStamps: 'syncCredStamps',
+  /** 选项页已读的“更新说明”版本（字符串，见 options/lib/release-notes.ts）；仅 options 写（options 第二阶段新增） */
+  uiNotesSeen: 'uiNotesSeen',
 } as const;
 
 /** 单本来源词书数据键前缀：`srcBook:<bookId>` -> SourceBookData */

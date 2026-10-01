@@ -437,3 +437,45 @@ describe('第 3 轮：O1–O4', () => {
     expect(res.withheld).toBeUndefined();
   });
 });
+
+describe('第二阶段 F1：addWord 的 targets 完全取代默认 addTargets', () => {
+  it('T1 targets=[local:other]：只写入 local:other，“我的生词本”与远端来源都不写', async () => {
+    const other = await saveLocalBook({ id: 'local:other', name: '其他', format: 'txt', words: [] });
+    await seedSourceBook({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签', canAdd: true, canDelete: true }, {});
+    await patchSettings({ sources: { youdao: { enabled: true } }, wordActions: { addTargets: [MY_WORDS_BOOK_ID, 'src:youdao:0'] } });
+    const calls = youdaoOk();
+    const res = await addWord({ word: 'zyzzyva', lemma: 'zyzzyva', targets: [other.id] });
+    expect(res.ok).toBe(true);
+    expect(res.added.map((a) => a.bookId)).toEqual([other.id]);
+    expect((await getLocalBook(other.id))!.words.zyzzyva).toBeDefined();
+    expect(await getLocalBook(MY_WORDS_BOOK_ID)).toBeUndefined();
+    expect(calls.filter((c) => /ajax\/add/.test(c.url))).toHaveLength(0);
+  });
+
+  it('T2 启用有道且默认 addTargets 含有道：targets=[我的生词本] 时有道加词接口调用 0 次', async () => {
+    await seedSourceBook({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签', canAdd: true, canDelete: true }, {});
+    await patchSettings({ sources: { youdao: { enabled: true } }, wordActions: { addTargets: ['src:youdao:0'] } });
+    const calls = youdaoOk();
+    const res = await addWord({ word: 'zyzzyva', lemma: 'zyzzyva', targets: [MY_WORDS_BOOK_ID] });
+    expect(res.added).toEqual([expect.objectContaining({ bookId: MY_WORDS_BOOK_ID, ok: true })]);
+    expect(calls.filter((c) => /ajax\/add/.test(c.url))).toHaveLength(0);
+    expect((await getSourceBook('src:youdao:0'))!.words.zyzzyva).toBeUndefined();
+  });
+
+  it('未知 id 过滤、只读目标跳过并说明；空数组/全部未知视为非法，不回退默认目标', async () => {
+    await seedSourceBook({ id: 'src:eudic:mastered', providerId: 'eudic', remoteId: 'mastered', name: '已掌握单词', canAdd: false, readOnlyReason: '欧路只提供读取已掌握单词的接口' }, {});
+    const res = await addWord({ word: 'zyzzyva', lemma: 'zyzzyva', targets: ['local:nope', 'src:eudic:mastered', MY_WORDS_BOOK_ID] });
+    expect(res.added.map((a) => [a.bookId, a.ok])).toEqual([
+      ['src:eudic:mastered', false],
+      [MY_WORDS_BOOK_ID, true],
+    ]);
+    expect(res.message).toContain('已掌握');
+
+    const empty = await addWord({ word: 'quux', lemma: 'quux', targets: [] });
+    expect(empty).toMatchObject({ ok: false, added: [] });
+    expect(empty.message).toContain('未选择');
+    const unknown = await addWord({ word: 'quux', lemma: 'quux', targets: ['local:gone'] });
+    expect(unknown).toMatchObject({ ok: false, added: [] });
+    expect((await getLocalBook(MY_WORDS_BOOK_ID))!.words.quux).toBeUndefined();
+  });
+});
