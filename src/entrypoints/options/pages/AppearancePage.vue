@@ -7,12 +7,12 @@ import AppIcon from '@/ui/components/AppIcon.vue';
 import BottomSheet from '@/ui/components/BottomSheet.vue';
 import MarkPreview from '@/ui/components/MarkPreview.vue';
 import SegmentedControl from '@/ui/components/SegmentedControl.vue';
-import SettingRow from '@/ui/components/SettingRow.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
 import ToggleSwitch from '@/ui/components/ToggleSwitch.vue';
 import { markPrimaryColor } from '@/ui/components/palette';
 import ColorRow from '../components/ColorRow.vue';
 import ColorSheet from '../components/ColorSheet.vue';
+import CardTriggerSection from '../sections/CardTriggerSection.vue';
 import LivePreview from '../components/LivePreview.vue';
 import PresetCard from '../components/PresetCard.vue';
 import StyleEditor from '../components/StyleEditor.vue';
@@ -35,7 +35,7 @@ import { showToast } from '../lib/toast';
 /**
  * 外观页（v5）：吸顶实时预览（真实句子 + 多本词书 + 行内译文 + 链接，亮/暗网页切换）→ 预设画廊（组合预设带缩略与说明、我的样式、
  * 单色样式、旧版配色）→ 样式编辑器（装饰线 / 文字 / 背景 / 边框四个维度，可另存为“我的样式”）→ 按词书设置（跟随全局 / 只换颜色 /
- * 独立样式）→ 行内译文（模式 + 颜色/浓淡/字号/模糊自测）→ 卡片。
+ * 独立样式）→ 行内译文（模式 + 颜色/浓淡/字号/模糊自测）→ 释义卡片（电脑端打开方式 v11、卡片颜色；标题与卡片首次提示里的“设置 › 释义卡片”一致）。
  * 对标：沉浸式翻译的译文样式列表、Relingo 的分组设置与实时预览、Burning Vocabulary 的预设色块。
  */
 const { settings, books } = useOptions();
@@ -238,17 +238,8 @@ const cardColor = computed({
     </template>
   </SettingsSection>
 
-  <SettingsSection id="card" title="释义卡片">
-    <SettingRow label="打开方式" description="自动：电脑上悬停、手机上点按" stack>
-      <SegmentedControl
-        v-model="settings.card.trigger"
-        :options="[
-          { value: 'auto', label: '自动' },
-          { value: 'hover', label: '悬停' },
-          { value: 'click', label: '点击' },
-        ]"
-      />
-    </SettingRow>
+  <SettingsSection id="card" title="释义卡片" description="生词的释义卡片怎样打开；手机、平板上始终点按生词打开">
+    <CardTriggerSection />
     <details class="advanced">
       <summary>卡片颜色</summary>
       <div class="fields">

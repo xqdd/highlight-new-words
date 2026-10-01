@@ -36,11 +36,11 @@ interface NavItem {
 }
 const NAV: NavItem[] = [
   { id: 'books', label: '词书', icon: 'book', desc: '选择与组合要高亮的词书' },
-  { id: 'appearance', label: '外观', icon: 'palette', desc: '样式预设、行内译文与卡片' },
+  { id: 'appearance', label: '外观', icon: 'palette', desc: '样式预设、行内译文、释义卡片' },
   { id: 'sources', label: '生词本', icon: 'cloud', desc: '有道 / 欧路同步与文件导入' },
   { id: 'known', label: '熟词', icon: 'known', desc: '已掌握的词不再高亮' },
   { id: 'sync', label: '同步', icon: 'sync', desc: '浏览器账号、WebDAV 与手动备份' },
-  { id: 'more', label: '更多', icon: 'more', desc: '发音、站点、代码块、界面主题' },
+  { id: 'more', label: '更多', icon: 'more', desc: '发音、站点、悬浮球、YouTube、代码块' },
 ];
 
 /** 同步相关锚点原在“更多”页（popup/background 生成的 `#more/sync` 链接），现在归“同步”页，旧链接继续可用 */

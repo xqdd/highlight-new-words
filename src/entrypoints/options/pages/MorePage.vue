@@ -10,10 +10,12 @@ import { useOptions } from '../lib/context';
 import { showToast } from '../lib/toast';
 import ReleaseNotesSheet from '../components/ReleaseNotesSheet.vue';
 import CodeSection from '../sections/CodeSection.vue';
+import FloatBallSection from '../sections/FloatBallSection.vue';
 import SitesSection from '../sections/SitesSection.vue';
 import TtsSection from '../sections/TtsSection.vue';
+import YouTubeSection from '../sections/YouTubeSection.vue';
 
-/** 更多：发音、站点规则、代码块标注、界面主题、引导与恢复默认（跨设备同步已移到“同步”页） */
+/** 更多：发音、站点规则、悬浮球（手机）、YouTube 字幕、代码块标注、界面主题、引导与恢复默认（跨设备同步已移到“同步”页） */
 const { settings, navigate } = useOptions();
 const version = browser.runtime.getManifest().version;
 const confirmReset = ref(false);
@@ -29,6 +31,8 @@ async function reset() {
 <template>
   <TtsSection />
   <SitesSection />
+  <FloatBallSection />
+  <YouTubeSection />
   <CodeSection />
 
   <SettingsSection id="ui" title="界面">
