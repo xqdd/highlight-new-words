@@ -1,10 +1,10 @@
 {
   "appName": {
-    "message": "有道词典生词本高亮",
+    "message": "生词高亮 - 有道/欧路生词本与分级词书",
     "description": "The title of the application, displayed in the web store."
   },
   "appDesc": {
-    "message": "在英文网站中高亮显示有道词典生词本中的单词",
+    "message": "在英文网页中高亮有道/欧路生词本与四六级、考研、托福、雅思、GRE 等分级词书中的单词，支持行内翻译与词形还原",
     "description": "The description of the application, displayed in the web store."
   }
 }

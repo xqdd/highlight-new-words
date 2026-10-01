@@ -1,10 +1,10 @@
 {
   "appName": {
-    "message": "highlight the youdao dictionary new words book",
+    "message": "Highlight New Words - Youdao/Eudic word book & graded vocabularies",
     "description": "The title of the application, displayed in the web store."
   },
   "appDesc": {
-    "message": "highlight the youdao dictionary new words book content in the english web site",
+    "message": "Highlight words from your Youdao/Eudic word book and graded vocabularies (CET, TOEFL, IELTS, GRE...) on English web pages, with inline translation and lemmatization",
     "description": "The description of the application, displayed in the web store."
   }
 }
