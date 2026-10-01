@@ -85,10 +85,21 @@ const UI_TAG_PARTS = [
 const UI_IDS = new Set(['header-author', 'published-time-text', 'owner-sub-count', 'masthead-container', 'secondary', 'related', 'guide']);
 const uiTagCache = new Map<string, boolean>();
 
+/**
+ * m.youtube.com 的评论正文整个包在一个原生 button 里（点评论任意处打开回复），2026-10 实测结构：
+ * `ytm-comment-renderer > button.YtmCommentRendererContent > p.YtmCommentRendererText > span`，
+ * “Read more”等真正的按钮在其内部的 ytm-button-renderer 里，仍按标签名跳过。
+ * 因此父元素是评论渲染器（ytm-comment-renderer / *comment-view-model）的 button 视为评论正文容器放行，只看父元素标签，O(1)。
+ */
+function isCommentBodyButton(el: Element): boolean {
+  const parentTag = el.parentElement?.tagName ?? '';
+  return parentTag.includes('COMMENT-RENDERER') || parentTag.includes('COMMENT-VIEW-MODEL');
+}
+
 export function isYouTubeUiElement(el: Element): boolean {
   if (el.id && UI_IDS.has(el.id)) return true;
   const tag = el.tagName;
-  if (tag === 'BUTTON') return true;
+  if (tag === 'BUTTON') return !isCommentBodyButton(el);
   if (!tag.includes('-')) return false;
   let hit = uiTagCache.get(tag);
   if (hit === undefined) {
