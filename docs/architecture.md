@@ -14,7 +14,7 @@
 | 视觉 QA | Playwright 1.63（devDependency） | [scripts/qa/shot.mjs](../scripts/qa/shot.mjs) |
 | 数据 | ECDICT（MIT）+ CEFR-J 1.5（署名免费商用）+ KyleBing 词表（BSD-3，仅词表） | [scripts/data/fetch-raw.sh](../scripts/data/fetch-raw.sh) 下载固定版本原始数据，[scripts/data/build-data.mjs](../scripts/data/build-data.mjs) 确定性生成 `public/data`（来源声明见 `public/data/NOTICE.txt`） |
 
-目标浏览器：Chrome 与 Edge（含 Edge for Android），Edge 直接使用 chrome 构建产物（`npm run build:edge` 仅改输出目录名）。
+目标浏览器：Chrome 与 Edge（含 Edge for Android），Edge 直接使用 chrome 构建产物。
 
 ## 二、整体结构
 
@@ -534,7 +534,6 @@ flowchart LR
 | --- | --- |
 | `npm run dev` | WXT 开发模式（不自动开浏览器），产物 `.output/chrome-mv3-dev` |
 | `npm run build` | 生产构建，产物 `${OUT_DIR:-.output}/chrome-mv3` |
-| `npm run build:edge` | 产物 `.../edge-mv3`（与 chrome 构建一致） |
 | `npm run typecheck` | `vue-tsc --noEmit` |
 | `npm test` | Vitest 单测 |
 | `npm run qa:shot -- --ext <dir> ...` | 视觉 QA 截图 |

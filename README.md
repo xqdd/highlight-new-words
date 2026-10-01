@@ -133,12 +133,12 @@ Firefox 只用于开发调试，暂不上架，加载方法见 [docs/release.md]
 | 命令 | 说明 |
 | --- | --- |
 | `npm install` | 安装依赖（会自动执行 `wxt prepare`） |
-| `npm run dev` / `npm run dev:edge` | 开发模式 |
-| `npm run build` | 生产构建，产物在 `${OUT_DIR:-.output}/chrome-mv3` |
-| `npm run build:edge` / `npm run build:firefox` | Edge（与 chrome 产物相同）/ Firefox 构建 |
+| `npm run dev` | 开发模式 |
+| `npm run build` | 生产构建，产物在 `${OUT_DIR:-.output}/chrome-mv3`（Chrome 与 Edge 通用） |
+| `npm run build:firefox` | Firefox 构建 |
 | `npm run typecheck` | `vue-tsc` 类型检查 |
 | `npm test` / `npm run test:watch` | Vitest 单测 |
-| `npm run zip` / `npm run zip:edge` / `npm run zip:stores` | 打包上传商店用的 zip |
+| `npm run zip` | 打包上传商店用的 zip（Chrome 与 Edge 商店上传同一个） |
 | `npm run qa:shot -- --ext <产物目录> ...` | 用 Playwright 批量截图做视觉 QA，参数见 [scripts/qa/shot.mjs](./scripts/qa/shot.mjs) |
 
 多个构建并行时，用 `OUT_DIR` 隔离输出目录，例如 `OUT_DIR=/tmp/out/foo npm run build`。内置词书和词典数据由 [scripts/data](./scripts/data) 生成，步骤见架构文档的“命令与 OUT_DIR 约定”一节。

@@ -7,7 +7,7 @@
 | 目标 | 构建 | 发布渠道 | 状态 |
 | --- | --- | --- | --- |
 | Chrome（桌面） | chrome 产物 `chrome-mv3` | Chrome 网上应用店 | 上架 |
-| Microsoft Edge（桌面、Edge for Android） | 与 chrome 产物相同（`edge-mv3` 只是目录名不同） | Microsoft Edge 加载项（Partner Center） | 上架 |
+| Microsoft Edge（桌面、Edge for Android） | 直接使用 chrome 产物 `chrome-mv3` | Microsoft Edge 加载项（Partner Center） | 上架 |
 | Firefox（桌面、Android） | firefox 产物 `firefox-mv3`（MV3，后台为事件页） | 无 | **仅开发调试，暂不上架** |
 
 商店材料都在 [store/](../store)：
@@ -25,9 +25,7 @@
 
 | 命令 | 产物（`${OUT_DIR:-.output}` 下） | 用途 |
 | --- | --- | --- |
-| `npm run zip` | `highlight-new-words-<版本>-chrome.zip` | 上传 Chrome 网上应用店 |
-| `npm run zip:edge` | `highlight-new-words-<版本>-edge.zip` | 上传 Edge 加载项 |
-| `npm run zip:stores` | 以上两个 | 发版时一次打包 |
+| `npm run zip` | `highlight-new-words-<版本>-chrome.zip` | 上传 Chrome 网上应用店与 Edge 加载项（两家用同一个 zip） |
 | `npm run build:firefox` | `firefox-mv3/` | Firefox 本地加载调试 |
 | `npm run pack:crx` | `.output/highlight-new-words-<版本>.crx` | 手机 Edge 侧载测试（不用于商店，见第十二节） |
 
@@ -72,7 +70,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  A[Partner Center 注册<br/>Microsoft Edge 计划，个人免费] --> B[npm run zip:edge]
+  A[Partner Center 注册<br/>Microsoft Edge 计划，个人免费] --> B[npm run zip]
   B --> C[Create new extension → 上传 zip]
   C --> D[Availability<br/>Public / 全部市场]
   D --> E[Properties<br/>分类 / 网站 / 支持联系方式]
@@ -83,7 +81,7 @@ flowchart TD
 ```
 
 1. 在 [Partner Center](https://partner.microsoft.com/dashboard/microsoftedge/public/login?ref=dd) 注册 Microsoft Edge 开发者（个人账号免费）。
-2. 上传 `npm run zip:edge` 的 zip；扩展包含 `zh_CN` 与 `en` 两个 locale，Store listings 会出现两种语言，**两种语言都必须填描述和徽标**。
+2. 上传 `npm run zip` 的 zip（与 Chrome 相同）；扩展包含 `zh_CN` 与 `en` 两个 locale，Store listings 会出现两种语言，**两种语言都必须填描述和徽标**。
 3. Properties：分类 Education，网站与支持填 GitHub 仓库。
 4. Privacy：与 Chrome 相同，照 [permissions.md](../store/permissions.md) 填。
 5. Store listings：描述按 [listing.zh_CN.md](../store/listing.zh_CN.md) / [listing.en.md](../store/listing.en.md)（250–10,000 字符）；徽标 [logo-edge-300.png](../store/images/logo-edge-300.png)（1:1，建议 300x300，最小 128）；截图最多 6 张，1280x800 或 640x480；小/大宣传图可选，尺寸同 Chrome；搜索词最多 7 个、合计 21 词、每个 30 字符内。
@@ -182,7 +180,7 @@ npm run build:firefox            # 产物 ${OUT_DIR:-.output}/firefox-mv3
 
 - [ ] `package.json` 版本号已递增（首发 3.0.0），与 tag 一致 —— 版本号为 3.0.0；tag `v3.0.0` 待发版提交时打
 - [ ] `npm ci && npm run typecheck && npm test` 通过（以发版提交为准重跑；2026-10-01 最近一次全量为 485 通过、1 跳过，另有并行开发中的 `options-fix`、`lemma` 用例未收尾，发版前须全绿）
-- [x] `npm run zip:stores` 成功；解压 chrome zip 检查 `manifest.json`：版本号 3.0.0、权限 `storage`/`unlimitedStorage`/`tts`/`tabs`/`contextMenus`/`scripting`、无 `browser_specific_settings`
+- [x] `npm run zip` 成功；解压 chrome zip 检查 `manifest.json`：版本号 3.0.0、权限 `storage`/`unlimitedStorage`/`tts`/`tabs`/`contextMenus`/`scripting`、无 `browser_specific_settings`
 - [x] `_locales/*/messages.json`：`appName` ≤ 75 字符、`appDesc` ≤ 132 字符（中文 20/55，英文 66/124）
 - [x] 权限列表中每一项都在代码中有真实用途（`cookies` 已移除）
 - [x] 无远程代码：产物中没有对外部脚本 URL 的 `import`/`<script src>`
@@ -212,7 +210,7 @@ npm run build:firefox            # 产物 ${OUT_DIR:-.output}/firefox-mv3
 商店上架前在手机 Edge 上实测，用 crx 侧载：
 
 ```bash
-npm run pack:crx                 # build:edge 后打包 .output/edge-mv3，产物 .output/highlight-new-words-<版本>.crx
+npm run pack:crx                 # build 后打包 .output/chrome-mv3，产物 .output/highlight-new-words-<版本>.crx
 ```
 
 - 脚本 [scripts/pack-crx.mjs](../scripts/pack-crx.mjs)：用 Chromium 内核浏览器的 `--pack-extension` 无头打包；浏览器依次取 `CHROME_PATH`、PATH 中的 Chrome/Chromium/Edge、Playwright 缓存的 Chromium。产物固定写到 `.output/`，不跟随 `OUT_DIR`。

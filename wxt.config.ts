@@ -5,7 +5,7 @@ import { patchFirefoxManifest } from './src/core/platform/manifest';
  * WXT 构建配置。
  *
  * 并行构建约定：设置环境变量 OUT_DIR 可改变构建输出根目录（默认 `.output`），
- * 产物位于 `${OUT_DIR}/chrome-mv3`（dev 模式为 `chrome-mv3-dev`，edge 为 `edge-mv3`）。
+ * 产物位于 `${OUT_DIR}/chrome-mv3`（dev 模式为 `chrome-mv3-dev`）；Edge 直接使用 chrome 产物。
  * 多个 agent 并行构建时各自使用不同 OUT_DIR，避免互相覆盖，例如：
  *   OUT_DIR=/tmp/gauntlet/out/engine npm run build
  */

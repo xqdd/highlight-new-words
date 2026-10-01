@@ -6,9 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "wxt",
-    "dev:edge": "wxt -b edge",
     "build": "wxt build",
-    "build:edge": "wxt build -b edge",
     "zip": "wxt zip",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
@@ -16,9 +14,7 @@
     "qa:shot": "node scripts/qa/shot.mjs",
     "postinstall": "wxt prepare",
     "build:firefox": "wxt build -b firefox",
-    "zip:edge": "wxt zip -b edge",
-    "zip:stores": "wxt zip && wxt zip -b edge",
-    "pack:crx": "wxt build -b edge && node scripts/pack-crx.mjs"
+    "pack:crx": "wxt build && node scripts/pack-crx.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",

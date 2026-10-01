@@ -2,7 +2,7 @@
 /**
  * 把构建产物打成 .crx，用于手机 Edge（Canary）开发者选项“Extension install by crx”侧载测试，不用于商店发布。
  *
- * 用法：npm run pack:crx            （先 build:edge，再打包 .output/edge-mv3）
+ * 用法：npm run pack:crx            （先 build，再打包 .output/chrome-mv3；Edge 与 Chrome 用同一份产物）
  *       node scripts/pack-crx.mjs [扩展目录]
  *
  * - 签名私钥固定放在 .cache/crx-key.pem（.cache 不进 git）：首次运行时由浏览器生成，之后复用，扩展 ID 保持不变，
@@ -17,7 +17,7 @@ import path from 'node:path';
 import { execSync, spawnSync } from 'node:child_process';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const extDir = path.resolve(ROOT, process.argv[2] ?? '.output/edge-mv3');
+const extDir = path.resolve(ROOT, process.argv[2] ?? '.output/chrome-mv3');
 const keyPath = path.join(ROOT, '.cache/crx-key.pem');
 const manifest = JSON.parse(fs.readFileSync(path.join(extDir, 'manifest.json'), 'utf8'));
 const out = path.join(ROOT, `.output/highlight-new-words-${manifest.version}.crx`);
