@@ -7,9 +7,11 @@ import type { CardActions, CardData } from '@/content/card/types';
 import { describeForm, dictLinks, formatPhonetic, parseDefinitions } from '@/content/card/word-info';
 import {
   buildAddTargets,
-  describeAddResult,
-  describeKnownResult,
+  addNotice,
   describePreview,
+  knownNotice,
+  removeNotice,
+  undoKnownNotice,
   type AddTargetOption,
   type CardBackend,
 } from '@/content/card/word-actions';
@@ -80,6 +82,7 @@ function makeActions(over: Partial<CardActions> = {}): CardActions {
       deleted: [],
       message: '已标记为熟词；已从“我的生词本”删除 abandon',
       written: [{ bookId: 'known:local', name: '本地熟词本', ok: true, words: [lemma] }],
+      removedLocal: [{ bookId: 'local:mine', name: '我的生词本', ok: true, words: [lemma] }],
     })),
     unmarkKnown: vi.fn(async () => ({ ok: true, message: '已撤销；已加回 abandon' })),
     deleteFromSources: vi.fn(async () => ({ ok: true, message: '已删除', reports: [] })),
@@ -119,6 +122,7 @@ function makeBackend(over: Partial<CardBackend> = {}): CardBackend & Record<stri
     removeWord: vi.fn(async () => ({ ok: true, removed: [{ bookId: 'local:mine', name: '我的生词本', ok: true, words: ['abandon'] }], message: '已从“我的生词本”删除 abandon' })),
     confirmKnown: vi.fn(async (_w: string, lemma: string) => ({ ok: true, lemma, deleted: [], message: '已标记为熟词；已从“有道词典 · 无标签”删除 lay' })),
     sourceStates: vi.fn(async () => ({})),
+    unmarkKnown: vi.fn(async () => ({ ok: true, restored: ['abandon'], message: '已撤销；已加回 abandon' })),
     ...over,
   } as CardBackend & Record<string, ReturnType<typeof vi.fn>>;
 }
@@ -180,24 +184,35 @@ describe('ShadowCardView', () => {
 
   it('认识：关闭卡片，toast 写明记入哪里与移除了什么，撤销显示后台结果', async () => {
     const actions = makeActions();
-    view = new ShadowCardView(document, actions, makeBackend());
+    const backend = makeBackend();
+    view = new ShadowCardView(document, actions, backend);
     view.open(mark, data());
     await flush();
-    // 说明行：认识写到哪里
-    expect(q('.hints')!.textContent).toContain('记入 本地熟词本');
+    // 说明行：默认一行摘要，详情折叠在“i”里
+    expect(q('.hint-sum')!.textContent).toContain('加入 → 我的生词本 · 认识 → 本地熟词本');
+    expect(q('.hint-details')).toBeNull();
+    q('[data-act="hints"]')!.click();
+    expect(q('.hint-details')!.textContent).toContain('记入 本地熟词本');
     q('[data-act="known"]')!.click();
     await flush();
     expect(actions.markKnown).toHaveBeenCalledWith('abandon', 'abandoned');
     expect(view.isOpen).toBe(false);
     const toast = q('.toast')!;
     expect(toast.hidden).toBe(false);
-    expect(toast.textContent).toContain('「abandon」已标为熟词，记入“本地熟词本”');
-    expect(toast.textContent).toContain('已从“我的生词本”删除 abandon');
-    expect(toast.textContent).not.toContain('已标记为熟词；');
-    toast.querySelector('button')!.click();
+    expect(toast.classList.contains('ok')).toBe(true);
+    // 一行主结论 + 撤销 + 可展开详情
+    expect(toast.querySelector('.msg')!.textContent).toBe('「abandon」已标为熟词，记入“本地熟词本”');
+    const det = toast.querySelector<HTMLElement>('.t-details')!;
+    expect(det.hidden).toBe(true);
+    expect(det.textContent).toContain('已从“我的生词本”删除 abandon');
+    toast.querySelector<HTMLElement>('[data-act="toast-details"]')!.click();
+    expect(det.hidden).toBe(false);
+    toast.querySelector<HTMLElement>('.t-act')!.click();
     await flush();
-    expect(actions.unmarkKnown).toHaveBeenCalledWith('abandon');
-    expect(q('.toast')!.textContent).toContain('已加回 abandon');
+    expect(backend.unmarkKnown).toHaveBeenCalledWith('abandon');
+    // 撤销提示与原操作对称：逐本说明加回了哪些词
+    expect(q('.toast .msg')!.textContent).toBe('已撤销，「abandon」恢复高亮，已加回“我的生词本”');
+    expect(q('.toast .t-details')!.textContent).toContain('已加回“我的生词本”：abandon');
   });
 
   it('认识：含不可撤销的远端删除与同形异义词时先确认；勾选后带 confirmed 再调用', async () => {
@@ -239,19 +254,49 @@ describe('ShadowCardView', () => {
     expect(q('.toast')!.textContent).toContain('删除 lay');
   });
 
+  it('锚点被重建（加入生词本后重扫）时换到同位置的新 mark，卡片不跳位、不换配色', async () => {
+    view = new ShadowCardView(document, makeActions(), makeBackend());
+    view.open(mark, data());
+    await flush();
+    // 模拟 engine 重扫：旧 mark 被替换为同一原形的新 mark
+    const p = mark.parentElement!;
+    p.innerHTML = 'They <hnw-mark data-lemma="abandon"><hnw-w>abandoned</hnw-w></hnw-mark> it.';
+    await flush();
+    const fresh = document.querySelector('hnw-mark')!;
+    expect(fresh).not.toBe(mark);
+    expect(view.anchor).toBe(fresh);
+    expect(fresh.hasAttribute('data-hnw-active')).toBe(true);
+    expect(view.isOpen).toBe(true);
+  });
+
+  it('单词已在用户生词本（入口词条被生词本一行释义覆盖）时仍显示词典完整释义，生词本释义作为附加信息', async () => {
+    const backend = makeBackend({
+      lookupDict: vi.fn(async () => ({ word: 'deliberate', short: 'adj. 故意的', full: 'adj. 故意的；深思熟虑的\nvt. 仔细考虑；商议' })),
+    });
+    view = new ShadowCardView(document, makeActions(), backend);
+    view.open(mark, data({ entry: { word: 'deliberate', short: '故意的', full: '故意的' } }));
+    await flush();
+    expect(q('.defs')!.textContent).toContain('仔细考虑');
+    // 生词本释义已包含在词典释义里：不重复显示
+    expect(q('.user-trans')).toBeNull();
+    view.update(data({ entry: { word: 'deliberate', short: '审慎的', full: '审慎的（我的笔记）' } }));
+    await flush();
+    expect(q('.user-trans')!.textContent).toContain('审慎的（我的笔记）');
+  });
+
   it('加入生词本：按默认目标加入，toast 写明加到哪里，按钮变为已收藏，可撤销', async () => {
     const backend = makeBackend();
     view = new ShadowCardView(document, makeActions(), backend);
     view.open(mark, data({ entry: { word: 'abandon', phonetic: 'ә', short: '放弃', full: '' } }));
     await flush();
-    expect(q('.hints')!.textContent).toContain('写入 我的生词本');
+    expect(q('.hints')!.textContent).toContain('加入 → 我的生词本');
     q('[data-act="add"]')!.click();
     await flush();
     expect(backend.addWord).toHaveBeenCalledWith({ word: 'abandoned', lemma: 'abandon', trans: '放弃', phonetic: 'ә' });
-    expect(q('.toast')!.textContent).toContain('已加入“我的生词本”');
+    expect(q('.toast .msg')!.textContent).toBe('「abandon」已加入“我的生词本”');
     expect(q('[data-act="add"]')!.getAttribute('aria-pressed')).toBe('true');
     expect(q('[data-act="add"]')!.textContent).toContain('已在生词本');
-    q('.toast button')!.click();
+    q('.toast .t-act')!.click();
     await flush();
     expect(backend.removeWord).toHaveBeenCalledWith('abandon', ['local:mine']);
     expect(q('.toast')!.textContent).toContain('已撤销加入');
@@ -274,8 +319,9 @@ describe('ShadowCardView', () => {
     q('[data-act="add"]')!.click();
     await flush();
     expect(q('.toast')!.classList.contains('err')).toBe(true);
-    expect(q('.toast')!.textContent).toContain('未登录');
-    expect(q('.toast button')).toBeNull();
+    expect(q('.toast')!.getAttribute('role')).toBe('alert');
+    expect(q('.toast .msg')!.textContent).toBe('「abandon」未能加入生词本：未登录');
+    expect(q('.toast .t-act')).toBeNull();
     expect(q('[data-act="add"]')!.getAttribute('aria-pressed')).toBe('false');
   });
 
@@ -293,6 +339,10 @@ describe('ShadowCardView', () => {
       ['src:youdao:9', false, true],
     ]);
     expect(panel.textContent).toContain('有道只能加到默认分组');
+    // 点按置灰项：toast 说明原因
+    panel.querySelector<HTMLElement>('[data-act="opt-off"]')!.click();
+    await flush();
+    expect(q('.toast .msg')!.textContent).toContain('有道只能加到默认分组');
     boxes[1]!.click();
     expect(q('[data-act="targets-apply"]')!.textContent).toContain('2');
     q('[data-act="targets-apply"]')!.click();
@@ -315,8 +365,11 @@ describe('ShadowCardView', () => {
     await flush();
     const btn = q('[data-act="add"]')!;
     expect(btn.getAttribute('aria-disabled')).toBe('true');
-    expect(q('.hint.has-warn')!.textContent).toContain('有道只能加到默认分组');
-    btn.click();
+    expect(q('.hint-sum .warn')!.textContent).toContain('没有可写入的生词本');
+    q('[data-act="hints"]')!.click();
+    expect(q('.hint-details')!.textContent).toContain('有道只能加到默认分组');
+    // 展开说明会重绘底栏，重新取按钮
+    q('[data-act="add"]')!.click();
     await flush();
     expect(backend.addWord).not.toHaveBeenCalled();
     expect(q('.toast')!.textContent).toContain('无法加入');
@@ -361,9 +414,11 @@ describe('ShadowCardView', () => {
     q('[data-act="add"]')!.click();
     await flush();
     expect(backend.removeWord).toHaveBeenCalledWith('abandon', ['local:mine']);
-    q('.toast button')!.click();
+    expect(q('.toast .msg')!.textContent).toBe('「abandon」已移出“我的生词本”');
+    q('.toast .t-act')!.click();
     await flush();
     expect(backend.addWord).toHaveBeenCalledWith(expect.objectContaining({ targets: ['local:mine'] }));
+    expect(q('.toast .msg')!.textContent).toContain('已撤销移出：「abandon」已加入“我的生词本”');
   });
 
   it('强调色取自单词的高亮颜色并保证可读', () => {
@@ -377,15 +432,20 @@ describe('ShadowCardView', () => {
     expect(luminance(accent)).toBeLessThan(0.2);
   });
 
-  it('窄视口使用底部卡片布局，toast 移到顶部', async () => {
+  it('窄视口使用底部卡片布局；目标面板占满卡片，toast 贴在卡片上沿', async () => {
     vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(390);
     view = new ShadowCardView(document, makeActions(), makeBackend());
     view.open(mark, data());
     expect(q('.card')!.classList.contains('sheet')).toBe(true);
     await flush();
+    q('[data-act="targets"]')!.click();
+    expect(q('.card')!.classList.contains('paneled')).toBe(true);
+    q('[data-act="panel-cancel"]')!.click();
+    expect(q('.card')!.classList.contains('paneled')).toBe(false);
+    vi.spyOn(q('.card')!, 'getBoundingClientRect').mockReturnValue({ top: 500 } as DOMRect);
     q('[data-act="add"]')!.click();
     await flush();
-    expect(q('.toast')!.classList.contains('top')).toBe(true);
+    expect(q('.toast')!.style.bottom).toBe(`${window.innerHeight - 500 + 8}px`);
     vi.restoreAllMocks();
   });
 });
@@ -426,25 +486,44 @@ describe('word-actions', () => {
     expect(out[1]!.name).toContain('无标签');
   });
 
-  it('describeKnownResult / describeAddResult / describePreview', () => {
-    expect(
-      describeKnownResult(
-        {
-          ok: true,
-          lemma: 'run',
-          deleted: [],
-          message: '已标记为熟词；“欧路词典 · 已掌握单词”未处理：只读',
-          written: [
-            { bookId: 'known:local', name: '本地熟词本', ok: true, words: ['run'] },
-            { bookId: 'src:eudic:mastered', name: '欧路词典 · 已掌握单词', ok: false, words: [], error: '只读', skipped: true },
-          ],
-        },
-        'run',
-      ),
-    ).toBe('「run」已标为熟词，记入“本地熟词本”；“欧路词典 · 已掌握单词”未处理：只读');
+  it('knownNotice / addNotice / removeNotice / undoKnownNotice / describePreview', () => {
+    const known = {
+      ok: true,
+      lemma: 'run',
+      deleted: [{ bookId: 'src:youdao:0', deleted: ['ran', 'runs'], failed: [] }],
+      message: '已标记为熟词；“欧路词典 · 已掌握单词”未处理：只读；已从“有道 · 无标签”删除 ran、runs',
+      written: [
+        { bookId: 'known:local', name: '本地熟词本', ok: true, words: ['run'] },
+        { bookId: 'src:eudic:mastered', name: '欧路词典 · 已掌握单词', ok: false, words: [], error: '只读', skipped: true },
+      ],
+    };
+    const kn = knownNotice(known, 'run');
+    expect(kn).toEqual({
+      level: 'ok',
+      title: '「run」已标为熟词，记入“本地熟词本”（1 处跳过）',
+      details: ['“欧路词典 · 已掌握单词”未处理：只读', '已从“有道 · 无标签”删除 ran、runs'],
+    });
+    // 远端删除失败：部分失败样式
+    const failedKnown = { ...known, deleted: [{ bookId: 'src:youdao:0', deleted: [], failed: [{ word: 'ran', error: 'HTTP 500' }] }] };
+    expect(knownNotice(failedKnown, 'run').level).toBe('warn');
+    expect(knownNotice(failedKnown, 'run').title).toMatch(/^部分失败：.*1 处失败/);
+    // 撤销：逐本说明加回/未加回
+    const undo = undoKnownNotice(known, { ok: true, restored: ['ran'], message: '已撤销；已加回 ran；runs 已从来源删除，无法自动加回' }, 'run', () => '有道 · 无标签');
+    expect(undo.level).toBe('warn');
+    expect(undo.title).toBe('已撤销，「run」恢复高亮（1 个词形未能加回）');
+    expect(undo.details).toEqual(['已加回“有道 · 无标签”：ran', '未能加回“有道 · 无标签”：runs', 'runs 已从来源删除，无法自动加回']);
+
     const added = { ok: true, lemma: 'run', added: [{ bookId: 'local:mine', name: '我的生词本', ok: true, words: ['run'] }], removedKnown: [], message: '已加入“我的生词本”' };
-    expect(describeAddResult(added)).toBe('已加入“我的生词本”');
-    expect(describeAddResult(added, ['src:youdao:0'])).toContain('暂不支持临时目标');
+    expect(addNotice(added, 'run')).toEqual({ level: 'ok', title: '「run」已加入“我的生词本”', details: [] });
+    const partial = {
+      ...added,
+      added: [...added.added, { bookId: 'src:eudic:x', name: '欧路 · 外刊', ok: false, words: [], error: 'HTTP 500' }],
+      message: '已加入“我的生词本”；“欧路 · 外刊”失败：HTTP 500',
+    };
+    expect(addNotice(partial, 'run')).toEqual({ level: 'warn', title: '部分失败：「run」已加入“我的生词本”（1 处失败）', details: ['“欧路 · 外刊”失败：HTTP 500'] });
+    expect(removeNotice({ ok: true, removed: [{ bookId: 'local:mine', name: '我的生词本', ok: true, words: ['run'] }], message: '已从“我的生词本”删除 run' }, 'run').title).toBe(
+      '「run」已移出“我的生词本”',
+    );
     const p = describePreview({
       action: 'known',
       lemma: 'run',

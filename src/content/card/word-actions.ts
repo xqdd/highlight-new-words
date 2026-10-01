@@ -1,6 +1,8 @@
 import { effectiveBookRole } from '@/core/known/sources';
+import { PackagedDictionary } from '@/core/dict/packaged';
+import type { DictEntry } from '@/core/dict/types';
 import { sendToBackground } from '@/core/messaging';
-import type { AddWordResult, MarkKnownResult, RemoveWordResult, WordActionPreview, WordTargetResult } from '@/core/messaging/protocol';
+import type { AddWordResult, MarkKnownResult, RemoveWordResult, WordActionPreview } from '@/core/messaging/protocol';
 import { MY_WORDS_BOOK_ID, type BookId, type Settings } from '@/core/settings/schema';
 import { getSettings } from '@/core/settings/store';
 import { getProviderInfo } from '@/core/source/providers';
@@ -29,6 +31,16 @@ export interface CardBackend {
   confirmKnown(word: string, lemma: string): Promise<MarkKnownResult>;
   /** 读取若干来源词书的状态（判断能否删除、只读原因） */
   sourceStates(ids: BookId[]): Promise<Record<BookId, SourceBookState | undefined>>;
+  /**
+   * 撤销熟词（直接调 background unmarkKnown，拿到“已加回/无法加回”结果做对称提示；
+   * 入口注入的 CardActions.unmarkKnown 返回 void，不能用于展示详情）
+   */
+  unmarkKnown(lemma: string): Promise<{ ok: boolean; restored?: string[]; message?: string }>;
+  /**
+   * 打包词典的完整释义（可选）：单词加入用户生词本后，入口的组合词典会用生词本里的一行释义覆盖完整释义，
+   * 卡片用它始终展示词典完整义项，生词本释义作为附加信息
+   */
+  lookupDict?(lemma: string): Promise<DictEntry | undefined>;
 }
 
 /** “加入生词本”的一个候选目标 */
@@ -101,6 +113,9 @@ export function buildAddTargets(settings: Settings, sources: SourceBookIndex, lo
   return out;
 }
 
+/** 卡片自用的打包词典（与入口的组合词典分开，不受用户生词本释义覆盖） */
+let packagedDict: PackagedDictionary | undefined;
+
 /** 运行时实现：消息转发 background，候选目标读 storage */
 export function createCardBackend(): CardBackend {
   return {
@@ -117,37 +132,135 @@ export function createCardBackend(): CardBackend {
       const index = await getSourceIndex();
       return Object.fromEntries(ids.map((id) => [id, index.books[id]]));
     },
+    unmarkKnown: (lemma) => sendToBackground('unmarkKnown', { lemma }),
+    lookupDict: (lemma) => {
+      // 懒创建：只在打开卡片时加载对应首字母的分片（浏览器对扩展资源有缓存）
+      packagedDict ??= new PackagedDictionary();
+      return packagedDict.lookup(lemma);
+    },
   };
 }
 
 // ---------------- 结果文案（纯函数） ----------------
 
-const names = (rs: WordTargetResult[]) => rs.map((r) => `“${r.name}”`).join('、');
+const names = (rs: { name: string }[]) => rs.map((r) => `“${r.name}”`).join('、');
+/** 英文单词列表用半角逗号连接（中文顿号在西文字体中显示怪异） */
+const wordList = (words: string[]) => words.join(', ');
+
+/** 结果提示的级别：ok 成功（含只读跳过等说明）/ warn 部分失败 / err 全部失败 */
+export type NoticeLevel = 'ok' | 'warn' | 'err';
 
 /**
- * 标记熟词结果 -> toast 文案：先说写进了哪里，再列出从哪些生词本删除了哪些词形、跳过/失败的原因、撤销说明。
- * background 的 message 第一段固定为“已标记为熟词”，其余段落原样保留（包含删除、只读跳过、撤销限制）。
+ * 结果提示：toast 只显示一行 title（主结论），details 折叠在“详情”里（逐项去向、跳过原因、撤销说明）。
+ * 失败（warn/err）用独立的警示样式，首行写明“部分失败”/失败原因，不会与成功混淆。
  */
-export function describeKnownResult(res: MarkKnownResult, fallbackLemma: string): string {
-  const lemma = res.lemma || fallbackLemma;
-  const written = (res.written ?? []).filter((w) => w.ok);
-  const head = written.length ? `「${lemma}」已标为熟词，记入${names(written)}` : `「${lemma}」已标为熟词，不再高亮`;
-  const rest = (res.message || '')
-    .split('；')
-    .map((s) => s.trim())
-    .filter((s) => s && s !== '已标记为熟词');
-  return [head, ...rest].join('；');
+export interface Notice {
+  level: NoticeLevel;
+  title: string;
+  details: string[];
 }
 
-/** 加入生词本结果 -> toast 文案；请求了临时目标但后台按默认目标写入时补充说明 */
-export function describeAddResult(res: AddWordResult, requested?: BookId[]): string {
-  let msg = res.message || (res.ok ? `已加入${names(res.added.filter((a) => a.ok))}` : '加入失败');
-  if (requested?.length) {
-    const want = new Set(requested);
-    const ignored = res.added.some((a) => !want.has(a.bookId));
-    if (ignored) msg += '；当前版本暂不支持临时目标，已按设置中的默认目标加入';
+/** background 的 message 按“；”分段（每段是一个目标的结果或一条说明） */
+function messageParts(message: string | undefined): string[] {
+  return (message || '')
+    .split('；')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** 标题后缀：“（1 处跳过）”“（2 处失败）” */
+function countSuffix(failed: number, skipped: number): string {
+  const parts = [failed ? `${failed} 处失败` : '', skipped ? `${skipped} 处跳过` : ''].filter(Boolean);
+  return parts.length ? `（${parts.join('，')}）` : '';
+}
+
+/**
+ * 标记熟词结果 -> 提示：标题写明记入了哪些熟词本，详情列出从哪些生词本删除了哪些词形、跳过/失败的原因、撤销限制。
+ * background 的 message 第一段固定为“已标记为熟词”，其余段落原样作为详情。
+ */
+export function knownNotice(res: MarkKnownResult, fallbackLemma: string): Notice {
+  const lemma = res.lemma || fallbackLemma;
+  const written = res.written ?? [];
+  const okWritten = written.filter((w) => w.ok);
+  const failed = written.filter((w) => !w.ok && !w.skipped).length + res.deleted.reduce((n, r) => n + r.failed.length, 0);
+  const skipped = written.filter((w) => w.skipped).length + (res.withheld?.length ?? 0);
+  const where = okWritten.length ? `，记入${names(okWritten)}` : '，不再高亮';
+  return {
+    level: failed ? 'warn' : 'ok',
+    title: `${failed ? '部分失败：' : ''}「${lemma}」已标为熟词${where}${countSuffix(failed, skipped)}`,
+    details: messageParts(res.message).filter((s) => s !== '已标记为熟词'),
+  };
+}
+
+/** 加入生词本结果 -> 提示：标题写明加到了哪些生词本；部分失败/全部失败用警示样式 */
+export function addNotice(res: AddWordResult, fallbackLemma: string, prefix = ''): Notice {
+  const lemma = res.lemma || fallbackLemma;
+  const ok = res.added.filter((a) => a.ok);
+  const failed = res.added.filter((a) => !a.ok && !a.skipped).length + res.removedKnown.filter((r) => !r.ok && !r.skipped).length;
+  const skipped = res.added.filter((a) => a.skipped).length;
+  const details = messageParts(res.message).filter((s) => s !== '加入失败' && !s.startsWith('已加入'));
+  if (!res.ok) {
+    // 全部失败：标题直接给出第一个原因，详情逐项列出
+    const reason = res.added.find((a) => !a.ok)?.error ?? (res.added.length ? undefined : res.message);
+    return { level: 'err', title: `${prefix}「${lemma}」未能加入生词本${reason ? `：${reason}` : ''}`, details };
   }
-  return msg;
+  return {
+    level: failed ? 'warn' : 'ok',
+    title: `${prefix}${failed ? '部分失败：' : ''}「${lemma}」已加入${names(ok)}${countSuffix(failed, skipped)}`,
+    details,
+  };
+}
+
+/** 移出生词本（取消收藏）结果 -> 提示 */
+export function removeNotice(res: RemoveWordResult, lemma: string, prefix = ''): Notice {
+  const ok = res.removed.filter((r) => r.ok && r.words.length);
+  const failed = res.removed.filter((r) => !r.ok);
+  const details = messageParts(res.message);
+  if (!res.ok && !ok.length) return { level: 'err', title: `${prefix}「${lemma}」未能移出生词本${failed[0]?.error ? `：${failed[0].error}` : ''}`, details };
+  if (!ok.length) return { level: 'ok', title: `${prefix}生词本中没有「${lemma}」`, details: [] };
+  return {
+    level: failed.length ? 'warn' : 'ok',
+    title: `${prefix}${failed.length ? '部分失败：' : ''}「${lemma}」已移出${names(ok)}${countSuffix(failed.length, 0)}`,
+    details,
+  };
+}
+
+/**
+ * 撤销熟词的提示（与原操作对称）：逐本说明认识时移除的词形哪些已加回、哪些没能加回；
+ * 加回到其他分组、仍在来源熟词本中等情况沿用 background 的说明。
+ * bookName 用于把来源删除报告里的 bookId 换成显示名。
+ */
+export function undoKnownNotice(
+  known: MarkKnownResult,
+  undo: { ok: boolean; restored?: string[]; message?: string },
+  lemma: string,
+  bookName: (id: BookId) => string,
+): Notice {
+  const restored = new Set(undo.restored ?? []);
+  const removed: { name: string; words: string[] }[] = [
+    ...(known.removedLocal ?? []).filter((r) => r.ok && r.words.length).map((r) => ({ name: r.name, words: r.words })),
+    ...known.deleted.filter((r) => r.deleted.length).map((r) => ({ name: bookName(r.bookId), words: r.deleted })),
+  ];
+  const details: string[] = [];
+  let lost = 0;
+  for (const r of removed) {
+    const back = r.words.filter((w) => restored.has(w));
+    const miss = r.words.filter((w) => !restored.has(w));
+    if (back.length) details.push(`已加回“${r.name}”：${wordList(back)}`);
+    if (miss.length) {
+      lost += miss.length;
+      details.push(`未能加回“${r.name}”：${wordList(miss)}`);
+    }
+  }
+  // background 的补充说明（加回到同来源其他分组、无法加回、仍在来源熟词本中）
+  const notes = messageParts(undo.message).filter((s) => s !== '已撤销' && !s.startsWith('已加回'));
+  details.push(...notes);
+  const stillKnown = notes.some((s) => s.includes('依然不会高亮'));
+  if (!undo.ok) return { level: 'err', title: `撤销失败：「${lemma}」仍是熟词`, details };
+  const head = stillKnown ? `已撤销本地熟词标记，「${lemma}」仍在来源熟词本中` : `已撤销，「${lemma}」恢复高亮`;
+  const backTo = removed.filter((r) => r.words.some((w) => restored.has(w)));
+  const tail = lost ? `（${lost} 个词形未能加回）` : backTo.length === 1 ? `，已加回${names(backTo)}` : backTo.length ? `，已加回 ${backTo.length} 本生词本` : '';
+  return { level: lost || stillKnown ? 'warn' : 'ok', title: head + tail, details };
 }
 
 /** 说明行的一段文字；warn=true 的段落（跳过/不支持的原因）用警示色显示 */

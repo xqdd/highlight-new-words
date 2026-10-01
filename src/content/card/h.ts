@@ -55,6 +55,8 @@ const ICONS = {
   remove: { paths: ['M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13'] },
   caret: { paths: ['M6 9l6 6 6-6'], width: 2.2 },
   info: { paths: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 11v5M12 8h.01'] },
+  error: { paths: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M9.5 9.5l5 5M14.5 9.5l-5 5'] },
+  alert: { paths: ['M12 3.5 2.5 20h19z', 'M12 10v4.5M12 17.2h.01'] },
 } satisfies Record<string, IconDef>;
 
 export type IconName = keyof typeof ICONS;

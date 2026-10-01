@@ -1,19 +1,23 @@
+import type { DictEntry } from '@/core/dict/types';
 import type { WordActionPreview } from '@/core/messaging/protocol';
 import type { BookId } from '@/core/settings/schema';
 import type { CardStyle } from '@/core/theme/themes';
 import type { BookMeta, SourceBookState } from '@/core/wordbook/types';
-import { TAG_CARD_HOST, TAG_WORD } from '../engine/dom';
+import { ATTR_LEMMA, TAG_CARD_HOST, TAG_MARK, TAG_WORD } from '../engine/dom';
 import { ACTIVE_MARK_CSS, CARD_CSS } from './card-css';
 import { append, h, icon, type Child } from './h';
 import type { CardActions, CardData, CardView } from './types';
 import {
+  addNotice,
   createCardBackend,
-  describeAddResult,
-  describeKnownResult,
   describePreview,
+  knownNotice,
+  removeNotice,
+  undoKnownNotice,
   type AddTargetOption,
   type CardBackend,
   type HintSegment,
+  type Notice,
 } from './word-actions';
 import { describeForm, dictLinks, formatPhonetic, parseDefinitions } from './word-info';
 
@@ -44,7 +48,18 @@ interface WordContext {
   knownPreview?: WordActionPreview;
   /** deletableBooks 中各来源词书的状态（判断是否真的能删） */
   deleteStates?: Record<BookId, SourceBookState | undefined>;
+  /** 打包词典的完整释义（不受用户生词本释义覆盖） */
+  dict?: DictEntry;
 }
+
+/** toast 上的操作按钮（撤销） */
+interface ToastAction {
+  label: string;
+  run: () => Promise<void>;
+}
+
+/** 锚点被 engine 重建（如加入生词本后全量重扫）时，在该距离内找同一原形的新 mark 作为锚点 */
+const REANCHOR_MAX_DISTANCE = 240;
 
 /**
  * 单词卡片（Shadow DOM 宿主 + 原生 DOM 渲染，不依赖框架，不使用 innerHTML）。
@@ -79,6 +94,12 @@ export class ShadowCardView implements CardView {
   private draftTargets = new Set<BookId>();
   /** 认识确认面板：是否同时删除同形异义词形 */
   private confirmHomographs = false;
+  /** 说明行是否展开详情（默认只显示一行去向摘要） */
+  private hintsOpen = false;
+  /** 锚点最近一次的位置（锚点被重建后据此找回同一位置的新 mark） */
+  private anchorRect: DOMRect | null = null;
+  /** 卡片打开期间监听锚点是否被移出文档 */
+  private anchorObserver: MutationObserver | null = null;
   private busy: 'add' | 'known' | 'delete' | null = null;
   private deleteConfirm = false;
   private deleteConfirmTimer: ReturnType<typeof setTimeout> | undefined;
@@ -138,6 +159,7 @@ export class ShadowCardView implements CardView {
     if (!this.host.isConnected) this.doc.documentElement.appendChild(this.host);
     if (!sameWord) {
       this.expanded = false;
+      this.hintsOpen = false;
       this.panel = 'none';
       this.busy = null;
       this.resetDeleteConfirm();
@@ -153,6 +175,7 @@ export class ShadowCardView implements CardView {
     this.hideToast();
     this.card.hidden = false;
     this.layout();
+    this.watchAnchor();
     if (!wasOpen) {
       this.card.classList.remove('in');
       // 下一帧再加 .in 触发过渡；同步读一次布局保证起始状态生效
@@ -174,12 +197,15 @@ export class ShadowCardView implements CardView {
     this.card.hidden = true;
     this.card.classList.remove('in', 'dragging');
     this.card.style.removeProperty('--drag');
+    this.unwatchAnchor();
     this.setActiveAnchor(null);
+    this.anchorRect = null;
     this.data = null;
     this.panel = 'none';
     this.ctxSeq++;
     this.resetDeleteConfirm();
-    this.toast.classList.remove('top');
+    // 卡片关闭后 toast 回到视口底部
+    this.placeToast();
   }
 
   contains(event: Event): boolean {
@@ -188,6 +214,8 @@ export class ShadowCardView implements CardView {
 
   setStyle(style: CardStyle): void {
     this.style = style;
+    // 入口在存储变化（如加入生词本触发重扫）后调用；锚点可能刚被重建，先找回新锚点再取色
+    if (this.isOpen && this._anchor && !this._anchor.isConnected) this.reanchor();
     if (this.isOpen && this._anchor) this.applyColors(this._anchor);
   }
 
@@ -197,6 +225,7 @@ export class ShadowCardView implements CardView {
     cancelAnimationFrame(this.rafId);
     clearTimeout(this.toastTimer);
     clearTimeout(this.deleteConfirmTimer);
+    this.unwatchAnchor();
     this.setActiveAnchor(null);
     this.doc.getElementById(ACTIVE_STYLE_ID)?.remove();
     this.host.remove();
@@ -223,6 +252,7 @@ export class ShadowCardView implements CardView {
       this.addTargets = t;
       apply({});
     }, ignore);
+    this.backend.lookupDict?.(data.lemma).then((dict) => dict && apply({ dict }), ignore);
     if (data.deletableBooks.length) {
       this.backend.sourceStates(data.deletableBooks.map((b) => b.id)).then((s) => apply({ deleteStates: s }), ignore);
     }
@@ -274,10 +304,15 @@ export class ShadowCardView implements CardView {
     this.data = data;
     const d = this.doc;
     const e = data.entry;
-    const loading = !e && this.awaitingEntry;
-    const phon = formatPhonetic(e?.phonetic);
+    const dict = this.ctx.dict;
+    // 释义始终以打包词典的完整义项为主：入口的组合词典在单词进入用户生词本后会用生词本里的一行释义覆盖它，
+    // 生词本释义与词典不同时作为附加信息单独显示
+    const main = dict?.full || dict?.short ? dict : e;
+    const userTrans = main !== e ? extraUserTrans(e, dict) : undefined;
+    const loading = !main && this.awaitingEntry;
+    const phon = formatPhonetic(e?.phonetic ?? dict?.phonetic);
     const form = describeForm(data.surface, data.lemma);
-    const defs = parseDefinitions(e?.short, e?.full);
+    const defs = parseDefinitions(main?.short, main?.full);
     const clamp = !this.expanded && defs.length > DEF_CLAMP_LINES;
 
     let defsNode: Child[];
@@ -294,7 +329,8 @@ export class ShadowCardView implements CardView {
 
     this.card.setAttribute('aria-label', `单词 ${data.lemma}`);
     const keep = ['dark', 'in', 'above', 'dragging'].filter((c) => this.card.classList.contains(c));
-    this.card.className = ['card', this.sheet ? 'sheet' : 'popover', ...keep].join(' ');
+    // paneled：内联面板打开；手机底部卡片上面板占满卡片（隐藏释义与底栏），操作按钮不被遮挡
+    this.card.className = ['card', this.sheet ? 'sheet' : 'popover', ...(this.panel !== 'none' ? ['paneled'] : []), ...keep].join(' ');
 
     const head = h(
       d,
@@ -322,6 +358,7 @@ export class ShadowCardView implements CardView {
       form &&
         h(d, 'div', { class: 'form' }, h(d, 'b', { lang: 'en' }, data.surface), h(d, 'span', { class: 'rel' }, form), h(d, 'span', {}, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma))),
       ...defsNode,
+      userTrans && h(d, 'div', { class: 'user-trans' }, h(d, 'span', { class: 'ut-label' }, '生词本释义'), h(d, 'span', {}, userTrans)),
       data.books.length > 0 && h(d, 'div', { class: 'tags' }, ...data.books.map((b) => bookTag(d, b))),
     );
 
@@ -414,26 +451,76 @@ export class ShadowCardView implements CardView {
       );
     }
 
-    // ---- 说明行 ----
-    const hints: HTMLElement[] = [];
-    if (!collected && eff) {
+    // ---- 说明行：默认一行去向摘要（加入 → 哪里 · 认识 → 哪里），逐项去向与跳过/只读原因折叠在“i”详情里 ----
+    const summary: { text: string; warn?: boolean }[] = [];
+    const details: HTMLElement[] = [];
+    let skips = 0;
+    if (collected) {
+      if (ctx.collectedIn?.length) summary.push({ text: `已在 ${shortNames(ctx.collectedIn.map((id) => this.targetName(id)))}` });
+    } else if (eff) {
       const segs: HintSegment[] = [
         usable!.length
-          ? { text: `写入 ${usable!.map((t) => t.name).join('、')}${this.tempAddTargets ? '（临时）' : ''}`, warn: false }
+          ? { text: `写入 ${usable!.map((t) => t.name).join('、')}${this.tempAddTargets ? '（本页临时选择）' : ''}`, warn: false }
           : { text: '没有可写入的生词本', warn: true },
       ];
-      for (const t of eff.filter((x) => x.disabledReason)) segs.push({ text: `${t.name}：${t.disabledReason}`, warn: true });
-      hints.push(hintLine(d, '加入', segs));
+      for (const t of eff.filter((x) => x.disabledReason)) segs.push({ text: `${t.name}：${t.disabledReason}，已跳过`, warn: true });
+      skips += segs.length - 1;
+      summary.push(
+        usable!.length
+          ? { text: `加入 → ${shortNames(usable!.map((t) => t.name))}${this.tempAddTargets ? '（本页）' : ''}` }
+          : { text: '加入 → 没有可写入的生词本', warn: true },
+      );
+      details.push(hintLine(d, '加入', segs));
     }
-    if (ctx.knownPreview) hints.push(hintLine(d, '认识', describePreview(ctx.knownPreview).segments));
-    if (deleteReason) hints.push(hintLine(d, '移出', [{ text: `来源生词本：${deleteReason}`, warn: true }]));
+    if (ctx.knownPreview) {
+      const segs = describePreview(ctx.knownPreview).segments;
+      const okWrite = ctx.knownPreview.write.filter((w) => w.ok).map((w) => w.name);
+      summary.push({ text: `认识 → ${shortNames(okWrite.length ? okWrite : ['本地熟词本'])}` });
+      skips += segs.filter((x) => x.warn).length;
+      details.push(hintLine(d, '认识', segs));
+    }
+    if (deleteReason) {
+      skips++;
+      details.push(hintLine(d, '移出', [{ text: `来源生词本：${deleteReason}`, warn: true }]));
+    }
+    const hints: HTMLElement[] = [];
+    if (summary.length) {
+      hints.push(
+        h(
+          d,
+          'div',
+          { class: 'hint-sum' },
+          h(
+            d,
+            'span',
+            { class: 'sum-text', title: summary.map((x) => x.text).join(' · ') },
+            ...summary.map((x, i) => h(d, 'span', x.warn ? { class: 'warn' } : {}, i ? ` · ${x.text}` : x.text)),
+          ),
+          details.length > 0 &&
+            h(
+              d,
+              'button',
+              {
+                class: `info${skips ? ' has-skip' : ''}`,
+                'data-act': 'hints',
+                'aria-expanded': this.hintsOpen ? 'true' : 'false',
+                'aria-label': this.hintsOpen ? '收起说明' : skips ? `查看说明（${skips} 项跳过或不支持）` : '查看说明',
+                title: skips ? `${skips} 项跳过或不支持，点按查看原因` : '查看详细去向',
+              },
+              icon(d, 'info'),
+              skips > 0 && h(d, 'span', {}, String(skips)),
+            ),
+        ),
+      );
+      if (this.hintsOpen) hints.push(h(d, 'div', { class: 'hint-details' }, ...details));
+    }
 
     return h(
       d,
       'div',
       { class: 'foot' },
       h(d, 'div', { class: 'actions' }, knownBtn, split, deleteBtn),
-      hints.length > 0 && h(d, 'div', { class: 'hints' }, ...hints),
+      hints.length > 0 && h(d, 'div', { class: 'hints', lang: 'zh-CN' }, ...hints),
       h(
         d,
         'div',
@@ -459,7 +546,9 @@ export class ShadowCardView implements CardView {
           h(
             d,
             'label',
-            { class: `opt${t.disabledReason ? ' off' : ''}` },
+            t.disabledReason
+              ? { class: 'opt off', 'data-act': 'opt-off', 'data-name': t.name, 'data-reason': t.disabledReason }
+              : { class: 'opt' },
             h(d, 'input', {
               type: 'checkbox',
               'data-target': t.id,
@@ -483,7 +572,7 @@ export class ShadowCardView implements CardView {
       { class: 'panel', role: 'group', 'aria-label': '加入到' },
       h(d, 'div', { class: 'panel-title' }, '加入到'),
       h(d, 'div', { class: 'opts' }, ...list),
-      h(d, 'p', { class: 'panel-note' }, '仅对本页有效；长期修改请到 设置 → 生词本 → 单词操作'),
+      h(d, 'p', { class: 'panel-note' }, '只对本页的“加入”生效；长期修改：扩展设置 → 生词本 → 单词操作'),
       h(
         d,
         'div',
@@ -536,7 +625,11 @@ export class ShadowCardView implements CardView {
   }
 
   private targetNames(ids: BookId[]): string {
-    return ids.map((id) => this.addTargets?.find((t) => t.id === id)?.name ?? id).join('、');
+    return ids.map((id) => this.targetName(id)).join('、');
+  }
+
+  private targetName(id: BookId): string {
+    return this.addTargets?.find((t) => t.id === id)?.name ?? id;
   }
 
   // ---------------- 布局 ----------------
@@ -549,21 +642,27 @@ export class ShadowCardView implements CardView {
   }
 
   private layout(): void {
-    this.toast.classList.toggle('top', this.isOpen && this.sheet);
     if (this.sheet) {
       // 底部卡片的位置完全由 CSS 决定
       this.card.style.removeProperty('top');
       this.card.style.removeProperty('left');
-      return;
+      if (this._anchor?.isConnected) this.anchorRect = this._anchor.getBoundingClientRect();
+    } else {
+      this.positionPopover();
     }
-    this.positionPopover();
+    this.placeToast();
   }
 
-  /** 浮层定位：优先在单词下方，空间不足放上方；水平以单词为中心并限制在视口内 */
+  /**
+   * 浮层定位：优先在单词下方，空间不足放上方；水平以单词为中心并限制在视口内。
+   * 锚点已被移出文档（engine 重建了高亮）且找不到接替的 mark 时保持原位，不跳到视口左上角。
+   */
   private positionPopover(): void {
-    const anchor = this._anchor;
-    if (!anchor) return;
+    let anchor = this._anchor;
+    if (anchor && !anchor.isConnected && this.reanchor()) anchor = this._anchor;
+    if (!anchor || !anchor.isConnected) return;
     const r = anchor.getBoundingClientRect();
+    this.anchorRect = r;
     const vw = this.doc.documentElement.clientWidth || window.innerWidth;
     const vh = window.innerHeight;
     const cw = this.card.offsetWidth;
@@ -577,6 +676,49 @@ export class ShadowCardView implements CardView {
     this.card.classList.toggle('above', placeAbove);
     this.card.style.top = `${Math.round(top)}px`;
     this.card.style.left = `${Math.round(left)}px`;
+  }
+
+  /** 卡片打开期间监听 DOM：锚点被 engine 重建（加入生词本后重扫、SPA 局部刷新）时换到新的 mark */
+  private watchAnchor(): void {
+    if (this.anchorObserver || typeof MutationObserver === 'undefined') return;
+    this.anchorObserver = new MutationObserver(() => {
+      const a = this._anchor;
+      // 只在锚点脱离文档时处理；回调里只做 isConnected 判断，大页面上开销可忽略
+      if (!this.isOpen || !a || a.isConnected) return;
+      if (this.reanchor() && this.isOpen && this._anchor) this.applyColors(this._anchor);
+    });
+    this.anchorObserver.observe(this.doc.body ?? this.doc.documentElement, { childList: true, subtree: true });
+  }
+
+  private unwatchAnchor(): void {
+    this.anchorObserver?.disconnect();
+    this.anchorObserver = null;
+  }
+
+  /**
+   * 锚点被移出文档后：找同一原形、离原位置最近（≤ REANCHOR_MAX_DISTANCE）的新 mark 接替锚点并重新定位。
+   * 找不到时返回 false，卡片保持原位与原配色（调用方决定是否关闭）。
+   */
+  private reanchor(): boolean {
+    const lemma = this.data?.lemma;
+    const last = this.anchorRect;
+    if (!lemma || !last) return false;
+    let best: HTMLElement | null = null;
+    let bestDistance = REANCHOR_MAX_DISTANCE;
+    for (const m of this.doc.querySelectorAll<HTMLElement>(TAG_MARK)) {
+      if (m.getAttribute(ATTR_LEMMA) !== lemma) continue;
+      const r = m.getBoundingClientRect();
+      const distance = Math.hypot(r.left - last.left, r.top - last.top);
+      if (distance <= bestDistance) {
+        best = m;
+        bestDistance = distance;
+      }
+    }
+    if (!best) return false;
+    this.setActiveAnchor(best);
+    this.anchorRect = best.getBoundingClientRect();
+    if (!this.sheet) this.positionPopover();
+    return true;
   }
 
   /** 底部卡片打开时，若单词会被卡片挡住，把页面滚动到单词位于卡片上方 */
@@ -598,7 +740,7 @@ export class ShadowCardView implements CardView {
     this.rafId = requestAnimationFrame(() => {
       const anchor = this._anchor;
       if (!this.isOpen || !anchor) return;
-      if (!anchor.isConnected) {
+      if (!anchor.isConnected && !this.reanchor()) {
         this.close();
         return;
       }
@@ -610,7 +752,7 @@ export class ShadowCardView implements CardView {
         this.layout();
       }
       if (this.sheet) return;
-      const r = anchor.getBoundingClientRect();
+      const r = this._anchor!.getBoundingClientRect();
       if (r.bottom < 0 || r.top > window.innerHeight) {
         this.close();
         return;
@@ -653,6 +795,8 @@ export class ShadowCardView implements CardView {
    * 单词没有可用颜色（如“无样式”只显示括号译文）时用主题的 accent。
    */
   private applyColors(anchor: HTMLElement): void {
+    // 脱离文档的锚点取不到计算样式（会被误判为亮色页面），保持当前配色
+    if (!anchor.isConnected) return;
     const pageDark = isDarkBackground(anchor);
     const cardIsLight = luminance(this.style.background) > 0.5;
     const useDark = pageDark && cardIsLight;
@@ -725,6 +869,14 @@ export class ShadowCardView implements CardView {
         this.expanded = true;
         this.rerender();
         break;
+      case 'hints':
+        this.hintsOpen = !this.hintsOpen;
+        this.rerender();
+        break;
+      case 'opt-off':
+        // 置灰的目标（只读分组等）：触屏没有 tooltip，点按时用 toast 说明原因
+        this.showNotice({ level: 'warn', title: `${btn.dataset.name ?? '该生词本'}不能加词：${btn.dataset.reason ?? '不支持'}`, details: [] });
+        break;
       case 'known':
         await this.onKnown(data);
         break;
@@ -793,11 +945,16 @@ export class ShadowCardView implements CardView {
       let res = await pending;
       // 用户勾选了同形异义词：background 第一次调用扣下了它们（withheld），带 confirmed 再调一次（幂等）
       if (withHomographs && res.withheld?.length) res = await this.backend.confirmKnown(data.surface, data.lemma);
-      this.showToast(describeKnownResult(res, data.lemma), {
+      const known = res;
+      // 来源删除报告只有 bookId：用打开卡片时的预览/候选目标换成显示名
+      const nameOf = (id: BookId) =>
+        this.ctx.knownPreview?.remove.find((r) => r.bookId === id)?.name ?? this.addTargets?.find((t) => t.id === id)?.name ?? id;
+      this.showNotice(knownNotice(known, data.lemma), {
         label: '撤销',
         run: async () => {
-          const undo = await this.actions.unmarkKnown(data.lemma);
-          this.showToast(undo && undo.message ? `「${data.lemma}」${undo.message}` : `已撤销，「${data.lemma}」恢复高亮`);
+          // 直接调 background 拿到“已加回/无法加回”，提示与原操作对称（逐本说明还原结果）
+          const undo = await this.backend.unmarkKnown(data.lemma);
+          this.showNotice(undoKnownNotice(known, undo, data.lemma, nameOf));
         },
       });
     } catch (err) {
@@ -851,20 +1008,25 @@ export class ShadowCardView implements CardView {
       const addedIds = res.added.filter((a) => a.ok).map((a) => a.bookId);
       if (res.ok && this.data?.lemma === data.lemma) this.ctx = { ...this.ctx, collected: true, collectedIn: addedIds };
       this.refreshKnownPreview(data);
-      this.showToast(
-        describeAddResult(res, targets),
+      // 请求了临时目标时，后台按 targets 写入（完全取代默认目标）；结果按实际写入逐项说明
+      const restoredKnown = res.removedKnown.filter((r) => r.ok && r.words.length);
+      this.showNotice(
+        addNotice(res, data.lemma),
         res.ok
           ? {
               label: '撤销',
               run: async () => {
                 const undo = await this.backend.removeWord(data.lemma, addedIds);
-                if (this.data?.lemma === data.lemma) this.ctx = { ...this.ctx, collected: false, collectedIn: [] };
+                if (this.data?.lemma === data.lemma && undo.ok) this.ctx = { ...this.ctx, collected: false, collectedIn: [] };
+                this.refreshKnownPreview(data);
                 this.rerender();
-                this.showToast(undo.ok ? `已撤销加入：${undo.message}` : `撤销未完成：${undo.message}`, undefined, !undo.ok);
+                const n = removeNotice(undo, data.lemma, '已撤销加入：');
+                // 加入时从熟词本移除的词，撤销加入时 background 会加回（10 分钟内）
+                for (const r of restoredKnown) n.details.push(`已重新记入“${r.name}”：${r.words.join(', ')}`);
+                this.showNotice(n);
               },
             }
           : undefined,
-        !res.ok,
       );
     } catch (err) {
       this.showToast(`加入失败：${errorText(err)}`, undefined, true);
@@ -884,20 +1046,21 @@ export class ShadowCardView implements CardView {
       if (this.data?.lemma === data.lemma && res.ok) this.ctx = { ...this.ctx, collected: false, collectedIn: [] };
       this.refreshKnownPreview(data);
       const removedIds = res.removed.filter((r) => r.ok && r.words.length).map((r) => r.bookId);
-      this.showToast(
-        res.message,
+      this.showNotice(
+        removeNotice(res, data.lemma),
         res.ok && removedIds.length
           ? {
               label: '撤销',
               run: async () => {
+                // 只加回刚移出的那几本（targets 完全取代默认目标）
                 const again = await this.backend.addWord({ word: data.surface, lemma: data.lemma, targets: removedIds });
-                if (this.data?.lemma === data.lemma && again.ok) this.ctx = { ...this.ctx, collected: true, collectedIn: removedIds };
+                if (this.data?.lemma === data.lemma && again.ok) this.ctx = { ...this.ctx, collected: true, collectedIn: again.added.filter((a) => a.ok).map((a) => a.bookId) };
+                this.refreshKnownPreview(data);
                 this.rerender();
-                this.showToast(describeAddResult(again, removedIds), undefined, !again.ok);
+                this.showNotice(addNotice(again, data.lemma, '已撤销移出：'));
               },
             }
           : undefined,
-        !res.ok,
       );
     } catch (err) {
       this.showToast(`移出失败：${errorText(err)}`, undefined, true);
@@ -946,32 +1109,101 @@ export class ShadowCardView implements CardView {
 
   // ---------------- toast ----------------
 
-  /** 结果提示：底部卡片打开时显示在顶部（不挡卡片）；error=true 时用警示样式 */
-  private showToast(message: string, action?: { label: string; run: () => Promise<void> }, error = false): void {
+  /** 简单提示（无详情）：error=true 时用失败样式 */
+  private showToast(message: string, action?: ToastAction, error = false): void {
+    this.showNotice({ level: error ? 'err' : 'ok', title: message, details: [] }, action);
+  }
+
+  /**
+   * 结果提示：一行主结论 + 可选“撤销” + 可展开的“详情”（逐项去向、跳过原因）。
+   * 成功为深色条；部分失败（warn，黄色图标）与失败（err，红色底）用独立的警示样式。
+   * 位置：始终在视口底部；手机底部卡片打开时放在卡片正上方，不遮挡卡片。
+   */
+  private showNotice(notice: Notice, action?: ToastAction): void {
     const d = this.doc;
     if (!this.host.isConnected) d.documentElement.appendChild(this.host);
     clearTimeout(this.toastTimer);
-    const btn =
+    const actionBtn =
       action &&
-      h(d, 'button', {
-        'data-act': 'toast',
-        onclick: async () => {
-          btn!.setAttribute('disabled', '');
-          try {
-            await action.run();
-          } catch (err) {
-            this.showToast(`操作失败：${errorText(err)}`, undefined, true);
-          }
+      h(
+        d,
+        'button',
+        {
+          class: 't-act',
+          'data-act': 'toast',
+          onclick: async () => {
+            actionBtn!.setAttribute('disabled', '');
+            try {
+              await action.run();
+            } catch (err) {
+              this.showToast(`操作失败：${errorText(err)}`, undefined, true);
+            }
+          },
         },
-      }, action.label);
+        action.label,
+      );
+    const details = notice.details.length
+      ? h(d, 'ul', { class: 't-details', hidden: true }, ...notice.details.map((x) => h(d, 'li', {}, x)))
+      : null;
+    const detailBtn: HTMLButtonElement | null =
+      details &&
+      h(
+        d,
+        'button',
+        {
+          class: 't-more',
+          'data-act': 'toast-details',
+          'aria-expanded': 'false',
+          onclick: () => {
+            const open = details.hidden;
+            details.hidden = !open;
+            detailBtn!.setAttribute('aria-expanded', String(open));
+            detailBtn!.textContent = open ? '收起' : '详情';
+            // 展开详情时暂停自动消失，收起后重新计时
+            if (open) clearTimeout(this.toastTimer);
+            else this.scheduleToastHide(action ? TOAST_ACTION_MS : TOAST_MS);
+            this.placeToast();
+          },
+        },
+        '详情',
+      );
+    const iconName = notice.level === 'ok' ? 'check' : notice.level === 'warn' ? 'alert' : 'error';
     this.toast.replaceChildren();
-    append(this.toast, [h(d, 'span', { class: 'msg' }, message), btn]);
-    this.toast.classList.toggle('err', error);
-    this.toast.classList.toggle('top', this.isOpen && this.sheet);
+    append(this.toast, [
+      h(
+        d,
+        'div',
+        { class: 't-row' },
+        h(d, 'span', { class: 't-icon' }, icon(d, iconName)),
+        h(d, 'span', { class: 'msg', title: notice.title }, notice.title),
+        detailBtn,
+        actionBtn,
+      ),
+      details,
+    ]);
+    this.toast.classList.remove('ok', 'warn', 'err');
+    this.toast.classList.add(notice.level);
+    // 失败提示用 alert 角色，读屏立即播报
+    this.toast.setAttribute('role', notice.level === 'ok' ? 'status' : 'alert');
     this.toast.hidden = false;
+    this.placeToast();
     void this.toast.offsetWidth;
     this.toast.classList.add('in');
-    this.scheduleToastHide(action ? TOAST_ACTION_MS : TOAST_MS);
+    // 失败与带“撤销”的提示停留更久
+    this.scheduleToastHide(action || notice.level !== 'ok' ? TOAST_ACTION_MS : TOAST_MS);
+  }
+
+  /** toast 位置：默认视口底部；手机底部卡片打开时紧贴卡片上沿（统一在底部区域，不挡卡片） */
+  private placeToast(): void {
+    if (this.isOpen && this.sheet) {
+      const top = this.card.getBoundingClientRect().top;
+      const gap = window.innerHeight - top + 8;
+      if (top > 0 && gap > 0) {
+        this.toast.style.setProperty('bottom', `${Math.round(gap)}px`);
+        return;
+      }
+    }
+    this.toast.style.removeProperty('bottom');
   }
 
   private scheduleToastHide(ms: number): void {
@@ -1003,6 +1235,21 @@ function hintLine(d: Document, label: string, segments: HintSegment[]): HTMLElem
     h(d, 'b', {}, label),
     ...segments.map((x, i) => h(d, 'span', x.warn ? { class: 'warn' } : {}, i ? `；${x.text}` : x.text)),
   );
+}
+
+/** 入口词条（可能来自用户生词本）中与词典不同的释义；已包含在词典释义里时不重复显示 */
+function extraUserTrans(entry: DictEntry | undefined, dict: DictEntry | undefined): string | undefined {
+  const user = entry?.full?.trim();
+  if (!user) return undefined;
+  const squash = (x: string | undefined) => (x ?? '').replace(/\s+/g, '');
+  const dictText = squash(dict?.full) + squash(dict?.short);
+  return dictText.includes(squash(user)) ? undefined : user.replace(/\s*\n\s*/g, '；');
+}
+
+/** 摘要里的名称：一本直接显示，多本显示“第一本 等 n 本” */
+function shortNames(list: string[]): string {
+  if (list.length <= 1) return list[0] ?? '';
+  return `${list[0]} 等 ${list.length} 本`;
 }
 
 /** 目标都不可用时的原因汇总 */
