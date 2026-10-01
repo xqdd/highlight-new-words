@@ -9,6 +9,7 @@ import {
   CAPTION_CONTAINER_CLASS,
   CAPTION_SEGMENT_CLASS,
   PLAYER_ID,
+  ROLLUP_CLASS,
   YT_STYLE_ID,
   isAutoCaptionHint,
 } from './dom';
@@ -40,7 +41,8 @@ const GLOSS_EM = '.64em';
  * - below：与 above 对称，留白加在生词下方（padding-bottom），注解贴底；字幕窗贴底定位，同样只向上长高。
  * - after：词后小字（GLOSS_EM，同样带深色底）。字幕段改为不折行（white-space:pre），字幕行改为居中的 flex，超出 YouTube 测量的窗口宽度时
  *   向两侧对称溢出（仍居中，背景随字幕段延伸）；超出播放器宽度的窗口由脚本改回 above
- * - 自动生成字幕（roll-up）窗口与自动字幕提示窗口同样按设置显示译文（窗口高度固定、overflow:hidden，注解可能被裁切；用户决定不特殊处理）
+ * - 自动生成字幕（roll-up）窗口与自动字幕提示窗口同样显示译文，但 above/below 一律改用 after（见 CaptionDecorator#process）；
+ *   窗口高度固定、overflow:hidden，after 超宽时注解可能被裁切
  */
 export function buildCaptionCss(): string {
   const win = (mode: string) => `${CAP} .caption-window[${ATTR_YT_GM}="${mode}"]`;
@@ -205,9 +207,11 @@ export class CaptionDecorator {
       const hint = isAutoCaptionHint(text);
       if (hint !== w.hasAttribute(ATTR_YT_HINT)) w.toggleAttribute(ATTR_YT_HINT, hint);
       if (!hint) texts.push(text);
-      // 所有字幕窗口（含自动生成字幕、提示窗口）一视同仁，按设置显示字幕内译文；
-      // after 已因放不下改成 above 的窗口保持 above（窗口每条字幕重建，不会一直沿用）
-      const want = mode === 'off' ? null : mode;
+      // 所有字幕窗口（含自动生成字幕、提示窗口）都按设置显示字幕内译文；after 已因放不下改成 above 的窗口保持 above（窗口每条字幕重建，不会一直沿用）。
+      // 自动生成字幕（roll-up）窗口的 above/below 改用 after：播放器每追加一个词就重写一次窗口高度，时而按它自己的固定行高、时而按实测内容高度，
+      // 注解把行撑高后两者不一致，整窗上下跳动（全屏最明显，2026-10 m.youtube.com 实测）；after 不改行高，没有这个问题
+      const rollup = w.classList.contains(ROLLUP_CLASS);
+      const want = mode === 'off' ? null : rollup ? 'after' : mode;
       const cur = w.getAttribute(ATTR_YT_GM);
       if (want === null) {
         if (cur !== null) w.removeAttribute(ATTR_YT_GM);
@@ -231,7 +235,8 @@ export class CaptionDecorator {
     requestAnimationFrame(() => {
       const pr = player.getBoundingClientRect();
       for (const w of windows) {
-        if (!w.isConnected || w.getAttribute(ATTR_YT_GM) !== 'after') continue;
+        // roll-up 窗口不退回 above（会重新引起整窗跳动，见 process），超宽时由窗口自身的 overflow:hidden 裁切两侧
+        if (!w.isConnected || w.getAttribute(ATTR_YT_GM) !== 'after' || w.classList.contains(ROLLUP_CLASS)) continue;
         const overflow = [...w.querySelectorAll(`.${CAPTION_SEGMENT_CLASS}`)].some((seg) => {
           const r = seg.getBoundingClientRect();
           return r.left < pr.left + 2 || r.right > pr.right - 2;

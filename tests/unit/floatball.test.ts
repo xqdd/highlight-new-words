@@ -236,7 +236,7 @@ describe('YouTube 字幕译文模式', () => {
     expect(player.querySelector('.caption-window')!.hasAttribute(ATTR_YT_GM)).toBe(false);
   });
 
-  it('after / off 模式；自动生成字幕窗口与提示窗口同样按设置显示译文，提示文字不计入当前字幕', async () => {
+  it('after / off 模式；自动生成字幕窗口的上方/下方改用词后，提示窗口照常显示译文，提示文字不计入当前字幕', async () => {
     const settings = createDefaultSettings();
     settings.youtube.captionTranslation = 'after';
     let player = buildPlayer(['looming here']);
@@ -254,7 +254,11 @@ describe('YouTube 字幕译文模式', () => {
     const dec2 = new CaptionDecorator(ctxWith(settings));
     dec2.attach(player.querySelector('.ytp-caption-window-container'));
     dec2.process();
-    expect(player.querySelector('.caption-window')!.getAttribute(ATTR_YT_GM)).toBe('above');
+    expect(player.querySelector('.caption-window')!.getAttribute(ATTR_YT_GM)).toBe('after');
+    settings.youtube.captionTranslation = 'below';
+    dec2.process();
+    expect(player.querySelector('.caption-window')!.getAttribute(ATTR_YT_GM)).toBe('after');
+    settings.youtube.captionTranslation = 'above';
     dec2.destroy();
 
     player = buildPlayer(['English (auto-generated)', 'Click ⚙ for settings']);
@@ -326,7 +330,7 @@ describe('YouTube 字幕译文模式', () => {
     seg.append(' and');
     expect(seg.textContent).toBe('help with voice acting and');
     await Promise.resolve();
-    expect(win.getAttribute(ATTR_YT_GM)).toBe('above');
+    expect(win.getAttribute(ATTR_YT_GM)).toBe('after');
     dec.destroy();
   });
 
