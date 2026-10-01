@@ -2,7 +2,16 @@ import { h } from '../card/h';
 import { ATTR_ACTIVE, ATTR_BOOKS, ATTR_LEMMA, TAG_CARD_HOST, TAG_MARK } from '../engine/dom';
 import type { SiteContext } from '../sites/types';
 import type { OverlayHost } from './host';
-import { wordAt } from './model';
+import { pointInRect, wordAt } from './model';
+
+/** 某个位置下的单词（同步命中，不查词库）：拖动取词预览与点按取词共用 */
+export interface PickHit {
+  /** 单词在页面中的范围（取词框位置、非高亮词的卡片锚点位置） */
+  range: Range;
+  word: string;
+  /** 落在高亮词上时为该 hnw-mark（卡片直接以它为锚点） */
+  mark: HTMLElement | null;
+}
 
 /** 选区稳定判定（ms） */
 const LONG_PRESS_SETTLE_MS = 280;
@@ -20,6 +29,8 @@ const SINGLE_WORD_RE = /^[A-Za-z]+(?:['’-][A-Za-z]+)*$/;
  * - 取词模式下点按一律阻止默认行为（不跳链接、不触发页面按钮），可编辑区除外（照常输入）
  * - 取词框随页面滚动跟随单词；卡片关闭（锚点的 data-hnw-active 被移除）后隐藏
  * - 退出：再次点悬浮球、顶部提示条的“退出”按钮、Esc
+ *
+ * 取词能力（probeAt 命中单词 / preview 预览框 / openHit 打开卡片）也供悬浮球“拖动取词”使用，与是否处于取词模式无关。
  */
 export class PickMode {
   private on = false;
@@ -27,6 +38,8 @@ export class PickMode {
   private box: HTMLElement | null = null;
   private range: Range | null = null;
   private boxObserver: MutationObserver | null = null;
+  /** 拖动取词的预览框（见 preview） */
+  private previewEl: HTMLElement | null = null;
 
   constructor(
     private readonly ctx: SiteContext,
@@ -75,6 +88,8 @@ export class PickMode {
     this.exit();
     this.disableLongPress();
     this.clearBox();
+    this.previewEl?.remove();
+    this.previewEl = null;
   }
 
   private readonly onKey = (e: KeyboardEvent) => {
@@ -82,7 +97,7 @@ export class PickMode {
   };
 
   private readonly onScroll = () => {
-    if (this.box && this.range) this.placeBox(this.range.getBoundingClientRect());
+    if (this.box && this.range) this.placeRect(this.box, this.range.getBoundingClientRect());
   };
 
   private readonly onClick = (e: MouseEvent) => {
@@ -104,19 +119,51 @@ export class PickMode {
 
   /** 点按位置取词并打开卡片；不在单词上时不做事（卡片已被通用逻辑关闭） */
   async pickAt(x: number, y: number): Promise<boolean> {
-    const hit = caretAt(this.ctx.doc, x, y);
+    const hit = this.probeAt(x, y);
     if (!hit) return false;
+    await this.openForRange(hit.range, hit.word);
+    return true;
+  }
+
+  /**
+   * client 坐标下的单词（同步、只做命中测试，供拖动取词按 rAF 调用）：不在单词上、在可编辑区域或我们自己的浮层/卡片上返回 null。
+   */
+  probeAt(x: number, y: number): PickHit | null {
+    const hit = caretAt(this.ctx.doc, x, y);
+    if (!hit) return null;
     const found = wordAt(hit.node.data, hit.offset);
-    if (!found) return false;
+    if (!found) return null;
+    const el = hit.node.parentElement;
+    if (!el || isEditable(el)) return null;
     const range = this.ctx.doc.createRange();
     range.setStart(hit.node, found.start);
     range.setEnd(hit.node, found.end);
-    const hitRect = range.getBoundingClientRect();
-    // caretRangeFromPoint 在空白处也会返回最近的字符：点按位置必须真的落在单词框内（留 6px 容差）
-    const tol = 6;
-    if (x < hitRect.left - tol || x > hitRect.right + tol || y < hitRect.top - tol || y > hitRect.bottom + tol) return false;
-    await this.openForRange(range, found.word);
-    return true;
+    // caretRangeFromPoint 在空白处也会返回最近的字符：取词点必须真的落在单词框内（留 6px 容差）
+    if (!pointInRect(range.getBoundingClientRect(), x, y, 6)) return null;
+    return { range, word: found.word, mark: el.closest<HTMLElement>(TAG_MARK) };
+  }
+
+  /** 打开命中单词的卡片：高亮词以 hnw-mark 为锚点（与点按高亮词相同），其他词放取词框作锚点（与 pickAt 相同） */
+  openHit(hit: PickHit): void {
+    if (hit.mark) {
+      if (this.ctx.getCard()?.anchor !== hit.mark || !this.ctx.getCard()?.isOpen) this.ctx.openCard(hit.mark);
+      return;
+    }
+    void this.openForRange(hit.range, hit.word);
+  }
+
+  /**
+   * 拖动取词的预览框：与卡片锚点（取词框 box）分开的另一个元素，拖动中移动它不会带着已打开的卡片跑。
+   * 传 null 隐藏。
+   */
+  preview(hit: PickHit | null): void {
+    if (!hit) {
+      if (this.previewEl) this.previewEl.hidden = true;
+      return;
+    }
+    this.previewEl ??= this.overlay.ui.appendChild(h(this.ctx.doc, 'span', { class: 'pickbox preview', 'aria-hidden': 'true' }));
+    this.previewEl.hidden = false;
+    this.placeRect(this.previewEl, hit.range.getBoundingClientRect());
   }
 
   /** 以页面上的一个单词范围为锚点打开卡片（取词框放在单词位置，不改页面 DOM） */
@@ -129,7 +176,7 @@ export class PickMode {
     box.setAttribute(ATTR_LEMMA, lemma);
     box.setAttribute(ATTR_BOOKS, books.join(' '));
     box.hidden = false;
-    this.placeBox(rect);
+    this.placeRect(box, rect);
     this.ctx.openCard(box);
   }
 
@@ -220,8 +267,8 @@ export class PickMode {
     return box;
   }
 
-  private placeBox(r: DOMRect): void {
-    const b = this.box!;
+  /** 把框放到单词矩形位置（取词框与拖动预览框共用） */
+  private placeRect(b: HTMLElement, r: DOMRect): void {
     const pad = 2;
     // 单词矩形是 client 坐标，换算到宿主局部坐标（双指缩放时宽高同样乘缩放倍数）
     const { scale } = this.overlay.frame();

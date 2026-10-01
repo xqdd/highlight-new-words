@@ -2,7 +2,7 @@ import type { StatusSummary } from '@/core/messaging/protocol';
 import { SOURCE_NOT_CONNECTED_TEXT } from '@/core/source/connect-status';
 
 /**
- * 悬浮球的纯逻辑（无 DOM 依赖，便于单测）：显示条件、位置吸附与夹取、点按位置取词、隐藏站点规则。
+ * 悬浮球的纯逻辑（无 DOM 依赖，便于单测）：显示条件、位置吸附与夹取、点按位置取词、拖动取词的准星位置、隐藏站点规则。
  */
 
 /** 记忆的位置：贴哪一侧 + 垂直位置（视口高度比例 0–1，球心） */
@@ -160,4 +160,33 @@ export function computeOverlayFrame(
 /** clientX/clientY（及 getBoundingClientRect）坐标 → 浮层宿主局部坐标 */
 export function toFrameLocal(frame: OverlayFrame, clientX: number, clientY: number): { x: number; y: number } {
   return { x: (clientX - frame.x) * frame.scale, y: (clientY - frame.y) * frame.scale };
+}
+
+/** 宿主局部坐标 → clientX/clientY（toFrameLocal 的逆运算），用于在页面上按浮层中的位置取词 */
+export function fromFrameLocal(frame: OverlayFrame, x: number, y: number): { x: number; y: number } {
+  return { x: x / frame.scale + frame.x, y: y / frame.scale + frame.y };
+}
+
+// ---------------- 拖动取词 ----------------
+
+/** 准星在球心正上方的距离（px，宿主局部坐标）：球半径 23 + 约 37px 间隙，避开按在球上的手指 */
+export const AIM_OFFSET = 60;
+/**
+ * 贴边区（px，球心到左右屏幕边缘的距离）：球心在此范围内视为“挪位置”，不显示准星、松手不取词。
+ * 拖到边缘是挪位置的自然动作，若此时准星恰好压在正文单词上也不应弹卡片。
+ */
+export const AIM_EDGE_ZONE = 56;
+
+/**
+ * 拖动中的准星位置（宿主局部坐标）：球心正上方 AIM_OFFSET；球心在贴边区内、或准星超出屏幕顶部时返回 null（不取词）。
+ */
+export function dragAimPoint(centerX: number, centerY: number, viewportW: number): { x: number; y: number } | null {
+  if (centerX < AIM_EDGE_ZONE || centerX > viewportW - AIM_EDGE_ZONE) return null;
+  const y = centerY - AIM_OFFSET;
+  return y < 0 ? null : { x: centerX, y };
+}
+
+/** 取词点是否真的落在单词框内（caretRangeFromPoint 在空白处也会返回最近的字符），tol 为四周容差 */
+export function pointInRect(r: Pick<DOMRect, 'left' | 'right' | 'top' | 'bottom'>, x: number, y: number, tol: number): boolean {
+  return x >= r.left - tol && x <= r.right + tol && y >= r.top - tol && y <= r.bottom + tol;
 }

@@ -165,6 +165,18 @@ ${BASE_CSS}
   position: fixed; pointer-events: none; border-radius: 4px; background: color-mix(in srgb, var(--accent) 24%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent); color: transparent; overflow: hidden; white-space: nowrap;
 }
+/* 拖动取词的准星：中心点即取词点（transform 平移到球心上方），白边 + 阴影在深浅背景上都看得见；命中单词时填充强调色 */
+.aim {
+  position: fixed; top: 0; left: 0; width: 0; height: 0; pointer-events: none;
+}
+.aim::before {
+  content: ""; position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; box-sizing: border-box; border-radius: 50%;
+  border: 2px solid var(--accent); box-shadow: 0 0 0 1px rgba(255, 255, 255, .9), 0 1px 4px rgba(0, 0, 0, .35);
+}
+.aim::after {
+  content: ""; position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+}
+.aim.hit::before { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 @media (prefers-reduced-motion: reduce) { .ball, .sheet, .scrim, .toast { transition: none; } }
 `;
 

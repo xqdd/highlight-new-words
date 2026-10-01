@@ -8,8 +8,8 @@ import { ballX, FLOAT_CSS, IDLE_SCALE } from './css';
 import { createOverlayHost, type OverlayHost } from './host';
 import { svgIcon } from './icons';
 import { FloatMenu, openOptionsPage } from './menu';
-import { BALL_SIZE, clampCenterY, hostMatches, isTouchPrimary, parsePos, snapPosition, type FloatBallPos } from './model';
-import { PickMode } from './pick';
+import { BALL_SIZE, clampCenterY, dragAimPoint, fromFrameLocal, hostMatches, isTouchPrimary, parsePos, snapPosition, type FloatBallPos } from './model';
+import { PickMode, type PickHit } from './pick';
 import { availableFloatActions, followFullscreen, setFloatMenuOpener } from './registry';
 
 export { registerFloatAction, openFloatMenu, overlayRoot, relocateOverlayHosts } from './registry';
@@ -29,7 +29,7 @@ const RETIRE_MS = 5600;
 /**
  * 通用悬浮球（v10）：只在触屏/手机端显示（(hover: none) and (pointer: coarse)，不看 UA），PC 端不显示。
  *
- * - 可拖动，松手吸附左右边缘；3 秒无操作或页面滚动时缩小并移到屏幕边缘外，露出约 20px 一条（白色内描边 + 深色外阴影，深浅背景都看得见），点按仍直接生效
+ * - 可拖动，松手吸附左右边缘；拖离边缘时球上方出现取词准星，松手时准星下有单词则打开该词卡片、球回原位（拖动取词），否则照常挪位置；3 秒无操作或页面滚动时缩小并移到屏幕边缘外，露出约 20px 一条（白色内描边 + 深色外阴影，深浅背景都看得见），点按仍直接生效
  * - 位置按设备记在 storage.local `floatBallPos`（侧边 + 视口高度比例），上下避开系统状态栏与手势条
  * - 点按：取词模式中 → 退出取词；站点有 primary 功能项（YouTube 视频页“当前字幕”）→ 直接执行；否则展开菜单（底部抽屉）
  * - 显示条件随设置（floatBall.enabled / hiddenSites）与媒体特性变化实时切换
@@ -96,14 +96,20 @@ class FloatBallView {
   private badgeTimer: ReturnType<typeof setInterval> | undefined;
   private suppressClickUntil = 0;
   private readonly offFrame: () => void;
-  private drag: { id: number; dx: number; dy: number; x0: number; y0: number; moved: boolean } | null = null;
+  /** 拖动状态：dx/dy 为按下点相对球左上角的偏移；x0/y0 按下点（client）；cx/cy 最近一次指针位置（client，供 rAF 取词） */
+  private drag: { id: number; dx: number; dy: number; x0: number; y0: number; cx: number; cy: number; moved: boolean } | null = null;
+  /** 拖动取词的准星（球心上方，见 model.ts dragAimPoint） */
+  private readonly aim: HTMLElement;
+  /** 准星取词的 rAF 句柄：pointermove 很密，取词（caretRangeFromPoint + 布局读取）每帧最多一次 */
+  private aimRaf = 0;
 
   constructor(private readonly ctx: SiteContext) {
     const doc = ctx.doc;
     this.overlay = createOverlayHost(doc, TAG_FLOAT_HOST, FLOAT_CSS);
     this.badge = h(doc, 'span', { class: 'badge', hidden: true });
     this.ball = h(doc, 'button', { type: 'button', class: 'ball right', 'aria-label': '生词高亮：打开菜单' }, svgIcon(doc, 'logo', 24), this.badge);
-    this.overlay.ui.appendChild(this.ball);
+    this.aim = h(doc, 'span', { class: 'aim', hidden: true, 'aria-hidden': 'true' });
+    this.overlay.ui.append(this.aim, this.ball);
     this.pick = new PickMode(ctx, this.overlay, (on) => {
       this.ball.classList.toggle('picking', on);
       this.ball.setAttribute('aria-label', on ? '退出取词模式' : '生词高亮：打开菜单');
@@ -153,6 +159,7 @@ class FloatBallView {
   destroy(): void {
     clearTimeout(this.idleTimer);
     clearInterval(this.badgeTimer);
+    cancelAnimationFrame(this.aimRaf);
     this.offFrame();
     window.removeEventListener('scroll', this.onScroll, true);
     this.pick.destroy();
@@ -216,7 +223,7 @@ class FloatBallView {
       const r = b.getBoundingClientRect();
       const p = this.overlay.toLocal(e.clientX, e.clientY);
       const r0 = this.overlay.toLocal(r.left, r.top);
-      this.drag = { id: e.pointerId, dx: p.x - r0.x, dy: p.y - r0.y, x0: e.clientX, y0: e.clientY, moved: false };
+      this.drag = { id: e.pointerId, dx: p.x - r0.x, dy: p.y - r0.y, x0: e.clientX, y0: e.clientY, cx: e.clientX, cy: e.clientY, moved: false };
       b.setPointerCapture?.(e.pointerId);
     });
     b.addEventListener('pointermove', (e) => {
@@ -230,11 +237,16 @@ class FloatBallView {
         this.idle = false;
         b.classList.remove('idle');
       }
-      const { width: vw, height: vh } = this.overlay.frame();
-      const p = this.overlay.toLocal(e.clientX, e.clientY);
-      const x = Math.min(vw - BALL_SIZE, Math.max(0, p.x - d.dx));
-      const y = Math.min(vh - BALL_SIZE, Math.max(0, p.y - d.dy));
+      const { x, y } = this.dragBallXY(d, e.clientX, e.clientY);
       this.place(x, y);
+      // 准星取词节流到 rAF：只记下最新指针位置，下一帧再取词与画预览框
+      d.cx = e.clientX;
+      d.cy = e.clientY;
+      this.aimRaf ||= requestAnimationFrame(() => {
+        this.aimRaf = 0;
+        const cur = this.drag;
+        if (cur?.moved) this.pick.preview(this.aimAt(cur, cur.cx, cur.cy));
+      });
     });
     const end = (e: PointerEvent) => {
       const d = this.drag;
@@ -242,8 +254,22 @@ class FloatBallView {
       this.drag = null;
       b.classList.remove('dragging');
       if (!d.moved) return;
-      // 拖动结束：吸附并记忆；随后浏览器补发的 click 不当作点按
+      // 随后浏览器补发的 click 不当作点按
       this.suppressClickUntil = performance.now() + 400;
+      cancelAnimationFrame(this.aimRaf);
+      this.aimRaf = 0;
+      // 松手位置重新取一次词（不等 rAF，避免用到上一帧的结果）；pointercancel（系统接管手势）不取词
+      const hit = e.type === 'pointerup' ? this.aimAt(d, e.clientX, e.clientY) : null;
+      this.aim.hidden = true;
+      this.pick.preview(null);
+      if (hit) {
+        // 拖动取词：打开卡片，球回到拖动前的位置（不改记忆的位置）
+        this.pick.openHit(hit);
+        this.place();
+        this.wake();
+        return;
+      }
+      // 挪位置：吸附并记忆
       const { width: vw, height: vh } = this.overlay.frame();
       const p = this.overlay.toLocal(e.clientX, e.clientY);
       this.pos = snapPosition(p.x - d.dx + BALL_SIZE / 2, p.y - d.dy + BALL_SIZE / 2, vw, vh);
@@ -259,6 +285,31 @@ class FloatBallView {
       if (performance.now() < this.suppressClickUntil) return;
       this.onTap();
     });
+  }
+
+  /** 拖动中球左上角（宿主局部坐标，夹在屏幕内）：与指针保持按下时的相对偏移 */
+  private dragBallXY(d: { dx: number; dy: number }, clientX: number, clientY: number): { x: number; y: number } {
+    const { width: vw, height: vh } = this.overlay.frame();
+    const p = this.overlay.toLocal(clientX, clientY);
+    return { x: Math.min(vw - BALL_SIZE, Math.max(0, p.x - d.dx)), y: Math.min(vh - BALL_SIZE, Math.max(0, p.y - d.dy)) };
+  }
+
+  /**
+   * 拖动取词：按指针位置算出球心与准星，摆放准星并返回准星下的单词。
+   * 球心在贴边区（挪位置）或准星出了屏幕时隐藏准星、返回 null。
+   */
+  private aimAt(d: { dx: number; dy: number }, clientX: number, clientY: number): PickHit | null {
+    const frame = this.overlay.frame();
+    const { x, y } = this.dragBallXY(d, clientX, clientY);
+    const aim = dragAimPoint(x + BALL_SIZE / 2, y + BALL_SIZE / 2, frame.width);
+    this.aim.hidden = !aim;
+    if (!aim) return null;
+    this.aim.style.transform = `translate(${Math.round(aim.x)}px, ${Math.round(aim.y)}px)`;
+    // 准星在宿主局部坐标中，换回 client 坐标后在页面上取词（宿主与准星都是 pointer-events:none，不挡命中）
+    const c = fromFrameLocal(frame, aim.x, aim.y);
+    const hit = this.pick.probeAt(c.x, c.y);
+    this.aim.classList.toggle('hit', !!hit);
+    return hit;
   }
 
   private onTap(): void {
