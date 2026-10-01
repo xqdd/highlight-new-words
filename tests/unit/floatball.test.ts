@@ -158,6 +158,17 @@ describe('floatball 注册表与全屏挂载', () => {
 
 // ---------------- YouTube ----------------
 
+/** 模拟手机全屏：触屏媒体查询命中 + document.fullscreenElement；返回还原函数 */
+function fakePhoneFullscreen(el: Element): () => void {
+  const prevMM = window.matchMedia;
+  window.matchMedia = ((q: string) => ({ matches: q.includes('pointer: coarse'), media: q }) as MediaQueryList) as typeof window.matchMedia;
+  Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => el });
+  return () => {
+    window.matchMedia = prevMM;
+    Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => null });
+  };
+}
+
 function buildPlayer(lines: string[], rollup = false): HTMLElement {
   document.body.innerHTML = `
     <div id="movie_player" class="html5-video-player">
@@ -237,7 +248,7 @@ describe('YouTube 字幕译文模式', () => {
     expect(player.querySelector('.caption-window')!.hasAttribute(ATTR_YT_GM)).toBe(false);
   });
 
-  it('after / off 模式；自动生成字幕窗口的上方/下方改用词后，提示窗口照常显示译文，提示文字不计入当前字幕', async () => {
+  it('after / off 模式；自动生成字幕窗口只在手机全屏时把上方/下方改用词后，提示窗口照常显示译文，提示文字不计入当前字幕', async () => {
     const settings = createDefaultSettings();
     settings.youtube.captionTranslation = 'after';
     let player = buildPlayer(['looming here']);
@@ -255,10 +266,18 @@ describe('YouTube 字幕译文模式', () => {
     const dec2 = new CaptionDecorator(ctxWith(settings));
     dec2.attach(player.querySelector('.ytp-caption-window-container'));
     dec2.process();
+    // 非全屏：照常按设置
+    expect(player.querySelector('.caption-window')!.getAttribute(ATTR_YT_GM)).toBe('above');
+    // 手机（触屏）全屏：上方/下方改用词后；退出全屏恢复
+    const restore = fakePhoneFullscreen(player);
+    dec2.process();
     expect(player.querySelector('.caption-window')!.getAttribute(ATTR_YT_GM)).toBe('after');
     settings.youtube.captionTranslation = 'below';
     dec2.process();
     expect(player.querySelector('.caption-window')!.getAttribute(ATTR_YT_GM)).toBe('after');
+    restore();
+    dec2.process();
+    expect(player.querySelector('.caption-window')!.getAttribute(ATTR_YT_GM)).toBe('below');
     settings.youtube.captionTranslation = 'above';
     dec2.destroy();
 
@@ -331,7 +350,7 @@ describe('YouTube 字幕译文模式', () => {
     seg.append(' and');
     expect(seg.textContent).toBe('help with voice acting and');
     await Promise.resolve();
-    expect(win.getAttribute(ATTR_YT_GM)).toBe('after');
+    expect(win.getAttribute(ATTR_YT_GM)).toBe('above');
     dec.destroy();
   });
 

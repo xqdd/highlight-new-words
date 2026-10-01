@@ -54,8 +54,8 @@ export function glossLook(s: ResolvedCaptionGlossStyle, baseWeight: number): str
  * - below：与 above 对称，留白加在生词下方（padding-bottom），注解贴底；字幕窗贴底定位，同样只向上长高。
  * - after：词后小字（字号、底色同上）。字幕段改为不折行（white-space:pre），字幕行改为居中的 flex，超出 YouTube 测量的窗口宽度时
  *   向两侧对称溢出（仍居中，背景随字幕段延伸）；超出播放器宽度的窗口由脚本改回 above
- * - 自动生成字幕（roll-up）窗口与自动字幕提示窗口同样显示译文，但 above/below 一律改用 after（见 CaptionDecorator#process）；
- *   窗口高度固定、overflow:hidden，after 超宽时注解可能被裁切
+ * - 自动生成字幕（roll-up）窗口与自动字幕提示窗口同样显示译文；手机全屏时 roll-up 窗口的 above/below 改用 after
+ *   （见 CaptionDecorator#rollupAsAfter）。窗口高度固定、overflow:hidden，注解可能被裁切
  * - 注解样式（颜色、底色、字号、括号、加粗、斜体）来自 settings.youtube.captionStyle（预设与解析见 core/theme/caption-style.ts），
  *   括号对三种模式都适用
  */
@@ -233,10 +233,8 @@ export class CaptionDecorator {
       if (hint !== w.hasAttribute(ATTR_YT_HINT)) w.toggleAttribute(ATTR_YT_HINT, hint);
       if (!hint) texts.push(text);
       // 所有字幕窗口（含自动生成字幕、提示窗口）都按设置显示字幕内译文；after 已因放不下改成 above 的窗口保持 above（窗口每条字幕重建，不会一直沿用）。
-      // 自动生成字幕（roll-up）窗口的 above/below 改用 after：播放器每追加一个词就重写一次窗口高度，时而按它自己的固定行高、时而按实测内容高度，
-      // 注解把行撑高后两者不一致，整窗上下跳动（全屏最明显，2026-10 m.youtube.com 实测）；after 不改行高，没有这个问题
-      const rollup = w.classList.contains(ROLLUP_CLASS);
-      const want = mode === 'off' ? null : rollup ? 'after' : mode;
+      // 手机全屏时自动生成字幕（roll-up）窗口的 above/below 改用 after，见 rollupAsAfter
+      const want = mode === 'off' ? null : this.rollupAsAfter(w) ? 'after' : mode;
       const cur = w.getAttribute(ATTR_YT_GM);
       if (want === null) {
         if (cur !== null) w.removeAttribute(ATTR_YT_GM);
@@ -251,6 +249,21 @@ export class CaptionDecorator {
   }
 
   /**
+   * 该窗口是否把 above/below 改用 after：只在手机（触屏）全屏时的自动生成字幕（roll-up）窗口。
+   * 播放器会重写 roll-up 窗口的高度，时而按它自己的固定行高、时而按实测内容高度，注解把行撑高后两者不一致，整窗上下跳动；
+   * after 不改行高，没有这个问题。2026-10 m.youtube.com 实测（同一段 15 秒）：手机全屏时几乎每追加一个词跳一次（40–80 次），
+   * 非全屏只在带注解的行换行上滚时跳（约 6 次），用户决定只在手机全屏时改用 after。进出全屏时 index.ts 会调用 refresh 重新计算
+   */
+  private rollupAsAfter(w: Element): boolean {
+    const doc = this.ctx.doc;
+    return (
+      w.classList.contains(ROLLUP_CLASS) &&
+      !!doc.fullscreenElement &&
+      !!doc.defaultView?.matchMedia?.('(hover: none) and (pointer: coarse)').matches
+    );
+  }
+
+  /**
    * after 模式的放不下检查：字幕段超出播放器左右边界（被裁切）时，该窗口改用 above。
    * 只在写入注解后检查一次（读布局，放在 rAF 中与 YouTube 的样式写入错开）。
    */
@@ -260,8 +273,8 @@ export class CaptionDecorator {
     requestAnimationFrame(() => {
       const pr = player.getBoundingClientRect();
       for (const w of windows) {
-        // roll-up 窗口不退回 above（会重新引起整窗跳动，见 process），超宽时由窗口自身的 overflow:hidden 裁切两侧
-        if (!w.isConnected || w.getAttribute(ATTR_YT_GM) !== 'after' || w.classList.contains(ROLLUP_CLASS)) continue;
+        // 手机全屏的 roll-up 窗口不退回 above（会重新引起整窗跳动，见 rollupAsAfter），超宽时由窗口自身的 overflow:hidden 裁切两侧
+        if (!w.isConnected || w.getAttribute(ATTR_YT_GM) !== 'after' || this.rollupAsAfter(w)) continue;
         const overflow = [...w.querySelectorAll(`.${CAPTION_SEGMENT_CLASS}`)].some((seg) => {
           const r = seg.getBoundingClientRect();
           return r.left < pr.left + 2 || r.right > pr.right - 2;

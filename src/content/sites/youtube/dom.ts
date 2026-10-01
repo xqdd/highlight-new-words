@@ -11,7 +11,7 @@ export const PLAYER_CLASS = 'html5-video-player';
 export const CAPTION_CONTAINER_CLASS = 'ytp-caption-window-container';
 export const CAPTION_WINDOW_SELECTOR = `#${PLAYER_ID} .${CAPTION_CONTAINER_CLASS} .caption-window`;
 export const CAPTION_SEGMENT_CLASS = 'ytp-caption-segment';
-/** 自动生成字幕（roll-up）窗口：高度固定、overflow:hidden；字幕内译文的 above/below 在此类窗口中改用 after（见 CaptionDecorator#process） */
+/** 自动生成字幕（roll-up）窗口：高度固定、overflow:hidden；手机全屏时字幕内译文的 above/below 在此类窗口中改用 after（见 CaptionDecorator#rollupAsAfter） */
 export const ROLLUP_CLASS = 'ytp-caption-window-rollup';
 /** 播放器控件自动隐藏时播放器根元素带此类名（控件出现后字幕整体上移） */
 export const AUTOHIDE_CLASS = 'ytp-autohide';

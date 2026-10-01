@@ -26,8 +26,8 @@ const { settings, navigate } = useOptions();
 const panelKey = isMacPlatform() ? '⌥L' : 'Alt+L';
 
 const TR_MODES = [
-  { value: 'above' as const, label: '上方注解', desc: '默认，译文在生词上方，字幕行不变宽；自动生成的字幕改为词后' },
-  { value: 'below' as const, label: '下方注解', desc: '译文在生词下方，字幕行不变宽；自动生成的字幕改为词后' },
+  { value: 'above' as const, label: '上方注解', desc: '默认，译文在生词上方，字幕行不变宽；手机全屏看自动生成的字幕时改为词后' },
+  { value: 'below' as const, label: '下方注解', desc: '译文在生词下方，字幕行不变宽；手机全屏看自动生成的字幕时改为词后' },
   { value: 'after' as const, label: '词后', desc: '译文跟在生词后面，放不下时自动改为上方' },
   { value: 'off' as const, label: '只高亮', desc: '字幕里不显示译文，查词看卡片' },
 ];
