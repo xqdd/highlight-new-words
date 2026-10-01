@@ -25,6 +25,7 @@ import { createOverlayHost } from '@/content/floatball/host';
 import { ballX, IDLE_SCALE, IDLE_VISIBLE } from '@/content/floatball/css';
 import { availableFloatActions, overlayRoot, registerFloatAction, registerOverlayHost, relocateOverlayHosts } from '@/content/floatball/registry';
 import { CaptionDecorator, buildCaptionCss } from '@/content/sites/youtube/captions';
+import { CAPTION_GLOSS_PRESETS, applyCaptionPreset, matchCaptionPreset } from '@/core/theme/caption-style';
 import { ATTR_YT_GLOSS, ATTR_YT_GM, ATTR_YT_HINT, createSkipRule } from '@/content/sites/youtube/dom';
 import { currentVideoId } from '@/content/sites/youtube/index';
 import { placeAroundCaptions } from '@/content/sites/youtube/zone';
@@ -348,12 +349,29 @@ describe('YouTube 字幕译文模式', () => {
       expect(Number(em[1])).toBeGreaterThanOrEqual(0.55);
       expect(Number(em[2])).toBeGreaterThanOrEqual(12);
     }
-    expect(css).toContain('max(.7em,12px)');
+    expect(css).toContain('max(0.7em,12px)');
     expect(css).toMatch(/::after\{[^}]*background:rgba\(0,0,0,\.86\)/);
     expect(css).toContain('white-space:pre!important');
     expect(css).toContain('justify-content:center');
     // engine 的行内译文在字幕里一律隐藏
     expect(css).toContain('hnw-tr{display:none!important}');
+  });
+
+  it('字幕译文样式：按设置生成颜色/底色/字号/括号，无底色加重描边；预设应用后匹配，改动后为自定义', () => {
+    const css = buildCaptionCss({ color: '#67e8f9', background: '', fontScale: 0.8, bracket: 'fullwidth', bold: true });
+    expect(css).toContain('--hnw-gf:max(0.8em,12px)');
+    expect(css).toContain('content:"（" attr(data-hnw-yt-gloss) "）"');
+    expect(css).toContain('background:transparent;color:#67e8f9;font-weight:700');
+    expect(css).toContain('text-shadow:0 0 2px #000,0 0 3px #000,1px 1px 2px #000');
+    expect(css).toContain('font-size:0.8em;margin-left:.18em');
+    // 浅色实底不描边
+    expect(buildCaptionCss({ background: 'rgba(255,224,138,.95)', color: '#1f2328' })).toContain('text-shadow:none');
+    // 字号夹在 0.55–1
+    expect(buildCaptionCss({ fontScale: 0.2 })).toContain('--hnw-gf:max(0.55em,12px)');
+    for (const p of CAPTION_GLOSS_PRESETS) expect(matchCaptionPreset(applyCaptionPreset({ bold: true }, p.id))?.id).toBe(p.id);
+    expect(matchCaptionPreset(undefined)?.id).toBe('classic');
+    expect(matchCaptionPreset({ color: '#FFE08A', background: 'rgba(0, 0, 0, .86)' })?.id).toBe('classic');
+    expect(matchCaptionPreset({ italic: true })).toBeUndefined();
   });
 });
 

@@ -538,7 +538,7 @@ section.section { scroll-margin-top: var(--anchor-offset, 72px); }
 .tr-paper { display: flex; align-items: center; justify-content: center; height: 48px; border-radius: 8px; background: #fff; color: #1f2328;
   font: 15px/1.3 Georgia, 'Times New Roman', serif; white-space: nowrap; overflow: hidden; border: 1px solid rgba(127, 127, 127, .18); }
 .tr-paper ruby.below { ruby-position: under; }
-.tr-paper rt { line-height: 1.2; }
+.tr-paper rt { line-height: 1.2; ruby-align: center; }
 .tr-gloss { display: inline-block; line-height: 1; white-space: nowrap; }
 .tr-name { font-size: 12px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slider { display: grid; grid-template-columns: 7.5em 1fr; align-items: center; gap: 10px; min-height: var(--tap); font-size: 13px; }

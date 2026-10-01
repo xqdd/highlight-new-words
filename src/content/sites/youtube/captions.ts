@@ -1,6 +1,9 @@
 import { TAG_MARK, TAG_TRANSLATION, TAG_WORD, ATTR_LEMMA } from '../../engine/dom';
 import { shortenTranslation } from '../../engine/engine';
 import { markSurface } from '../../engine/highlighter';
+import { TRANSLATION_BRACKETS } from '@/core/theme/themes';
+import { resolveCaptionStyle, type CaptionGlossStyle, type ResolvedCaptionGlossStyle } from '@/core/theme/caption-style';
+import { parseColor } from '../../engine/color';
 import type { SiteContext } from '../types';
 import {
   ATTR_YT_GLOSS,
@@ -20,12 +23,22 @@ const CARRY_OVER_MS = 500;
 const ATTR_FIT_FALLBACK = 'data-hnw-yt-fit';
 const CAP = `#${PLAYER_ID}>.${CAPTION_CONTAINER_CLASS}`;
 const MARK_IN_CAP = `${CAP} ${TAG_MARK}`;
-/** 注解颜色：注解底色为近黑（GLOSS_BG），用暖黄与白字区分（≥ 7:1） */
-const GLOSS_COLOR = '#ffe08a';
-/** 注解底色：近乎不透明，不依赖字幕段自身的半透明背景（用户可能调成透明） */
-const GLOSS_BG = 'rgba(0,0,0,.86)';
-/** 注解字号（相对字幕字号）：评审要求不低于字幕字号的 55%，取 0.64 留余量 */
-const GLOSS_EM = '.64em';
+
+/**
+ * 注解外观声明（颜色、底色、字重、斜体、描边），上方/下方/词后三种模式共用；字号、定位由各模式规则负责。
+ * 描边：深色底只要轻微描边；无底色时加重黑色描边，保证亮画面上可读；浅色实底（如黄底黑字）不描边。
+ * @param baseWeight 不加粗时的字重（上方/下方注解 500、词后 400）
+ * 选项页的字幕样式预览也用它，与页面渲染一致
+ */
+export function glossLook(s: ResolvedCaptionGlossStyle, baseWeight: number): string {
+  const bg = s.background ? parseColor(s.background) : null;
+  const lightBg = !!bg && bg.a > 0.5 && (0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b) / 255 > 0.55;
+  const shadow = !s.background ? '0 0 2px #000,0 0 3px #000,1px 1px 2px #000' : lightBg ? 'none' : '0 0 1px #000,0 0 2px #000';
+  return (
+    `background:${s.background || 'transparent'};color:${s.color};font-weight:${s.bold ? 700 : baseWeight};font-style:${s.italic ? 'italic' : 'normal'};` +
+    `text-shadow:${shadow}`
+  );
+}
 
 /**
  * 字幕专用样式（注入一次，与 engine 的页面样式相互独立）：
@@ -34,55 +47,66 @@ const GLOSS_EM = '.64em';
  * - above：有注解的生词改为 inline-block 并加 padding-top（= 注解高度），注解绝对定位在这段留白里（宽度限制在单词附近，过长省略）。
  *   留白跟着单词所在的那一行走：字幕段折成两行时，第二行的生词只撑高第二行，注解不会压到第一行文字上（逐行定位）；
  *   单词本身是不可拆分的，inline-block 不改变折行位置。字幕窗贴底定位，只会向上长高：不改变宽度、不折行、不裁切。
- *   注解字号随字幕字号（em）缩放，全屏时字幕变大注解也变大：GLOSS_EM（≥ 字幕字号的 55%，桌面 20px 字幕约 13px），
+ *   注解字号随字幕字号（em）缩放，全屏时字幕变大注解也变大：缺省 0.64em（可调，≥ 字幕字号的 55%，桌面 20px 字幕约 13px），
  *   下限桌面 12px、触屏 12px（手机字幕本身只有约 15px）。
- *   对比度：注解自带近乎不透明的深色底（只包住文字，宽度不超过单词附近）并加黑色描边，
- *   视频画面再亮、用户把字幕背景调成透明时，暖黄字与深底仍有 ≥ 7:1 的对比度
+ *   对比度：缺省注解自带近乎不透明的深色底（只包住文字，宽度不超过单词附近）并加黑色描边，
+ *   视频画面再亮、用户把字幕背景调成透明时，暖黄字与深底仍有 ≥ 7:1 的对比度；用户去掉底色时改用加重的黑色描边
  * - below：与 above 对称，留白加在生词下方（padding-bottom），注解贴底；字幕窗贴底定位，同样只向上长高。
- * - after：词后小字（GLOSS_EM，同样带深色底）。字幕段改为不折行（white-space:pre），字幕行改为居中的 flex，超出 YouTube 测量的窗口宽度时
+ * - after：词后小字（字号、底色同上）。字幕段改为不折行（white-space:pre），字幕行改为居中的 flex，超出 YouTube 测量的窗口宽度时
  *   向两侧对称溢出（仍居中，背景随字幕段延伸）；超出播放器宽度的窗口由脚本改回 above
  * - 自动生成字幕（roll-up）窗口与自动字幕提示窗口同样显示译文，但 above/below 一律改用 after（见 CaptionDecorator#process）；
  *   窗口高度固定、overflow:hidden，after 超宽时注解可能被裁切
+ * - 注解样式（颜色、底色、字号、括号、加粗、斜体）来自 settings.youtube.captionStyle（预设与解析见 core/theme/caption-style.ts），
+ *   括号对三种模式都适用
  */
-export function buildCaptionCss(): string {
+export function buildCaptionCss(style?: CaptionGlossStyle): string {
+  // 注解样式（用户可在 设置 › 更多 › YouTube 字幕 中选预设或自定义），缺省为近黑底 + 暖黄字、字幕字号的 0.64
+  const st = resolveCaptionStyle(style);
+  const em = `${st.fontScale}em`;
+  // 触屏字幕字号本身小（约 15px），注解比例至少 0.7
+  const touchEm = `${Math.max(st.fontScale, 0.7)}em`;
+  const [open, close] = TRANSLATION_BRACKETS[st.bracket];
+  const content = st.bracket === 'none' ? `attr(${ATTR_YT_GLOSS})` : `"${open}" attr(${ATTR_YT_GLOSS}) "${close}"`;
+  const look = glossLook(st, 500);
   const win = (mode: string) => `${CAP} .caption-window[${ATTR_YT_GM}="${mode}"]`;
   // 无释义的词写的是空注解，不占位
   const G = `${TAG_MARK}[${ATTR_YT_GLOSS}]:not([${ATTR_YT_GLOSS}=""])`;
-  const glossFont = 'font-weight:400;font-style:normal;text-decoration:none;letter-spacing:0;text-shadow:none;pointer-events:none';
+  const glossFont = 'text-decoration:none;letter-spacing:0;pointer-events:none';
   return [
     `${MARK_IN_CAP} ${TAG_TRANSLATION}{display:none!important}`,
     `${MARK_IN_CAP},${MARK_IN_CAP}>${TAG_WORD}{display:inline!important}`,
     // above：注解字号与留白都由 --hnw-gf 推出（字号 × 1.25 行高 + 2px 间隙），触屏下限更高
-    `${win('above')} ${G}{--hnw-gf:max(${GLOSS_EM},12px);display:inline-block!important;position:relative!important;vertical-align:baseline!important;` +
+    `${win('above')} ${G}{--hnw-gf:max(${em},12px);display:inline-block!important;position:relative!important;vertical-align:baseline!important;` +
       `padding-top:calc(var(--hnw-gf) * 1.25 + 3px)!important}`,
-    `@media (hover:none) and (pointer:coarse){${win('above')} ${G}{--hnw-gf:max(.7em,12px)}}`,
+    `@media (hover:none) and (pointer:coarse){${win('above')} ${G}{--hnw-gf:max(${touchEm},12px)}}`,
     // 注解框：水平居中于单词，宽度随文字（max-content），最宽不超过“单词 + 两侧各 .45em”，超出省略
-    `${win('above')} ${G}::after{content:attr(${ATTR_YT_GLOSS});position:absolute;left:50%;top:0;transform:translateX(-50%);` +
-      `box-sizing:border-box;width:max-content;max-width:calc(100% + .9em);padding:0 .25em;border-radius:3px;background:${GLOSS_BG};` +
-      `display:block;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--hnw-gf);line-height:1.25;color:${GLOSS_COLOR};${glossFont};` +
-      `font-weight:500;text-shadow:0 0 1px #000,0 0 2px #000}`,
+    `${win('above')} ${G}::after{content:${content};position:absolute;left:50%;top:0;transform:translateX(-50%);` +
+      `box-sizing:border-box;width:max-content;max-width:calc(100% + .9em);padding:0 .25em;border-radius:3px;` +
+      `display:block;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--hnw-gf);line-height:1.25;${glossFont};${look}}`,
     // below：与 above 对称，留白与注解放在生词下方
-    `${win('below')} ${G}{--hnw-gf:max(${GLOSS_EM},12px);display:inline-block!important;position:relative!important;vertical-align:baseline!important;` +
+    `${win('below')} ${G}{--hnw-gf:max(${em},12px);display:inline-block!important;position:relative!important;vertical-align:baseline!important;` +
       `padding-bottom:calc(var(--hnw-gf) * 1.25 + 3px)!important}`,
-    `@media (hover:none) and (pointer:coarse){${win('below')} ${G}{--hnw-gf:max(.7em,12px)}}`,
-    `${win('below')} ${G}::after{content:attr(${ATTR_YT_GLOSS});position:absolute;left:50%;bottom:0;transform:translateX(-50%);` +
-      `box-sizing:border-box;width:max-content;max-width:calc(100% + .9em);padding:0 .25em;border-radius:3px;background:${GLOSS_BG};` +
-      `display:block;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--hnw-gf);line-height:1.25;color:${GLOSS_COLOR};${glossFont};` +
-      `font-weight:500;text-shadow:0 0 1px #000,0 0 2px #000}`,
+    `@media (hover:none) and (pointer:coarse){${win('below')} ${G}{--hnw-gf:max(${touchEm},12px)}}`,
+    `${win('below')} ${G}::after{content:${content};position:absolute;left:50%;bottom:0;transform:translateX(-50%);` +
+      `box-sizing:border-box;width:max-content;max-width:calc(100% + .9em);padding:0 .25em;border-radius:3px;` +
+      `display:block;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:var(--hnw-gf);line-height:1.25;${glossFont};${look}}`,
     // after
     `${win('after')} .caption-visual-line{display:flex!important;justify-content:center!important}`,
     `${win('after')} .${CAPTION_SEGMENT_CLASS}{white-space:pre!important;flex:none!important}`,
-    `${win('after')} ${G}::after{content:attr(${ATTR_YT_GLOSS});font-size:${GLOSS_EM};margin-left:.18em;padding:0 .2em;border-radius:3px;background:${GLOSS_BG};color:${GLOSS_COLOR};${glossFont};` +
-      `text-shadow:0 0 1px #000,0 0 2px #000}`,
+    `${win('after')} ${G}::after{content:${content};font-size:${em};margin-left:.18em;padding:0 .2em;border-radius:3px;${glossFont};${glossLook(st, 400)}}`,
   ].join('\n');
 }
 
-function ensureStyle(doc: Document): void {
-  if (doc.getElementById(YT_STYLE_ID)) return;
-  const s = doc.createElement('style');
-  s.id = YT_STYLE_ID;
-  s.textContent = buildCaptionCss();
-  (doc.head ?? doc.documentElement).appendChild(s);
+/** 注入或更新字幕样式（注解样式随设置变化，内容相同时不重写） */
+function ensureStyle(doc: Document, style: CaptionGlossStyle | undefined): void {
+  let s = doc.getElementById(YT_STYLE_ID);
+  if (!s) {
+    s = doc.createElement('style');
+    s.id = YT_STYLE_ID;
+    (doc.head ?? doc.documentElement).appendChild(s);
+  }
+  const css = buildCaptionCss(style);
+  if (s.textContent !== css) s.textContent = css;
 }
 
 /** 字幕注解的查词键：优先页面词形自己的词条，没有再用原形（与 engine 行内译文口径一致） */
@@ -119,7 +143,7 @@ export class CaptionDecorator {
     this.observer?.disconnect();
     this.container = container;
     if (!container) return;
-    ensureStyle(this.ctx.doc);
+    ensureStyle(this.ctx.doc, this.ctx.getSettings().youtube.captionStyle);
     this.observer = new MutationObserver((records) => {
       this.carryOver(records);
       this.schedule();
@@ -176,8 +200,9 @@ export class CaptionDecorator {
     }
   }
 
-  /** 设置变化：重新计算各窗口的译文模式，并补写注解 */
+  /** 设置变化：更新注解样式、重新计算各窗口的译文模式，并补写注解 */
   refresh(): void {
+    if (this.container) ensureStyle(this.ctx.doc, this.ctx.getSettings().youtube.captionStyle);
     this.schedule();
   }
 

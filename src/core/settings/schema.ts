@@ -1,4 +1,5 @@
 import type { CardStyle, InlineTranslationMode, MarkStyle, TranslationStyle } from '../theme/themes';
+import type { CaptionGlossStyle } from '../theme/caption-style';
 
 /**
  * 设置契约（存储于 chrome.storage.local 的 `settings` 键，单对象）。
@@ -141,9 +142,11 @@ export interface YouTubeSettings {
   hoverPause: boolean;
   /**
    * 字幕内生词译文：above=单词上方小注解（默认，字幕窗向上长高，不改变宽度）；below=单词下方小注解（同 above 对称）；after=词后小字（字幕行不折行、居中，
-   * 放不下时该条字幕自动改用上方注解）；off=只高亮。自动生成字幕同样按此设置（窗口高度固定，注解可能被裁切）
+   * 放不下时该条字幕自动改用上方注解）；off=只高亮。自动生成字幕的 above/below 改用 after（窗口高度由播放器写死，注解撑高行会让整窗跳动）
    */
   captionTranslation: 'off' | 'above' | 'below' | 'after';
+  /** 字幕注解样式（颜色、底色、字号、括号等，可选；缺省为近黑底 + 暖黄字，见 core/theme/caption-style.ts） */
+  captionStyle?: CaptionGlossStyle;
 }
 
 /**
