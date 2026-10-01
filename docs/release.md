@@ -29,6 +29,7 @@
 | `npm run zip:edge` | `highlight-new-words-<版本>-edge.zip` | 上传 Edge 加载项 |
 | `npm run zip:stores` | 以上两个 | 发版时一次打包 |
 | `npm run build:firefox` | `firefox-mv3/` | Firefox 本地加载调试 |
+| `npm run pack:crx` | `.output/highlight-new-words-<版本>.crx` | 手机 Edge 侧载测试（不用于商店，见第十二节） |
 
 - 所有目标统一 MV3：`wxt.config.ts` 中固定 `manifestVersion: 3`（WXT 对 firefox 默认是 MV2）。
 - 目标浏览器专有的 manifest 字段不写在公共 `manifest` 里，而是由 `build:manifestGenerated` 钩子调用 [platform/manifest.ts](../src/core/platform/manifest.ts) 的 `patchFirefoxManifest` 注入：gecko `id`、`strict_min_version: 140.0`、`gecko_android.strict_min_version: 142.0`、`data_collection_permissions`，并去掉 Firefox 不支持的 `tts` 权限。chrome/edge 产物不含 `browser_specific_settings`。
@@ -205,3 +206,17 @@ npm run build:firefox            # 产物 ${OUT_DIR:-.output}/firefox-mv3
 
 - [ ] Chrome、Edge 均提交同一版本；记录提交日期与审核结果
 - [ ] 上线后用商店安装一次，确认版本号与功能
+
+## 十二、手机 Edge 侧载测试
+
+商店上架前在手机 Edge 上实测，用 crx 侧载：
+
+```bash
+npm run pack:crx                 # build:edge 后打包 .output/edge-mv3，产物 .output/highlight-new-words-<版本>.crx
+```
+
+- 脚本 [scripts/pack-crx.mjs](../scripts/pack-crx.mjs)：用 Chromium 内核浏览器的 `--pack-extension` 无头打包；浏览器依次取 `CHROME_PATH`、PATH 中的 Chrome/Chromium/Edge、Playwright 缓存的 Chromium。产物固定写到 `.output/`，不跟随 `OUT_DIR`。
+- 签名私钥 `.cache/crx-key.pem`（`.cache/` 不进 git）：首次打包时生成，之后复用，扩展 ID 不变，手机上覆盖安装能保留设置与数据。私钥不要提交或外传；丢失只会让扩展 ID 变化，重新安装即可。
+- 传到手机：USB 调试下 `adb push .output/highlight-new-words-<版本>.crx /sdcard/Download/`，或用微信/QQ 文件传输。
+- 安装（Edge Canary；正式版目前只支持从商店安装扩展，可能没有此入口）：设置 → 关于 Microsoft Edge → 连点版本号约 5 次开启开发者选项 → 设置 → 开发者选项 → “Extension install by crx” → 选择 crx。扩展入口在右下角“…”菜单的“扩展”中。以上菜单路径尚未在真机上逐项核对，以实际界面为准。
+- 改代码后重新 `npm run pack:crx`，在手机上同样方式覆盖安装。

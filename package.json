@@ -17,7 +17,8 @@
     "postinstall": "wxt prepare",
     "build:firefox": "wxt build -b firefox",
     "zip:edge": "wxt zip -b edge",
-    "zip:stores": "wxt zip && wxt zip -b edge"
+    "zip:stores": "wxt zip && wxt zip -b edge",
+    "pack:crx": "wxt build -b edge && node scripts/pack-crx.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.3",
