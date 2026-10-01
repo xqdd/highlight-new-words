@@ -38,6 +38,8 @@ const COOKIE_PAGE_DELAY_MS = 500;
 export const OPENAPI_MIN_INTERVAL_MS = 2_100;
 export const OPENAPI_PAGE_SIZE = 100;
 export const OPENAPI_MAX_PAGE = 50;
+/** 读请求遇到网络错误 / 5xx 时的重试次数 */
+export const OPENAPI_GET_RETRIES = 2;
 /** 批量删除/加词每次最多的单词数（文档未写上限，保守取 100） */
 const OPENAPI_BATCH = 100;
 
@@ -68,19 +70,35 @@ export function setOpenApiThrottle(ms: number): void {
 
 async function openApi<T>(ctx: SourceContext, method: string, path: string, body?: unknown): Promise<T> {
   const run = async (): Promise<T> => {
-    const wait = lastOpenApiAt + minIntervalMs - Date.now();
-    if (wait > 0) await sleep(wait);
-    lastOpenApiAt = Date.now();
-    let res: Response;
-    try {
-      res = await fetch(OPENAPI_BASE + path, {
-        method,
-        headers: { Authorization: authHeader(ctx)!, 'Content-Type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-    } catch {
-      throw new SourceError('无法连接欧路服务器，请检查网络', 'network');
+    let res: Response | undefined;
+    // 读请求（列分组、分页拉词）在网络错误 / 5xx 时指数退避重试（间隔 2.1s、4.2s）：实测偶发首个请求连接失败会让整个来源同步失败。
+    // 写请求（加词/删词）不重试：结果未知时重试可能重复执行，交给调用方报告失败、保留本地缓存。
+    // 重试同样排在全局串行链中并计入请求间隔，不会突破“1 分钟 30 次”的限流
+    const attempts = method === 'GET' ? 1 + OPENAPI_GET_RETRIES : 1;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const wait = lastOpenApiAt + minIntervalMs * 2 ** attempt - Date.now();
+      if (wait > 0) await sleep(wait);
+      lastOpenApiAt = Date.now();
+      try {
+        res = await fetch(OPENAPI_BASE + path, {
+          method,
+          headers: { Authorization: authHeader(ctx)!, 'Content-Type': 'application/json' },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+      } catch {
+        if (attempt + 1 < attempts) {
+          console.info('[hnw] 欧路请求网络错误，重试', path, attempt + 1);
+          continue;
+        }
+        throw new SourceError('无法连接欧路服务器，请检查网络', 'network');
+      }
+      if (res.status >= 500 && attempt + 1 < attempts) {
+        console.info('[hnw] 欧路服务器错误，重试', res.status, path, attempt + 1);
+        continue;
+      }
+      break;
     }
+    res = res!;
     const text = await res.text();
     if (res.status === 401) throw new SourceError('欧路 API 授权无效或已过期，请重新获取授权信息', 'auth');
     if (res.status === 403 || res.status === 429) throw new SourceError('欧路接口访问过于频繁，已被临时限制，请 1 小时后再试', 'ratelimit');

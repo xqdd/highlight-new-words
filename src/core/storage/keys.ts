@@ -17,6 +17,8 @@ export const STORAGE_KEYS = {
   syncState: 'syncState',
   /** WebDAV 同步状态：BackendSyncStatus（见 core/sync/types.ts）；仅 background 写 */
   webdavSyncState: 'webdavSyncState',
+  /** WebDAV 本机持有的写锁令牌 WebDavHeldLock（SW 持锁时被回收，重启后据此 UNLOCK）；仅 background 写（第 5 轮新增） */
+  webdavLock: 'webdavLock',
   /** 凭据随同步上传的版本戳：CredentialId -> { at 修改时间, h 值摘要 }（见 core/sync/credentials.ts）；仅 background 写 */
   syncCredStamps: 'syncCredStamps',
 } as const;

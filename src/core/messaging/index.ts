@@ -1,4 +1,5 @@
 import { browser, type Browser } from 'wxt/browser';
+import { speakText } from '../platform/tts';
 import type {
   BackgroundProtocol,
   ContentProtocol,
@@ -54,7 +55,18 @@ export async function sendToBackground<K extends MsgType<BackgroundProtocol>>(
   data: MsgData<BackgroundProtocol, K>,
 ): Promise<MsgReturn<BackgroundProtocol, K>> {
   const envelope: Envelope<K, typeof data> = { ns: 'hnw', type, data };
-  return unwrap(await browser.runtime.sendMessage(envelope));
+  const result = unwrap(await browser.runtime.sendMessage(envelope)) as MsgReturn<BackgroundProtocol, K>;
+  // 后台无朗读引擎（无 chrome.tts 且 service worker 没有 speechSynthesis，如部分移动端）：在调用方页面上下文用 Web Speech 朗读
+  if (type === 'tts') return (await speakFallback(result as MsgReturn<BackgroundProtocol, 'tts'>)) as MsgReturn<BackgroundProtocol, K>;
+  return result;
+}
+
+/** tts 消息的页面兜底朗读：后台返回 fallback 参数时在本上下文朗读，并把结果换成本地朗读结果 */
+async function speakFallback(res: MsgReturn<BackgroundProtocol, 'tts'>): Promise<MsgReturn<BackgroundProtocol, 'tts'>> {
+  if (!res?.fallback) return res;
+  const { text, ...opts } = res.fallback;
+  const local = await speakText(text, opts);
+  return local.spoken ? { spoken: true } : { spoken: false, reason: local.reason ?? 'unavailable' };
 }
 
 /** background 注册处理器（必须实现全部消息） */

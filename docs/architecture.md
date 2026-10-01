@@ -79,17 +79,18 @@ flowchart LR
 
 | 字段 | 含义 |
 | --- | --- |
-| `updatedAt` | 最近修改时间，`saveSettings` 自动刷新；storage.sync 按此 LWW |
+| `updatedAt` | 最近修改时间，`saveSettings` 自动刷新（只改本机字段 `sync`/`apiToken` 时不刷新，避免新设备刚配好同步就用默认设置覆盖远端）；各同步后端按此 LWW |
 | `enabled` | 总开关（旧 `toggle`） |
 | `books.enabled` | 启用词书 id 数组，三类词书可任意组合；顺序即优先级（id 规则见 4.2） |
 | `style.themeId` / `style.custom` / `style.perBook` | 全局主题、自定义颜色（含旧版 4 个颜色）、按词书覆盖 |
 | `inlineTranslation.mode` | `off` / `after`（词后）/ `ruby`（词上方，CSS `display:ruby`） |
 | `card.trigger` | `auto`（桌面悬停 + 触屏点按）/ `hover` / `click` |
 | `tts` | 自动发音开关、`voice`（`chrome.tts.speak` 选项）、语速 |
-| `sources[providerId]` | 按来源配置 `SourceSettings`：`enabled`、`autoSync`（每天）、`deleteOnKnown`（默认 false，`wordActions.knownRemoveFrom='auto'` 时生效）、可选 `apiToken`（仅本机，不参与同步） |
+| `sources[providerId]` | 按来源配置 `SourceSettings`：`enabled`、`autoSync`（每天）、`deleteOnKnown`（默认 false，`wordActions.knownRemoveFrom='auto'` 时生效）、可选 `apiToken`（本机字段；只有勾选 `credentialSync["token:<id>"]` 时才作为凭据随同步上传） |
 | `knownBooks` | 熟词本多来源：`enabled` 启用的来源熟词本 id（角色为 known 的来源词书，如欧路“已掌握单词”，首次同步成功自动加入）；`roles` 用户为来源词书指定的角色 `new`/`known`（覆盖 provider 声明）。本地熟词本始终生效，见 4.9 |
 | `wordActions` | 单词操作目标（见 4.9）：`sameLemma` 同原形开关（默认开）；`addTargets` 加入生词本写入的书（默认 `local:mine` “我的生词本”）；`addRemoveFromKnown` 加入时移出的熟词本（默认本地熟词本 `known:local`）；`knownTargets` 认识时写入的熟词本（默认 `known:local`）；`knownRemoveFrom` 认识时移除的生词本，`'auto'` = 沿用各来源 `deleteOnKnown` |
-| `sync` | storage.sync 开关与 `include.{settings,knownWords,localBooks}`（本机字段，不参与同步） |
+| `sync` | 本机同步配置（不参与同步）：`enabled`/`include` 为 chrome.storage.sync 后端；`webdav` 为 WebDAV 后端（`enabled/url/username/password/dir/include(+sourceBooks)/autoSync{onChange,onStartup,intervalMinutes}`），见 4.11 |
+| `credentialSync` | 凭据是否随同步上传：`token:<providerId>`（来源 API token）、`webdav`（WebDAV 连接信息含密码），默认全部 false；本字段参与设置同步，各设备一致，见 4.11 |
 | `sites.disabled` | 禁用站点（含子域名，见 `isSiteDisabled`） |
 | `ui.theme` | 扩展页面（popup/options）界面主题 `auto`/`light`/`dark`（options 分片新增，默认 `auto`）；页面在根元素设置 `data-theme`，`auto` 时不设置、跟随系统 |
 
@@ -103,7 +104,10 @@ flowchart LR
 | `srcBook:<bookId>` | `SourceBookData { id, words: UserWordMap, updatedAt }` | background |
 | `localBooks` | `LocalBookIndex { books: id→LocalBookMeta, removed: id→删除时间 }` | options、sync |
 | `localBook:<bookId>` | `LocalBookData { id, words }` | options、sync |
-| `syncState` | `SyncStatus`（用量/阶段/错误/设备 id） | background |
+| `syncState` | `SyncStatus`（storage.sync 用量/阶段/错误/设备 id） | background |
+| `webdavSyncState` | `BackendSyncStatus`（WebDAV 阶段/错误/上次同步/设备 id/retryAt/recheckAt） | background |
+| `webdavLock` | `WebDavHeldLock { url, token, at }`：本机持有的 WebDAV 写锁令牌，LOCK 成功时写入、UNLOCK 后删除；SW 持锁时被回收，重启后第一次写入先用它 UNLOCK（第 5 轮新增） | background |
+| `syncCredStamps` | 凭据修改时间戳 `id → { at, h 值摘要 }`（凭据合并用） | background |
 
 `storage.session` 中 `tabWords` 用于徽章；`storage.sync` 键见 4.9。
 
@@ -211,18 +215,24 @@ flowchart LR
 
 | 方向 | 消息 | 参数 → 返回 |
 | --- | --- | --- |
-| → background | `tts` | `{text, force?}` → `{spoken, reason?}`（`unavailable`=无 chrome.tts，调用方可退回页面 speechSynthesis；本机不存在的 voiceName 自动退回按 lang） |
+| → background | `tts` | `{text, force?}` → `{spoken, reason?, fallback?}`（引擎走 platform 垫片：chrome.tts → 后台 speechSynthesis（Firefox）；都没有时返回 `fallback` 朗读参数，`sendToBackground` 自动在调用方上下文用 Web Speech 朗读，调用方无需处理；本机不存在的 voiceName 自动退回按 lang） |
 | → background | `refreshSourceBooks` | `{providerId}` → `SourceBookState[]`（列远端生词本，新书 status=never，消失的标 orphaned） |
 | → background | `syncSourceBooks` | `{bookIds?, providerId?}` → `SourceSyncResult[]`（逐本独立；无登记的书时先刷新列表） |
 | → background | `deleteSourceWords` | `{word, bookIds?, forms?}` → `DeleteWordsResult`（远端成功才移除本地缓存；`forms` 只含屈折词形） |
-| → background | `markKnown` | `{word, lemma}` → `MarkKnownResult`（按 `wordActions` 写熟词本 + 从生词本移除屈折词形；`written`/`removedLocal`/`fullyUndoable` 为第 2 轮新增可选字段） |
+| → background | `markKnown` | `{word, lemma, confirmed?}` → `MarkKnownResult`（按 `wordActions` 写熟词本 + 从生词本移除屈折词形；`written`/`removedLocal`/`fullyUndoable` 为第 2 轮新增；第 3 轮新增 `confirmed` 与 `withheld`：同形异义词形的远端删除未确认时不执行，见 4.9） |
 | → background | `unmarkKnown` | `{lemma}` → `{ok, restored?, message?}`（10 分钟内撤销：本地词书完整恢复，来源词书加回可写的原书，不可写时加回同来源可写书并在 message 说明；记录存 `storage.session` 的 `knownUndo`） |
 | → background | `addWord` | `{word, lemma, trans?, phonetic?}` → `AddWordResult`（写入 `addTargets`，移出 `addRemoveFromKnown`） |
 | → background | `removeWord` | `{lemma, bookIds?}` → `RemoveWordResult`（移出生词本；10 分钟内会把加入时移出的熟词加回） |
-| → background | `previewWordAction` | `{action:'add'\|'known', word, lemma}` → `WordActionPreview`（只读本地缓存，列出写入目标和各书将移除的词形，`needsConfirm` 表示含远端删除） |
+| → background | `previewWordAction` | `{action:'add'\|'known', word, lemma}` → `WordActionPreview`（只读本地缓存，列出写入目标和各书将移除的词形，`needsConfirm` 表示含远端删除；`remove[].homographs` 为需确认的同形异义词形） |
 | → background | `getWordState` | `{lemma}` → `{collected, collectedIn, known}` |
 | → background | `getSyncStatus` | `{}` → `SyncStatus` |
-| → background | `syncNow` | `{}` → `SyncStatus`（立即 pull + push） |
+| → background | `syncNow` | `{}` → `SyncStatus`（storage.sync 立即 pull + push） |
+| → background | `getSyncBackends` | `{}` → `{storageSync: SyncStatus, webdav: BackendSyncStatus}` |
+| → background | `webdavTest` | `{url?, username?, password?, dir?}` → `WebDavTestResult`（逐步：连接 → 目录（MKCOL）→ 写入权限 → 现有文件）；options 在点击处理里先调 platform `requestOriginAccess(url)` |
+| → background | `webdavSyncNow` | `{}` → `BackendSyncStatus` |
+| → background | `exportBackup` | `{includeSourceBooks?, includeCredentials?, compress?}` → `BackupExport`（凭据默认不写入备份，第 4 轮新增 `includeCredentials`；`content` 为 JSON 文本或 gzip 的 base64，`fileName` 已带 .json/.json.gz） |
+| → background | `previewBackupImport` | `{content, mode:'merge'\|'overwrite'}` → `BackupImportPreview`（新增/删除/更新/冲突计数 + `summary` 中文） |
+| → background | `importBackup` | `{content, mode}` → `BackupImportResult` |
 | → background | `reportPageWords` | `{lemmas}`（本 frame 全量）→ void，用于徽章 |
 | → background | `getTabWords` | `{tabId}` → `{lemmas}` |
 | → content（顶层 frame） | `getPageState` | `{}` → `PageState` |
@@ -303,17 +313,50 @@ sequenceDiagram
 
 **新增格式**：`ImportFormat` 加一项 → `IMPORT_FORMATS` 加 UI 选项 → `parse.ts` 的 `PARSERS` 与 `detectImportFormat` 补齐。
 
-### 4.11 storage.sync 同步
+### 4.11 跨设备同步（SyncBackend：storage.sync / WebDAV / 手动备份）
 
-实现在 [core/sync](../src/core/sync)（归 background 分片），background 中只实例化一个 `StorageSyncService`。
+实现在 [core/sync](../src/core/sync)（归 background 分片）。快照的段构造与合并只实现一次（[snapshot.ts](../src/core/sync/snapshot.ts) 的 `SnapshotBuilder`/`applyRemoteSnapshot`/`runSyncCycle`），传输层抽象为 `SyncBackend`（[backend.ts](../src/core/sync/backend.ts)）：
+
+```ts
+interface SyncBackend {
+  id: 'storage-sync' | 'webdav';
+  read(): Promise<RemoteSnapshot>;          // { version, segs, readSegment(id) }
+  list(): Promise<{ version; segs }>;      // 只读段目录
+  plan(candidates, base, kept): SyncPlan;  // 按容量取舍（storage.sync）或全写（WebDAV）
+  write(plan, base, deviceId);             // 远端版本 ≠ base.version 时抛 SyncConflictError，不写任何数据
+  getUsage();
+}
+```
+
+```mermaid
+flowchart LR
+  R[read 远端快照] --> M[applyRemoteSnapshot<br/>合并到本机] --> B[SnapshotBuilder.build<br/>按 scope 构造段] --> P[backend.plan] --> W[backend.write<br/>If-Match / manifest 版本]
+  W -- SyncConflictError --> R
+```
+
+`runSyncCycle` 冲突时重新 read → 合并 → 再写，最多 3 次；合并满足交换律与幂等，重试不丢数据。
+
+| 后端 | 服务 | 存储 | 并发控制 | 调度 |
+| --- | --- | --- | --- | --- |
+| chrome.storage.sync | `StorageSyncService`（[service.ts](../src/core/sync/service.ts)）+ `StorageSyncBackend` | `hnw:m` + 切片（下文） | 写前重读 `hnw:m`，`device@at` 变化即冲突；剩余竞态由段哈希兜底 | 变化防抖 5s/最多 30s、写频率限额与退避（下文）、其他设备写入后 2s 拉取、启动同步 |
+| WebDAV | `WebDavSyncService`（[webdav-service.ts](../src/core/sync/webdav-service.ts)）+ `WebDavBackend`（[backends/webdav.ts](../src/core/sync/backends/webdav.ts)） | `<url>/<dir>/hnw-sync.json` 单文件（段目录 + 段数据，一次 PUT 原子替换） | 写入持有 WebDAV 排他写锁：`LOCK`（60s 超时，令牌持久化到 `webdavLock`）→ [弱/无 ETag 时锁内 GET 比较内容哈希] → `PUT`（`If: (<锁令牌>)`，强 ETag 另带 `If-Match`，文件不存在带 `If-None-Match: *`）→ `UNLOCK`；412 与 423（被其他设备锁定，随机退避 300–1500ms，`WebDavLockedError`）即冲突。服务器不支持 LOCK（405/501 等 4xx）时退化为写后回读校验（随机等待 300–1500ms 后 GET，内容不是自己写的即冲突）并在 5–15s 后复查一轮，复查时间持久化为 `recheckAt`；LOCK 500/502/504 是瞬时错误，本次写入内退避重试 3 次，不判定为不支持锁 | `autoSync.onChange`（按 `include` 过滤触发键，防抖 10s/最多 60s）、`onStartup`、`intervalMinutes`（SW 唤醒时检查是否到期，存活期间 setTimeout；不申请 alarms 权限）；429/503 退避 10 分钟（`retryAt`）；一轮冲突重试 5 次仍失败为 `pending` 并在 30–90s 后自动再同步（被锁定时提示“同步文件被另一设备锁定…约 N 秒后自动重试”）；5xx 服务器错误为 `pending` 并在 60–120s 后自动重试；SW 启动时残留的 `syncing` 复位为 `pending` 并补一次同步，未做的 `recheckAt` 复查到期立即补做 |
+| 手动备份 | [backup.ts](../src/core/sync/backup.ts)（`exportBackup`/`previewBackupImport`/`importBackup`） | 单个 JSON（可选 gzip），可读格式 `BackupFile`（`format: 'highlight-new-words-backup'`） | — | 用户操作 |
+
+WebDAV 细节：目录——read 拿到远端文件（200）即视为目录存在，不再 PROPFIND；文件不存在时只 PROPFIND 最深一级，不存在再自顶向下逐级 MKCOL（405 = 已存在；403 时再 PROPFIND，已存在即成功——Apache 对并发 MKCOL 的较晚请求返回 403）；目录在网盘端被删除/移动时，LOCK/PUT 返回 404/409（Apache 对父目录不存在的 PUT 返回 403，确认目录不存在后同样处理）或回读 GET 404 都会清除“目录已存在”缓存，逐级 MKCOL 后整次写入（LOCK → 比较 → PUT → UNLOCK）重试一次，SW 存活期间第 1 次同步即恢复；目录名逐段 `encodeURIComponent`；认证 HTTP Basic（UTF-8），`credentials:'omit'`；错误码映射为中文（401 提示坚果云需“应用密码”、403、404/409、423、429/503 限流、507 空间不足）。主机权限：chrome 产物 host_permissions 已覆盖 http/https，无需 `optional_host_permissions`；Firefox 等可撤销主机权限的环境由 options 在“测试连接/保存”点击处理中调用 platform 的 `requestOriginAccess(url)`，background 每次同步前 `hasOriginAccess` 检查，未授权时状态为 error 并提示去测试连接授权。
+
+手动备份：导出内容 = 设置（`pickSyncedSettings`）+ 本地熟词本（含墓碑）+ 本地词书（含删除墓碑）+ 可选来源词书缓存 + 勾选上传的凭据（凭据在备份文件中是明文，默认不含；`exportBackup` 传 `includeCredentials: true` 才写入，未写入的个数见 `counts.skippedCredentials`）。导入 `merge` 与同步合并规则相同；`overwrite` 把本机换成备份内容，本机多出的熟词/本地词书记删除墓碑（时间为导入时刻，会经同步传播），设置与写入的词书 `updatedAt` 记为导入时刻；本机 `sync` 配置与未随备份提供的 token 保留。预览只读，返回新增/删除/更新/冲突计数（冲突 = 两边都有记录且不同，合并时按时间取较新者）。
+
+**凭据随同步上传**（[credentials.ts](../src/core/sync/credentials.ts)）：`listSyncCredentials(settings)` 给 options 渲染勾选项（含 `risk` 说明文案、`excludedBackends`）。勾选的凭据放在 `cred` 段 `{id: {v, at}}`；**后端自身凭据不写进它自己**：WebDAV 连接信息只会随 storage.sync 与手动备份上传，不会写进 WebDAV 文件。合并：只采用本机勾选的凭据，本机为空或远端修改时间较新时采用；修改时间由 background `watchCredentialChanges` 在设置变化时记录到 `syncCredStamps`。取消勾选（设置同步到各设备后）下一次推送即移除远端 `cred` 段。
+
+**storage.sync 后端细节**（background 中只实例化一个 `StorageSyncService`）：
 
 - **段与编码**：数据切成段，每段 `JSON → deflate-raw（CompressionStream）→ base64`（`encodeSyncValue`），按单项上限切片：
-  - `settings`（`pickSyncedSettings`：去掉 `sync` 与 `apiToken`）、`known`、`lbr`（本地词书删除墓碑）、`lb:<uuid>`（每本本地词书一段）；来源词书不同步
+  - `settings`（`pickSyncedSettings`：去掉 `sync` 与 `apiToken`）、`cred`（勾选上传的凭据，随 include.settings）、`known`、`lbr`（本地词书删除墓碑）、`lb:<uuid>`（每本本地词书一段）；`sb:<bookId>`（来源词书缓存）只有 WebDAV/备份可选，storage.sync 不同步
   - `storage.sync` 键：`hnw:m` 为 `SyncManifest { v, device, at, segs: 段→{kind, n 切片数, h 哈希, at, level}, parts? }`，切片为 `hnw:<段>:<i>`；段目录超过单项上限时 manifest 分片，其余片在 `hnw:m:<i>`（`{ segs }`，最多 16 片），与切片同批写入；读取时缺片的段视为未知，不拉取也不当作删除
 - **配额与取舍**（`planSyncLayout`，纯函数）：按优先级 settings(0) → known(1) → lbr(2) → 本地词书(10+，小书优先) 依次放入；本地词书先尝试完整，再降级为仅单词（`reduced`），仍放不下则 `skipped`；保证总字节 ≤ `QUOTA_BYTES - 预留`、项数（含 manifest 分片）≤ `MAX_ITEMS`、单项 ≤ `QUOTA_BYTES_PER_ITEM`。用量 `SyncUsage` 写入 `syncState` 供 UI 展示。
 - **写频率**：本机变化防抖 5s，连续改动时最多等待 30s（maxWait，从第一次未推送的改动算起），两次推送间隔 ≥ 10s，本机写操作按滑动窗口自我限额（Chrome 上限的 80%：每分钟 96、每小时 1440）。每次推送最多 1 次 `set`（切片与 manifest 同批）+ 1 次 `remove`，只重写哈希变化的段。遇到 `MAX_WRITE_OPERATIONS_PER_MINUTE` 退避 60s；遇到 `PER_HOUR` 按本机写入记录推算窗口释放时间（无记录时退避 1 小时）。退避截止时间写入 `syncState.retryAt`（SW 重启后仍遵守），退避期间 `phase=pending`、`error` 清空、`notice` 说明何时自动重试，手动同步只拉取。内容比较一律用 `stableStringify`（Chrome 读回的对象键按字母序，直接 `JSON.stringify` 比较会导致每次同步都重写）。熟词段用紧凑编码 [known-codec.ts](../src/core/sync/known-codec.ts)（秒精度，超配额降级为天精度）。拉取时段哈希与 manifest 不符或解码失败只跳过该段。
 - **合并**（[merge.ts](../src/core/sync/merge.ts)）：设置按 `updatedAt` LWW 且保留本机字段；熟词并集 + 墓碑（墓碑保留 180 天）；本地词书每本按 `updatedAt` LWW，墓碑时间 ≥ 更新时间则删除；超配额被跳过的书不视为删除。全新安装的默认设置 `updatedAt=0`、旧版迁移结果 `updatedAt=1`，新设备首次同步时远端设置胜出。
-- **用户开关**：`settings.sync.enabled` 关闭后不读写 storage.sync；`include` 中关闭的类别不推送也不拉取，但保留远端已有段（`kept`，可能是其他设备的数据）。
+- **用户开关**：`settings.sync.enabled` 关闭后不读写 storage.sync；`include` 中关闭的类别不推送也不拉取，但保留远端已有段（`kept`，可能是其他设备的数据）。WebDAV 同理使用 `settings.sync.webdav.include`。
 
 ```mermaid
 flowchart LR
@@ -367,7 +410,10 @@ stdout 输出每页统计 JSON（高亮数、不同词条数、行内翻译数�
 - 欧路 OpenAPI 已用调试账号 token 实测（分类、拉词、已掌握、在“测试”分组加词/删词）；cookie 模式沿用旧版接口，未登录判断（非 JSON / 重定向到登录页）为推断，未实测。
 - 欧路 cookie 模式删除（SetStarRating）作用于整个生词本，不区分分类；“已掌握单词”只读，OpenAPI 没有写入接口。
 - storage.sync 在真实 Chromium 中验证了配额（自算用量与 `getBytesInUse` 误差 < 50 字节）与无变化不重写，未做真实多设备验证。
-- 撤销熟词时有道非默认分组的词只能加回默认分组“无标签”（文案会说明）；欧路 cookie 模式无加词接口，无法加回（`MarkKnownResult.fullyUndoable=false`）。
-- 屈折还原数据中的同形异义词（lay 是 lie 的过去式也是原形动词、found 是 find 的过去式也是原形）会按屈折处理：标记 lie 会删除生词本中的 lay。卡片应在 `previewWordAction.needsConfirm` 时列出将删除的词。
+- 撤销熟词时有道非默认分组的词只能加回默认分组“无标签”（markKnown 的 message 预先说明“撤销时会加回 …”）；欧路 cookie 模式无加词接口，无法加回（message 说明“撤销不会恢复”，`fullyUndoable=false`）。
+- 认识（`knownRemoveFrom='auto'`）时同时从“加入生词本”的本地目标（默认“我的生词本”）移除，撤销时加回。
+- 屈折还原数据中的同形异义词（lay 是 lie 的过去式也是原形动词、found 是 find 的过去式也是原形）：后台层保护（`forms.ts#findHomographForms`：不规则词形且打包词典中它有自己的屈折变化，如 lay/laid、found/founded、saw/sawing）——这些词的**远端**删除只有 `markKnown` 带 `confirmed=true` 才执行，否则保留并在 `withheld` 与 message 中说明；用户点的页面词形本身不拦截。卡片可据 `previewWordAction.remove[].homographs` 弹确认后带 `confirmed` 重发（幂等）。本地词书移除可完整撤销，不拦截。
+- 欧路“已掌握”868 词同步约 19 秒：`page_size` 服务器上限 100（2026-10 实测 500/1000 返回 400），叠加 1 分钟 30 次限流（间隔 2.1s），无法再快。读请求（列分组、分页）网络错误/5xx 自动重试 2 次（2.1s、4.2s 退避），写请求不重试。
+- WebDAV 只用本地 docker（bytemark/webdav，Apache mod_dav）实测，坚果云/Nextcloud 未实测（是否支持 LOCK 未验证）。并发写入：支持 LOCK 时真实两 profile 并发 0/72 轮丢失；不支持 LOCK（用拒绝 LOCK 的代理模拟）时写后回读校验 + 复查 0/20 轮丢失，对方 PUT 比本机回读还慢落地时远端会暂时缺本机的词，5–15s 复查补推；复查前 SW 被回收时由持久化的 `recheckAt` 在下次 SW 启动时立即补做（合并幂等，不会永久丢失本机数据）。
 - storage.sync 的防抖/退避计时器在 SW 被回收后丢失，未推送的改动在 SW 下次启动时由启动同步补推（没有使用 alarms 权限）。
 - 徽章：background 在 URL（不含 hash）变化时清零（含 SPA 路由），依赖内容脚本在路由切换后按页面实际高亮重新全量上报。

@@ -106,11 +106,12 @@ export function toggleSiteRule(disabled: string[], hostname: string, enable: boo
 
 const CATEGORY_TITLES: Record<BookCategory, string> = {
   user: '我的生词本',
+  level: '难度分级',
   exam: '考试分级',
   frequency: '词频分级',
   other: '其他',
 };
-const CATEGORY_ORDER: BookCategory[] = ['user', 'exam', 'frequency', 'other'];
+const CATEGORY_ORDER: BookCategory[] = ['user', 'level', 'exam', 'frequency', 'other'];
 
 export interface BookGroup {
   category: BookCategory;
@@ -118,7 +119,7 @@ export interface BookGroup {
   books: BookMeta[];
 }
 
-/** 按类别分组（用户词书 → 考试 → 词频 → 其他），组内保持 registry 顺序（内置词书按 level） */
+/** 按类别分组（用户词书 → 难度分级 → 考试 → 词频 → 其他），组内保持 registry 顺序（内置词书按 level） */
 export function groupBooks(books: BookMeta[]): BookGroup[] {
   return CATEGORY_ORDER.map((category) => ({
     category,

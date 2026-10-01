@@ -12,7 +12,9 @@ import { findInflectedForms } from '@/background/forms';
 import { youdaoProvider } from '@/background/sources/youdao';
 import { setOpenApiThrottle } from '@/background/sources/eudic';
 import { deleteFromSources, syncSourceBooks } from '@/background/sources/service';
-import { addWord, getWordState, markKnown, previewWordAction, removeWord, unmarkKnown } from '@/background/known';
+import { addWord, getWordState, markKnown, previewWordAction, removeWord, setHomographDictionary, unmarkKnown } from '@/background/known';
+import { PackagedDictionary } from '@/core/dict/packaged';
+import type { DictShardFile } from '@/core/dict/types';
 
 /**
  * 第 2 轮评审阻塞项回归：
@@ -323,5 +325,115 @@ describe('F5 熟词本多来源与单词操作配置', () => {
     const res = await addWord({ word: 'careful', lemma: 'careful' });
     expect(res.removedKnown).toEqual([expect.objectContaining({ bookId: 'src:eudic:mastered', ok: false, skipped: true })]);
     expect(res.message).toContain('不会高亮');
+  });
+});
+
+describe('第 3 轮：O1–O4', () => {
+  const tokenSettings = { sources: { eudic: { enabled: true, apiToken: 'abc' } } };
+  /** 从磁盘读打包词典分片（与扩展运行时 data/dict 一致），用于同形异义判定 */
+  const diskDict = () =>
+    new PackagedDictionary(async (p) => JSON.parse(readFileSync(resolve(__dirname, '../../public/data/dict', `${p}.json`), 'utf8')) as DictShardFile);
+  afterEach(() => setHomographDictionary(undefined));
+
+  it('O1 欧路列分组首个请求网络错误：GET 自动重试，整轮同步成功；写请求（POST）不重试', async () => {
+    await patchSettings(tokenSettings);
+    let categoryCalls = 0;
+    let postCalls = 0;
+    mockFetch(
+      (url) => {
+        if (!/studylist\/category/.test(url)) return undefined;
+        if (++categoryCalls === 1) throw new TypeError('Failed to fetch');
+        return json(EUDIC.category);
+      },
+      on(/studylist\/mastered_words/, () => json(EUDIC.mastered)),
+      (url, init) => {
+        if (!/studylist\/words/.test(url)) return undefined;
+        if (init?.method === 'POST') {
+          postCalls++;
+          throw new TypeError('Failed to fetch');
+        }
+        return json(EUDIC.words);
+      },
+    );
+    const results = await syncSourceBooks({ providerId: 'eudic' });
+    expect(categoryCalls).toBe(2);
+    expect(results.every((r) => r.ok)).toBe(true);
+    await patchSettings({ wordActions: { addTargets: ['src:eudic:0'] } });
+    const res = await addWord({ word: 'zyzzyva', lemma: 'zyzzyva' });
+    expect(postCalls).toBe(1);
+    expect(res.added[0]).toMatchObject({ ok: false });
+  });
+
+  it('O2 默认 auto：认识后从“我的生词本”移除，卡片状态不再同时显示已收藏与熟词；撤销后加回', async () => {
+    await addWord({ word: 'run', lemma: 'run', trans: '跑' });
+    expect(await getWordState('run')).toMatchObject({ collected: true, known: false });
+    const res = await markKnown('running', 'run');
+    expect(res.removedLocal).toEqual([expect.objectContaining({ bookId: MY_WORDS_BOOK_ID, ok: true, words: ['run'] })]);
+    expect(await getWordState('run')).toMatchObject({ collected: false, known: true });
+    await unmarkKnown('run');
+    expect(await getWordState('run')).toMatchObject({ collected: true, known: false });
+    expect((await getLocalBook(MY_WORDS_BOOK_ID))!.words.run!.trans).toBe('跑');
+  });
+
+  it('O3 撤销文案与行为一致：可加回原书不提示；只能加回默认分组时说明去向；加不回时才说“不会恢复”', async () => {
+    // 有道非默认分组（不能加词）+ 默认分组可加词 -> fallback
+    await seedSourceBook({ id: 'src:youdao:g1', providerId: 'youdao', remoteId: 'g1', name: '考研', canAdd: false, canDelete: true }, { run: { word: 'run', ref: 'i1' } });
+    await seedSourceBook({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签', canAdd: true, canDelete: true }, {});
+    await patchSettings({ sources: { youdao: { enabled: true, deleteOnKnown: true } } });
+    // 加词后 provider 会重新拉取默认分组以取得新 itemId
+    youdaoOk([on(/webapi\/words/, () => json(YD_CASEDUP))]);
+    const res = await markKnown('run', 'run');
+    expect(res.fullyUndoable).toBe(false);
+    expect(res.message).toContain('撤销时 run 会加回“有道词典 · 无标签”');
+    expect(res.message).not.toContain('不会恢复');
+    const undo = await unmarkKnown('run');
+    expect(undo.message).toContain('已加回“无标签”');
+
+    // 原书可加词：不提示撤销去向
+    fakeBrowser.reset();
+    await seedYoudaoMixed();
+    youdaoOk();
+    const ok = await markKnown('apple', 'apple');
+    expect(ok.fullyUndoable).toBe(true);
+    expect(ok.message).not.toMatch(/撤销/);
+  });
+
+  it('O4 同形异义：标记 lie 时生词本里的 lay/lain 中 lay 是独立单词——未带 confirmed 不删除，带 confirmed 才删除', async () => {
+    setHomographDictionary(diskDict());
+    const words: UserWordMap = Object.fromEntries(['lie', 'lies', 'lay', 'lain', 'lying', 'find', 'found', 'finds'].map((w) => [w, { word: w, ref: `i-${w}` }]));
+    await seedSourceBook({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签', canAdd: true, canDelete: true }, words);
+    await patchSettings({ sources: { youdao: { enabled: true, deleteOnKnown: true } } });
+
+    const preview = await previewWordAction({ action: 'known', word: 'lie', lemma: 'lie' });
+    expect(preview.needsConfirm).toBe(true);
+    expect(preview.remove[0]!.homographs).toEqual(['lay']);
+
+    let calls = youdaoOk();
+    const res = await markKnown('lie', 'lie');
+    expect(deletedItemIds(calls).sort()).toEqual(['i-lain', 'i-lie', 'i-lies', 'i-lying']);
+    expect(res.withheld).toEqual([{ bookId: 'src:youdao:0', name: '有道词典 · 无标签', words: ['lay'] }]);
+    expect(res.message).toContain('lay 也是独立的单词');
+    expect((await getSourceBook('src:youdao:0'))!.words.lay).toBeDefined();
+
+    calls = youdaoOk();
+    const res2 = await markKnown('lie', 'lie', { confirmed: true });
+    expect(deletedItemIds(calls)).toEqual(['i-lay']);
+    expect(res2.withheld).toBeUndefined();
+
+    // find -> found（也是“创立”）同样需要确认；finds 是规则变化，直接删除
+    calls = youdaoOk();
+    const r3 = await markKnown('find', 'find');
+    expect(deletedItemIds(calls).sort()).toEqual(['i-find', 'i-finds']);
+    expect(r3.withheld![0]!.words).toEqual(['found']);
+  });
+
+  it('O4 用户点的就是该词形（页面上的 found 还原为 find）：视为用户本意，不拦截', async () => {
+    setHomographDictionary(diskDict());
+    await seedSourceBook({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签', canAdd: true, canDelete: true }, { find: { word: 'find', ref: 'i-find' }, found: { word: 'found', ref: 'i-found' } });
+    await patchSettings({ sources: { youdao: { enabled: true, deleteOnKnown: true } } });
+    const calls = youdaoOk();
+    const res = await markKnown('found', 'find');
+    expect(deletedItemIds(calls).sort()).toEqual(['i-find', 'i-found']);
+    expect(res.withheld).toBeUndefined();
   });
 });

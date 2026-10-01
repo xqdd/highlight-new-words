@@ -1,6 +1,14 @@
 import type { BookId } from '../settings/schema';
 import type { SourceBookState } from '../wordbook/types';
-import type { SyncStatus } from '../sync/types';
+import type {
+  BackendSyncStatus,
+  BackupExport,
+  BackupImportMode,
+  BackupImportPreview,
+  BackupImportResult,
+  SyncStatus,
+  WebDavTestResult,
+} from '../sync/types';
 
 /**
  * 跨上下文消息契约（类型即文档）。
@@ -67,8 +75,13 @@ export interface MarkKnownResult {
   written?: WordTargetResult[];
   /** 从本地生词本移除的结果（本地移除可完整撤销） */
   removedLocal?: WordTargetResult[];
-  /** 撤销时远端删除能否完整恢复：false 时卡片应提示“撤销不会恢复已从来源删除的词”或部分恢复 */
+  /** 撤销时远端删除能否完整恢复到原生词本：false 时 message 中已说明（加回其他分组 / 无法加回的词） */
   fullyUndoable?: boolean;
+  /**
+   * 因“同形异义”未执行的远端删除（background 第 3 轮新增）：如标记 lie 时生词本里的 lay（也是“放置”）、标记 find 时的 found（也是“创立”）。
+   * 请求未带 confirmed=true 时后台不删除这些词，卡片可展示确认后带 confirmed 再调用一次 markKnown（幂等）。
+   */
+  withheld?: { bookId: BookId; name: string; words: string[] }[];
 }
 
 /** addWord 结果 */
@@ -95,6 +108,8 @@ export interface WordActionPreviewItem extends WordTargetResult {
   /** 远端操作（来源词书）；删除远端单词无法完全撤销时 undoable=false */
   remote: boolean;
   undoable: boolean;
+  /** words 中属于同形异义的词形（如 lie 的 lay），远端删除需要 markKnown 带 confirmed=true（background 第 3 轮新增） */
+  homographs?: string[];
 }
 
 /**
@@ -118,7 +133,15 @@ export interface BackgroundProtocol {
    * 返回 spoken=false 表示未朗读：reason='disabled' 自动发音关闭；'unavailable' 当前浏览器无 chrome.tts（如部分移动端），
    * 调用方可退回页面内 speechSynthesis。
    */
-  tts(data: { text: string; force?: boolean }): { spoken: boolean; reason?: 'disabled' | 'unavailable' | 'error' };
+  tts(data: { text: string; force?: boolean }): {
+    spoken: boolean;
+    reason?: 'disabled' | 'unavailable' | 'error';
+    /**
+     * 后台没有可用朗读引擎时（无 chrome.tts 且无 speechSynthesis）返回的朗读参数（background 第 3 轮新增）：
+     * sendToBackground 收到后自动在调用方上下文（内容脚本/扩展页）用 platform 的 speakText 朗读，调用方无需处理。
+     */
+    fallback?: { text: string; lang?: string; voiceName?: string; rate?: number };
+  };
 
   // ---- 来源生词本 ----
   /** 刷新某来源的远端生词本列表（调用 provider.listRemoteBooks），新发现的书登记到索引（status=never），返回该来源全部书的状态 */
@@ -139,8 +162,9 @@ export interface BackgroundProtocol {
    * 标记熟词：按 settings.wordActions.knownTargets 写入熟词本（默认本地熟词本），
    * 按 knownRemoveFrom（'auto' = 各来源 deleteOnKnown）从生词本移除该词；sameLemma 开启时移除屈折词形（不含派生词）。
    * word 为页面原词（同原形开关关闭时也会移除该词形本身）。
+   * 后台保护：远端删除中的同形异义词形（previewWordAction 的 homographs）只有 confirmed=true 才删除，否则放在结果的 withheld 中。
    */
-  markKnown(data: { word: string; lemma: string }): MarkKnownResult;
+  markKnown(data: { word: string; lemma: string; confirmed?: boolean }): MarkKnownResult;
   /**
    * 撤销熟词（卡片“撤销”、熟词本管理）：移出本地熟词本；10 分钟内会撤回 markKnown 的其他写入/移除：
    * 本地生词本完整恢复；来源生词本在 provider 可加词时加回（有道非默认分组只能加回默认分组，欧路 cookie 模式无法加回）。
@@ -165,6 +189,27 @@ export interface BackgroundProtocol {
   getSyncStatus(data: Record<string, never>): SyncStatus;
   /** 立即执行一次拉取合并 + 推送（忽略防抖），返回最新状态 */
   syncNow(data: Record<string, never>): SyncStatus;
+
+  // ---- 同步后端（background 第 3 轮新增，见 architecture.md 4.11） ----
+  /** 各同步后端状态：storage.sync（同 getSyncStatus）与 WebDAV */
+  getSyncBackends(data: Record<string, never>): { storageSync: SyncStatus; webdav: BackendSyncStatus };
+  /**
+   * 测试 WebDAV 连接（逐步：连接 → 目录（不存在则 MKCOL 创建）→ 写入权限 → 现有同步文件）。
+   * 参数不传时用已保存设置；options 应在点击处理函数里先调用 platform 的 requestOriginAccess(url)（不能先 await 其他操作）。
+   */
+  webdavTest(data: { url?: string; username?: string; password?: string; dir?: string }): WebDavTestResult;
+  /** 立即进行一轮 WebDAV 同步（GET → 合并 → PUT If-Match，冲突时重新拉取合并后重试） */
+  webdavSyncNow(data: Record<string, never>): BackendSyncStatus;
+  /**
+   * 导出手动备份（设置、熟词含墓碑、本地词书，可选来源词书缓存）；compress=true 时 content 为 gzip 的 base64。
+   * 凭据在备份里是明文：默认不含，includeCredentials=true（用户导出时确认）才写入勾选上传的凭据
+   */
+  exportBackup(data: { includeSourceBooks?: boolean; includeCredentials?: boolean; compress?: boolean }): BackupExport;
+  /** 导入预览（只读）：content 为 JSON 文本或 .json.gz 的 base64 */
+  previewBackupImport(data: { content: string; mode: BackupImportMode }): BackupImportPreview;
+  /** 执行导入：merge 合并（与同步规则相同）/ overwrite 覆盖（本机多出的数据记删除墓碑） */
+  importBackup(data: { content: string; mode: BackupImportMode }): BackupImportResult;
+
   /** 内容脚本上报本 frame 已高亮的不同词条（全量，非增量），用于徽章计数 */
   reportPageWords(data: { lemmas: string[] }): void;
   /** popup 查询某标签页已高亮的不同词条（合并所有 frame） */

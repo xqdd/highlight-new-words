@@ -177,6 +177,15 @@ export interface BackendSyncStatus {
   segments?: number;
   /** 最近一次同步因并发写冲突（412）重试的次数，仅诊断 */
   conflictRetries?: number;
+  /** 服务器限流退避：此时间前不请求（phase=pending） */
+  retryAt?: number;
+  /**
+   * 待复查时间（WebDAV 服务器不支持锁时，写入后 5–15 秒复查一轮）：持久化以便 SW 在复查前被回收时，
+   * 下次启动立即补做（第 5 轮新增，可选）
+   */
+  recheckAt?: number;
+  /** 本机设备 id（写入远端文件的 device 字段） */
+  deviceId?: string;
 }
 
 /** 手动备份文件格式标识 */
@@ -227,7 +236,8 @@ export interface BackupExport {
   content: string;
   /** 原始 JSON 字节数 */
   bytes: number;
-  counts: { knownWords: number; localBooks: number; sourceBooks: number; credentials: number };
+  /** skippedCredentials：勾选了随同步上传、但导出时未传 includeCredentials 而未写入备份的凭据数（第 4 轮新增，可选） */
+  counts: { knownWords: number; localBooks: number; sourceBooks: number; credentials: number; skippedCredentials?: number };
 }
 
 /** WebDAV 连接测试结果（逐步说明，options 直接展示） */

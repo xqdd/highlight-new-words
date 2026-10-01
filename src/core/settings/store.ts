@@ -29,11 +29,29 @@ export async function getSettings(): Promise<Settings> {
 }
 
 /**
+ * 参与跨设备同步的设置内容（去掉 updatedAt 与本机字段：sync 同步配置、各来源 apiToken），用于判断是否需要刷新 updatedAt。
+ * 与 core/sync/merge.ts 的 pickSyncedSettings 口径一致。
+ */
+function syncedBody(s: Settings): string {
+  const { updatedAt: _u, sync: _s, ...rest } = s;
+  const sources = Object.fromEntries(Object.entries(rest.sources ?? {}).map(([id, src]) => [id, { ...src, apiToken: undefined }]));
+  return JSON.stringify({ ...rest, sources }, (_k, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1))) : v,
+  );
+}
+
+/**
  * 保存设置并刷新 updatedAt（多设备同步按此 LWW）。
+ * 只改本机字段（同步配置 sync、apiToken）时不刷新 updatedAt：否则新设备上刚填好 WebDAV / 打开同步，
+ * 本机的默认设置就会因时间较新而覆盖远端的真实设置（background 第 3 轮修复）。
  * keepUpdatedAt=true 仅供 sync 层写入远端合并结果时使用，保留远端的时间戳。
  */
 export async function saveSettings(settings: Settings, opts: { keepUpdatedAt?: boolean } = {}): Promise<void> {
-  const value = opts.keepUpdatedAt ? settings : { ...settings, updatedAt: Date.now() };
+  let value = settings;
+  if (!opts.keepUpdatedAt) {
+    const prev = normalizeSettings((await browser.storage.local.get(STORAGE_KEYS.settings))[STORAGE_KEYS.settings]);
+    value = syncedBody(prev) === syncedBody(settings) ? { ...settings, updatedAt: prev.updatedAt } : { ...settings, updatedAt: Date.now() };
+  }
   await browser.storage.local.set({ [STORAGE_KEYS.settings]: value });
 }
 

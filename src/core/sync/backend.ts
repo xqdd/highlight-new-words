@@ -37,6 +37,11 @@ export interface BackendWriteResult {
   version: string | null;
   /** 本次写操作次数（storage.sync 计入写频率限额） */
   writeOps: number;
+  /**
+   * 写入没有原子保护（WebDAV 服务器不支持 LOCK 且无强 ETag，只做了写后回读校验）：建议多少毫秒后再同步一轮复查，
+   * 覆盖“其他设备较慢的 PUT 在本机回读之后才落地”的情况（第 4 轮新增，可选）
+   */
+  recheckAfterMs?: number;
 }
 
 export interface SyncBackend {

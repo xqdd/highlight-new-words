@@ -1,6 +1,8 @@
 import { browser } from 'wxt/browser';
 import { getKnownData, getKnownWords, setKnownWords } from '@/core/known/store';
 import { effectiveBookRole } from '@/core/known/sources';
+import { PackagedDictionary } from '@/core/dict/packaged';
+import type { Dictionary } from '@/core/dict/types';
 import { createLemmatizer } from '@/core/lemma';
 import type { Lemmatizer } from '@/core/lemma/types';
 import type {
@@ -20,7 +22,7 @@ import { withStorageLock } from '@/core/storage/lock';
 import { parseBookId } from '@/core/wordbook/ids';
 import type { LocalBookData, LocalBookIndex, SourceBookIndex, UserWord } from '@/core/wordbook/types';
 import { getLocalBook, getLocalIndex, getSourceBook, getSourceIndex, updateLocalIndex } from '@/core/wordbook/user-store';
-import { findInflectedForms } from './forms';
+import { findHomographForms, findInflectedForms } from './forms';
 import { getSourceProvider } from './sources';
 import {
   addToSourceBook,
@@ -51,6 +53,16 @@ export function getLemmatizer(): Promise<Lemmatizer> {
     throw e;
   });
   return lemmatizerPromise;
+}
+
+/** 同形异义判定用的打包词典（只在有远端删除时才加载对应首字母分片）；单测可注入 */
+let homographDict: Dictionary | undefined;
+export function setHomographDictionary(d: Dictionary | undefined): void {
+  homographDict = d;
+}
+async function lookupForms(word: string): Promise<{ word: string }[] | undefined> {
+  homographDict ??= new PackagedDictionary();
+  return (await homographDict.lookup(word))?.forms;
 }
 
 const LOCAL_KNOWN_NAME = '本地熟词本';
@@ -132,18 +144,23 @@ function targetName(id: BookId, ctx: ActionContext): string {
 
 /**
  * 标记熟词时要移除的生词本：
- * - 'auto'（默认，兼容旧开关）：启用的来源中开启 deleteOnKnown、支持删除的全部生词本（未孤立、角色为 new）
+ * - 'auto'（默认，兼容旧开关）：“加入生词本”的本地目标（默认“我的生词本”）+ 启用的来源中开启 deleteOnKnown、
+ *   支持删除的全部生词本（未孤立、角色为 new）
  * - 列表：用户在选项页选择的本地/来源生词本
  */
 export function resolveKnownRemoveFrom(settings: Settings, sources: SourceBookIndex): BookId[] {
   const conf = settings.wordActions.knownRemoveFrom;
   if (conf !== 'auto') return [...new Set(conf)];
-  return Object.values(sources.books)
+  // 本地“加入生词本”的目标（默认“我的生词本”）：认识后不再是生词，一并移出（本地移除可完整撤销），
+  // 否则卡片会同时显示“已收藏”和“熟词”
+  const localAddTargets = addTargetsOf(settings).filter((id) => parseBookId(id).kind === 'local');
+  const sourceBooks = Object.values(sources.books)
     .filter((b) => {
       const src = settings.sources[b.providerId];
       return src?.enabled && src.deleteOnKnown && canDeleteFrom(b) && effectiveBookRole(b, settings) === 'new';
     })
     .map((b) => b.id);
+  return [...new Set([...localAddTargets, ...sourceBooks])];
 }
 
 /** 移除计划中的一项：某本书中要移除的 key（屈折词形） */
@@ -153,6 +170,8 @@ interface RemovalItem {
   keys: string[];
   /** 不能执行的原因（来源只读等）；有值时不执行，只在结果中说明 */
   blocked?: string;
+  /** 来源词书中属于同形异义的词形（forms.ts#findHomographForms），未确认时不删除 */
+  homographs?: string[];
 }
 
 /** 按配置规划移除：只读本地数据，不发请求；没有命中词形的书不列出 */
@@ -176,7 +195,8 @@ async function planRemoval(ids: BookId[], target: string, surface: string, ctx: 
       const keys = data ? findInflectedForms(target, Object.keys(data.words), ctx.lemmatizer, opts) : [];
       if (!keys.length) continue;
       const blocked = canDeleteFrom(state) ? undefined : (state?.readOnlyReason ?? (state?.orphaned ? '远端已没有该生词本' : '该来源不支持删除'));
-      out.push({ bookId: id, kind: 'source', keys, blocked });
+      const homographs = blocked ? [] : await findHomographForms(keys, target, surface, lookupForms);
+      out.push({ bookId: id, kind: 'source', keys, blocked, ...(homographs.length ? { homographs } : {}) });
     }
   }
   return out;
@@ -184,8 +204,19 @@ async function planRemoval(ids: BookId[], target: string, surface: string, ctx: 
 
 /** 撤销能否把远端删除的词加回原书 */
 function sourceUndoable(bookId: BookId, ctx: ActionContext): boolean {
+  return sourceUndoTarget(bookId, ctx).mode === 'same';
+}
+
+/**
+ * 撤销时远端删除的词加回到哪里（与 sources/service.ts#restoreSourceWords 的规则一致）：
+ * same=原书；fallback=同来源可加词的生词本（如有道非默认分组只能加回“无标签”）；lost=无法加回（欧路 cookie 模式等）
+ */
+function sourceUndoTarget(bookId: BookId, ctx: ActionContext): { mode: 'same' | 'fallback' | 'lost'; to?: string } {
   const state = ctx.sources.books[bookId];
-  return !!state?.canAdd && !!getSourceProvider(state.providerId)?.addWords;
+  if (!state || !getSourceProvider(state.providerId)?.addWords) return { mode: 'lost' };
+  if (state.canAdd && !state.orphaned) return { mode: 'same' };
+  const alt = Object.values(ctx.sources.books).find((b) => b.providerId === state.providerId && b.canAdd && !b.orphaned && (b.role ?? 'new') === 'new');
+  return alt ? { mode: 'fallback', to: targetName(alt.id, ctx) } : { mode: 'lost' };
 }
 
 // ---------------- 本地词书读写 ----------------
@@ -305,7 +336,7 @@ const addedTo = (name: string, words: string) => `已加入“${name}”：${wor
  * 2. 从 knownRemoveFrom（'auto' = 各来源 deleteOnKnown）移除该词的屈折词形（sameLemma 关闭时只移除当前词形与原形本身）
  * 3. 记录撤销信息
  */
-export async function markKnown(word: string, lemma: string): Promise<MarkKnownResult> {
+export async function markKnown(word: string, lemma: string, opts: { confirmed?: boolean } = {}): Promise<MarkKnownResult> {
   const target = lemma.trim().toLowerCase();
   const surface = word.trim().toLowerCase() || target;
   const ctx = await loadContext();
@@ -342,15 +373,35 @@ export async function markKnown(word: string, lemma: string): Promise<MarkKnownR
   }
 
   const plan = (await planRemoval(resolveKnownRemoveFrom(ctx.settings, ctx.sources), target, surface, ctx)).filter((p) => p.kind !== 'known-local');
-  const removal = await executeRemoval(plan, ctx);
+  // 后台层保护：同形异义词形（lie→lay、find→found）的远端删除必须经用户确认（confirmed），否则保留并在结果中列出
+  const withheld: NonNullable<MarkKnownResult['withheld']> = [];
+  if (!opts.confirmed) {
+    for (const item of plan) {
+      if (!item.homographs?.length) continue;
+      withheld.push({ bookId: item.bookId, name: targetName(item.bookId, ctx), words: item.homographs });
+      item.keys = item.keys.filter((k) => !item.homographs!.includes(k));
+    }
+  }
+  const removal = await executeRemoval(
+    plan.filter((p) => p.keys.length),
+    ctx,
+  );
   if (removal.sourceRemoved.length || removal.localRemoved.length || sourceAdded.length) {
     await putUndo(`known:${target}`, { at: Date.now(), sourceRemoved: removal.sourceRemoved, localRemoved: removal.localRemoved, knownLocalRemoved: [], sourceAdded });
   }
   const fullyUndoable = removal.sourceRemoved.every((r) => sourceUndoable(r.bookId, ctx));
-  console.log('[hnw] 标记熟词', word, '->', target, removal.results);
+  console.log('[hnw] 标记熟词', word, '->', target, removal.results, withheld);
 
   const parts = ['已标记为熟词', ...describe(written.filter((w) => !w.ok), addedTo), ...describe(removal.results, removedFrom)];
-  if (removal.sourceRemoved.length && !fullyUndoable) parts.push('注意：撤销不会恢复已从来源删除的部分单词');
+  // 撤销说明与 unmarkKnown 的实际行为一致：能加回原书的不提示；只能加回同来源其他分组的说明去向；确实加不回的才说“不会恢复”
+  for (const r of removal.sourceRemoved) {
+    if (!r.words.length) continue;
+    const undo = sourceUndoTarget(r.bookId, ctx);
+    const words = r.words.map((w) => w.word.toLowerCase()).join('、');
+    if (undo.mode === 'fallback') parts.push(`撤销时 ${words} 会加回“${undo.to}”（“${targetName(r.bookId, ctx)}”不支持加词）`);
+    else if (undo.mode === 'lost') parts.push(`注意：撤销不会恢复已从“${targetName(r.bookId, ctx)}”删除的 ${words}`);
+  }
+  for (const w of withheld) parts.push(`${w.words.join('、')} 也是独立的单词，未从“${w.name}”删除（确认后才会删除）`);
   return {
     ok: true,
     lemma: target,
@@ -359,6 +410,7 @@ export async function markKnown(word: string, lemma: string): Promise<MarkKnownR
     written,
     removedLocal: removal.results.filter((r) => parseBookId(r.bookId).kind === 'local'),
     fullyUndoable,
+    ...(withheld.length ? { withheld } : {}),
   };
 }
 
@@ -497,6 +549,7 @@ export async function previewWordAction(data: { action: 'add' | 'known'; word: s
         words: p.keys,
         remote,
         undoable: !remote || sourceUndoable(p.bookId, ctx),
+        ...(p.homographs?.length ? { homographs: p.homographs } : {}),
         ...(p.blocked ? { error: p.blocked, skipped: true } : {}),
       };
     });

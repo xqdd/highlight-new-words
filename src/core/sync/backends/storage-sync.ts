@@ -157,7 +157,13 @@ export class StorageSyncBackend implements SyncBackend {
 
   async getUsage(): Promise<{ bytes: number; quotaBytes?: number }> {
     const area = this.area as StorageArea & { getBytesInUse?: (keys?: null) => Promise<number> };
-    const bytes = area.getBytesInUse ? await area.getBytesInUse(null) : (await this.read()).bytes ?? 0;
+    // getBytesInUse 在部分实现（Firefox 旧版、测试替身）中不可用：退回按读取内容自行计算（与 Chrome 计费规则一致）
+    let bytes: number;
+    try {
+      bytes = await area.getBytesInUse!(null);
+    } catch {
+      bytes = (await this.read()).bytes ?? 0;
+    }
     return { bytes, quotaBytes: this.quota.quotaBytes };
   }
 }

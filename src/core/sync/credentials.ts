@@ -63,7 +63,7 @@ export function listSyncCredentials(settings: Settings): SyncCredentialInfo[] {
       label: `${info.name} API token`,
       present: !!src.apiToken,
       upload: !!settings.credentialSync[id],
-      risk: 'token 会以可还原的形式存进你的浏览器账号同步数据（chrome.storage.sync）和 WebDAV 服务器上的同步文件；拿到这些数据的人可以读写你的生词本。',
+      risk: 'token 会以可还原的形式存进你的浏览器账号同步数据（chrome.storage.sync）和 WebDAV 服务器上的同步文件；导出手动备份时若选择包含凭据，会以明文写进备份文件。拿到这些数据的人可以读写你的生词本。',
       excludedBackends: [],
     });
   }
@@ -73,7 +73,7 @@ export function listSyncCredentials(settings: Settings): SyncCredentialInfo[] {
     label: 'WebDAV 连接信息（地址、用户名、密码）',
     present: !!(dav.url && dav.password),
     upload: !!settings.credentialSync[WEBDAV_CREDENTIAL_ID],
-    risk: '密码会存进你的浏览器账号同步数据（chrome.storage.sync），其他登录同一浏览器账号的设备会自动填入；不会写到 WebDAV 服务器本身。',
+    risk: '密码会存进你的浏览器账号同步数据（chrome.storage.sync），其他登录同一浏览器账号的设备会自动填入；导出手动备份时若选择包含凭据，会以明文写进备份文件；不会写到 WebDAV 服务器本身。',
     excludedBackends: ['webdav'],
   });
   return out;

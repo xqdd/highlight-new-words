@@ -268,6 +268,8 @@ export interface SyncCycleResult {
   /** 因冲突重试的次数 */
   conflictRetries: number;
   applied: ApplySummary;
+  /** 后端建议的复查同步延迟（见 BackendWriteResult.recheckAfterMs） */
+  recheckAfterMs?: number;
 }
 
 /**
@@ -299,6 +301,7 @@ export async function runSyncCycle(
         wrote: res.wrote,
         writeOps: res.writeOps,
         conflictRetries: attempt,
+        ...(res.recheckAfterMs ? { recheckAfterMs: res.recheckAfterMs } : {}),
         applied: applied ?? { settings: false, knownWords: false, localBooks: 0, sourceBooks: 0, credentials: [] },
       };
     } catch (e) {

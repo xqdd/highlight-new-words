@@ -46,3 +46,30 @@ export function findInflectedForms(
   }
   return out;
 }
+
+/**
+ * 同形异义词形（后台层删除保护）：删除集合中“本身也是独立单词”的不规则词形，如 lie 的 lay（放置）、find 的 found（创立）、
+ * see 的 saw（锯子）、wind 的 wound（伤口）。判定：
+ *   1. 不是 target 本身，也不是用户点的页面词形 surface；
+ *   2. 不能由屈折规则从该词还原到 target（running/runs/studied 这类规则变化不算）；
+ *   3. 打包词典中该词有自己的屈折变化（laid、founded、sawing…），说明它也是一个原形词。
+ * 词典缺失该词（ran、went、lain 没有独立词条）时不算同形异义。
+ * 这些词的远端删除必须带 confirmed（用户在确认框中看过）才执行，见 known.ts#markKnown。
+ */
+export async function findHomographForms(
+  keys: string[],
+  target: string,
+  surface: string,
+  lookupForms: (word: string) => Promise<{ word: string }[] | undefined>,
+): Promise<string[]> {
+  const t = target.toLowerCase();
+  const out: string[] = [];
+  for (const k of keys) {
+    const w = k.toLowerCase();
+    if (w === t || w === surface.toLowerCase()) continue;
+    if (inflectionRuleCandidates(w).includes(t)) continue;
+    const forms = await lookupForms(w);
+    if (forms?.some((f) => f.word.toLowerCase() !== w)) out.push(k);
+  }
+  return out;
+}
