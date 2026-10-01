@@ -1,0 +1,18 @@
+/*
+ * 首屏预隐藏样式（settings.performance.prehide 开启时由 background 动态注册为 document_start 内容样式，
+ * 见 src/background/prehide.ts 与 src/content/engine/prehide.ts）。
+ *
+ * 用“只含 visibility:hidden 的动画”隐藏而不是直接写 visibility:hidden：
+ * - 动画层的值优先于页面普通声明，无需 !important 也不会被站点的 html{visibility:visible} 覆盖；
+ * - 动画结束（1000ms）后自动失效：即使内容脚本没有运行（异常、被拦截），页面最多隐藏 1 秒；
+ * - 内容脚本首屏完成（或 600ms 兜底）后给 <html> 加 data-hnw-ready，选择器不再匹配，动画移除，页面立即显示。
+ */
+@keyframes hnw-prehide {
+  from,
+  to {
+    visibility: hidden;
+  }
+}
+html:not([data-hnw-ready]) {
+  animation: hnw-prehide 1000ms step-end !important;
+}

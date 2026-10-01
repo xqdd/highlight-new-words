@@ -54,8 +54,8 @@ const SLICE_MAX_MS = 12;
  */
 const FIRST_SLICE_MS = 24;
 /**
- * 首屏预隐藏期间（见 prehide.ts）额外的同步处理预算：页面此时不可见，允许比常规切片长，
- * 争取在显示前处理完视口内的全部文本（维基桌面首屏约需 10–20ms，首个切片已处理大部分）。
+ * 首屏就绪（primeFirstScreen）额外的同步处理预算：比常规切片长，争取一次处理完视口内的全部文本
+ *（维基桌面首屏约需 10–20ms，首个切片已处理大部分）；开启预隐藏时（见 prehide.ts）页面此时不可见，显示前即已完成。
  */
 const PRIME_SLICE_MS = 16;
 const REPORT_DELAY_MS = 400;
