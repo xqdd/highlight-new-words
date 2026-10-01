@@ -41,6 +41,8 @@ export class WordMatcher {
   private readonly userBookLemmas = new Map<string, Set<string>>();
   /** 用户词书中变形条目 -> 屈折原形（studies -> study），命中变形条目时 lemma 归一到原形 */
   private readonly entryLemma = new Map<string, string>();
+  /** 词条 -> 归到它的用户词书原始条目（run -> running、run），卡片据此显示生词本里实际记的词 */
+  private readonly lemmaEntries = new Map<string, Set<string>>();
 
   constructor(private readonly opts: WordMatcherOptions) {
     for (const w of opts.known) for (const l of this.inflectionLemmas(w)) this.knownLemmas.add(l);
@@ -51,6 +53,11 @@ export class WordMatcher {
         const lemmas = this.inflectionLemmas(w);
         for (const l of lemmas) set.add(l);
         if (lemmas[0] && !this.entryLemma.has(w)) this.entryLemma.set(w, lemmas[0]);
+        for (const l of [w, ...lemmas]) {
+          const entries = this.lemmaEntries.get(l) ?? new Set<string>();
+          entries.add(w);
+          this.lemmaEntries.set(l, entries);
+        }
       }
       this.userBookLemmas.set(b.meta.id, set);
     }
@@ -65,6 +72,14 @@ export class WordMatcher {
     const a = this.opts.lemmatizer.analyze?.(word);
     if (!a || (!a.fromTable && /(?:er|est)$/.test(a.base))) return [];
     return a.inflections.filter((l) => l !== word);
+  }
+
+  /**
+   * 用户词书里归到该词条的原始条目（生词本记的是 running，页面上的 runs/running 匹配到 run 时返回 ['running']）。
+   * 内置词书的条目本身就是原形，不在其中。
+   */
+  userEntriesOf(lemma: string): string[] {
+    return [...(this.lemmaEntries.get(lemma) ?? [])];
   }
 
   private bookHas(b: WordBook, w: string): boolean {

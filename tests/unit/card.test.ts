@@ -318,6 +318,19 @@ describe('ShadowCardView', () => {
     expect(dictLinks('advanced')[0]!.url).toContain('advanced');
   });
 
+  it('生词本里记的词与页面词形不同时单独标出（生词 running，页面 runs，原形 run）', async () => {
+    view = new ShadowCardView(document, makeActions(), makeBackend());
+    view.open(mark, data({ surface: 'runs', lemma: 'run', bookWords: ['running'], entry: { word: 'run', short: '跑' } }));
+    await flush();
+    expect(q('.word')!.textContent).toBe('runs');
+    expect(q('.form')!.textContent).toContain('原形 run');
+    expect(q('.form')!.textContent).toContain('生词 running');
+    // 页面词形就是生词本里记的词：不再重复标出
+    view.update(data({ surface: 'running', lemma: 'run', bookWords: ['running'], entry: { word: 'run', short: '跑' } }));
+    await flush();
+    expect(q('.form')!.textContent).not.toContain('生词');
+  });
+
   it('加入生词本：按默认目标加入，toast 写明加到哪里，按钮变为已收藏，可撤销', async () => {
     const backend = makeBackend();
     view = new ShadowCardView(document, makeActions(), backend);

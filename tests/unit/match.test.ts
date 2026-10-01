@@ -21,6 +21,19 @@ describe('WordMatcher', () => {
     expect(m.match('hello')).toBeNull();
   });
 
+  it('userEntriesOf：用户生词本里记的变形条目（running）可按原形查回，内置词书条目不在其中', () => {
+    const mine = createSetWordBook({ ...meta('mine'), kind: 'local' }, ['running']);
+    const lemmatizer = {
+      candidates: (w: string) => (w === 'runs' || w === 'running' ? [w, 'run'] : [w]),
+      analyze: (w: string) => ({ base: w, inflections: w === 'running' || w === 'runs' ? ['run'] : [], derivations: [], fromTable: true }),
+    };
+    const m = new WordMatcher({ lemmatizer, books: [mine, cet4], known: new Set() });
+    expect(m.match('runs')?.lemma).toBe('run');
+    expect(m.userEntriesOf('run')).toEqual(['running']);
+    expect(m.userEntriesOf('running')).toEqual(['running']);
+    expect(m.userEntriesOf('abandon')).toEqual([]);
+  });
+
   it('熟词优先（known wins）', () => {
     const m = make(['abandon']);
     expect(m.match('abandoned')).toBeNull();

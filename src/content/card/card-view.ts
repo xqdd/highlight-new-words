@@ -367,6 +367,8 @@ export class ShadowCardView implements CardView {
     const loading = !main && this.awaitingEntry;
     const phon = formatPhonetic(differs ? own?.phonetic : (e?.phonetic ?? dict?.phonetic));
     const form = describeForm(data.surface, data.lemma);
+    // 生词本里实际记的词与页面词形不同时单独标出（生词本记 running、页面是 runs，原形是 run）
+    const bookWord = data.bookWords?.includes(surface) ? undefined : data.bookWords?.find((w) => w !== data.lemma.toLowerCase());
     const defs = parseDefinitions(main?.short, main?.full);
     const clamp = !this.expanded && defs.length > DEF_CLAMP_LINES;
 
@@ -410,7 +412,15 @@ export class ShadowCardView implements CardView {
       d,
       'div',
       { class: 'body' },
-      form && h(d, 'div', { class: 'form' }, h(d, 'span', { class: 'rel' }, form), h(d, 'span', {}, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma))),
+      (form || bookWord) &&
+        h(
+          d,
+          'div',
+          { class: 'form' },
+          form && h(d, 'span', { class: 'rel' }, form),
+          form && h(d, 'span', {}, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma)),
+          bookWord && h(d, 'span', {}, '生词 ', h(d, 'b', { lang: 'en' }, bookWord)),
+        ),
       ...defsNode,
       // 主释义是词形自己的词条时，附一行原形的简短释义
       own && lemmaMain?.short && h(d, 'div', { class: 'user-trans lemma-trans' }, h(d, 'span', { class: 'ut-label' }, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma)), h(d, 'span', {}, lemmaMain.short)),

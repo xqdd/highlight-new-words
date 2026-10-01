@@ -58,6 +58,8 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
   let knownSnapshot = new Set<string>();
   let userKeysSnapshot = new Set<string>();
   let engine: HighlightEngine | null = null;
+  /** 最近一次构建的 matcher：卡片打开时查生词本里实际记的词（userEntriesOf） */
+  let currentMatcher: WordMatcher | undefined;
   let card: CardView | null = null;
   const isTop = window.top === window;
 
@@ -89,7 +91,8 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     const userBooks = loadedBooks.filter((b) => b.meta.kind !== 'builtin');
     userKeysSnapshot = new Set(userBooks.flatMap((b) => [...b.words()].map((w) => `${b.meta.id}\n${w}`)));
     dictionary = new CompositeDictionary([new UserBooksDictionary(userBooks), packagedDict]);
-    return new WordMatcher({ lemmatizer, books: loadedBooks, known });
+    currentMatcher = new WordMatcher({ lemmatizer, books: loadedBooks, known });
+    return currentMatcher;
   }
 
   function ensureCard(): CardView {
@@ -133,6 +136,7 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     const data: CardData = {
       surface: markSurface(mark),
       lemma,
+      bookWords: currentMatcher?.userEntriesOf(lemma),
       books,
       deletableBooks: books.filter((b) => b.kind === 'source' && !!getProviderInfo(b.providerId ?? '')?.capabilities.delete),
     };

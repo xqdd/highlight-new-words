@@ -9,6 +9,8 @@ export interface CardData {
   surface: string;
   /** 命中的词条 */
   lemma: string;
+  /** 用户词书里归到该词条的原始条目（生词本记的 running），见 WordMatcher#userEntriesOf；与页面词形不同时卡片单独标出 */
+  bookWords?: string[];
   /** 命中的词书（按优先级） */
   books: BookMeta[];
   /** 释义；undefined 表示加载中或无释义 */
