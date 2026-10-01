@@ -1,4 +1,4 @@
-import { CODE_COMMENT_STRING_SELECTOR, shouldSkipElement, type ScanOptions } from './dom';
+import { CODE_COMMENT_STRING_SELECTOR, CODE_ROOT_SELECTOR, shouldSkipElement, type ScanOptions } from './dom';
 
 const HAS_LETTER = /[A-Za-z]{2}/;
 
@@ -37,11 +37,15 @@ export function isRootSkipped(el: Element, opts?: ScanOptions): boolean {
   return closestSkipped(el, opts);
 }
 
-/** 文本所在的代码根元素（pre 或 code，取最外层 pre 优先）；不在代码中返回 null */
-export function codeRootOf(t: Text): Element | null {
-  const parent = t.parentElement;
-  if (!parent) return null;
-  return parent.closest('pre') ?? parent.closest('code');
+/**
+ * 节点（文本或元素）所在的代码根元素：pre、code 或常见语法高亮容器（见 CODE_ROOT_SELECTOR），取最外层；
+ * 不在代码中返回 null。取最外层是为了让同一代码块（如 GitHub 整个文件视图）共用一个根，浮动小标注按整块重排。
+ */
+export function codeRootOf(node: Node): Element | null {
+  let root = node.nodeType === Node.ELEMENT_NODE ? (node as Element).closest(CODE_ROOT_SELECTOR) : node.parentElement?.closest(CODE_ROOT_SELECTOR);
+  if (!root) return null;
+  for (let up = root.parentElement?.closest(CODE_ROOT_SELECTOR); up; up = up.parentElement?.closest(CODE_ROOT_SELECTOR)) root = up;
+  return root;
 }
 
 /**

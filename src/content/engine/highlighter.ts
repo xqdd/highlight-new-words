@@ -38,9 +38,25 @@ const ownerOf = new WeakMap<Node, Text>();
  * @returns 新建的 mark 元素（文档顺序）
  */
 export function highlightTextNode(node: Text, match: MatchFn, onLeftover?: (t: Text) => void, opts?: HighlightOptions): HTMLElement[] {
+  return wrapHits(node, findHits(node, match, opts), onLeftover, opts);
+}
+
+/** 文本中一个待高亮的命中词（findHits 的结果，交给 wrapHits 写入 DOM） */
+export interface TextHit {
+  start: number;
+  end: number;
+  m: MatchResult;
+  lowConf: boolean;
+}
+
+/**
+ * 只读阶段：分词并匹配，找出要高亮的词，不改动 DOM。
+ * engine 先对一批文本找命中、读完所在元素的计算样式，再统一写入（见 HighlightEngine#drain），避免写后读触发强制样式重算。
+ */
+export function findHits(node: Text, match: MatchFn, opts?: HighlightOptions): TextHit[] {
   const code = opts?.code;
   const tokens = code ? tokenizeCode(node.data) : tokenize(node.data);
-  const hits: { start: number; end: number; m: MatchResult; lowConf: boolean }[] = [];
+  const hits: TextHit[] = [];
   for (let i = 0; i < tokens.length; i++) {
     const tk = tokens[i]!;
     // 分词只认 ASCII 字母：与非 ASCII 字母/数字相连的片段（Tomás 的 Tom、naïve 的 na、COVID19）不是完整英文词，整体跳过
@@ -54,6 +70,12 @@ export function highlightTextNode(node: Text, match: MatchFn, onLeftover?: (t: T
     if (m && code === 'identifier' && isCodeKnownWord(m.lemma)) continue;
     if (m) hits.push({ start: tk.start, end: tk.end, m, lowConf: !code && isLowConfidence(node, tokens, i) });
   }
+  return hits;
+}
+
+/** 写入阶段：把 findHits 找到的命中词包裹成 mark（参数含义同 highlightTextNode） */
+export function wrapHits(node: Text, hits: TextHit[], onLeftover?: (t: Text) => void, opts?: HighlightOptions): HTMLElement[] {
+  const code = opts?.code;
   if (hits.length === 0) return [];
   const doc = node.ownerDocument;
   const marks: HTMLElement[] = [];

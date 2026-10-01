@@ -100,9 +100,13 @@ export function shouldSkipElement(el: Element, opts?: ScanOptions): boolean {
     if (!(opts?.codeEnabled && CODE_TAGS.has(tag))) return true;
   }
   if ((el as HTMLElement).isContentEditable || el.getAttribute('contenteditable') === 'true') return true;
-  // 在线代码编辑器（虚拟渲染的行，不是 contenteditable，但改动其 DOM 会破坏编辑器）始终跳过
   const cls = el.classList;
-  if (cls && cls.length > 0) for (const c of EDITOR_CLASSES) if (cls.contains(c)) return true;
+  if (cls && cls.length > 0) {
+    // 在线代码编辑器（虚拟渲染的行，不是 contenteditable，但改动其 DOM 会破坏编辑器）始终跳过
+    for (const c of EDITOR_CLASSES) if (cls.contains(c)) return true;
+    // 不用 pre/code 的语法高亮容器（如 GitHub 新代码视图的 div 行）：与 pre/code 一样受代码开关控制
+    if (!opts?.codeEnabled) for (const c of CODE_CONTAINER_CLASSES) if (cls.contains(c)) return true;
+  }
   // 站点适配层注册的额外规则（如 YouTube 播放器控件），未注册时为空数组
   for (const rule of siteSkipRules) if (rule(el)) return true;
   return false;
@@ -125,7 +129,7 @@ export function registerSiteSkipRule(rule: (el: Element) => boolean): () => void
 
 /** 扫描选项（代码块开关等），由 engine 按设置传入 */
 export interface ScanOptions {
-  /** 代码块中标注生词：放行 pre/code（v8） */
+  /** 代码块中标注生词：放行 pre/code 与语法高亮容器（v8） */
   codeEnabled?: boolean;
   /** 代码范围：comments=只处理注释与字符串 */
   codeScope?: 'comments' | 'all';
@@ -133,6 +137,22 @@ export interface ScanOptions {
 
 /** 代码开关打开时可以进入的标签 */
 export const CODE_TAGS = new Set(['CODE', 'PRE']);
+
+/**
+ * 不以 pre/code 为根的常见语法高亮/代码视图容器类名（只读渲染，不是编辑器）：
+ * - GitHub 新代码视图（React 渲染的 div 行）：react-code-lines、react-code-text、react-file-line
+ * - GitHub 旧代码视图 / Gist / diff：blob-code、blob-code-inner、diff-text-inner
+ * - highlight.js、Prism React Renderer、Shiki、SyntaxHighlighter（div/table 结构）的根类名
+ * 只收录专用于代码的类名；`highlight` 这类通用词不收录（正文强调也常用），其内部一般有 pre 兜底。
+ */
+const CODE_CONTAINER_CLASSES = [
+  'react-code-lines', 'react-code-text', 'react-file-line',
+  'blob-code', 'blob-code-inner', 'diff-text-inner',
+  'hljs', 'prism-code', 'shiki', 'syntaxhighlighter',
+];
+
+/** 代码根选择器：pre、code 与上面的语法高亮容器（scanner#codeRootOf 用来定位文本所在的代码块） */
+export const CODE_ROOT_SELECTOR = ['pre', 'code', ...CODE_CONTAINER_CLASSES.map((c) => `.${c}`)].join(',');
 
 /** 在线编辑器根元素类名：Monaco、CodeMirror 5/6、Ace */
 const EDITOR_CLASSES = ['monaco-editor', 'CodeMirror', 'cm-editor', 'ace_editor'];

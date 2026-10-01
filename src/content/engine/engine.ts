@@ -23,7 +23,8 @@ import {
 import {
   dropGroup,
   hasFragments,
-  highlightTextNode,
+  findHits,
+  wrapHits,
   markSurface,
   ownerTextOf,
   reserveTranslationSlot,
@@ -31,6 +32,7 @@ import {
   setMarkTranslation,
   unwrapAll,
   type HighlightOptions,
+  type TextHit,
 } from './highlighter';
 import { codeRootOf, createTextWalker, isRootSkipped, isTextCandidate } from './scanner';
 
@@ -60,6 +62,11 @@ const FIRST_SLICE_MS = 24;
  *（维基桌面首屏约需 10–20ms，首个切片已处理大部分）；开启预隐藏时（见 prehide.ts）页面此时不可见，显示前即已完成。
  */
 const PRIME_SLICE_MS = 16;
+/**
+ * 切片中“读阶段”（遍历、匹配、读计算样式）占预算的比例，剩余留给写阶段（包裹 mark、打上下文标记）。
+ * 写阶段一般远比匹配快，这样整片仍大致在预算内。
+ */
+const SLICE_READ_RATIO = 0.7;
 const REPORT_DELAY_MS = 400;
 /** 页面明暗主题切换（html/body 的 class/style 等属性变化）后，重新判断深色上下文的防抖时间 */
 const THEME_RECHECK_MS = 300;
@@ -268,13 +275,10 @@ export class HighlightEngine {
     return c?.enabled ? { codeEnabled: true, codeScope: c.scope } : {};
   }
 
-  /** 高亮一个文本节点：代码中的文本按标识符拆分（注释/字符串不跳过编程熟词） */
-  private highlight(t: Text): HTMLElement[] {
-    let hopts: HighlightOptions | undefined;
-    if (this.opts.code?.enabled && codeRootOf(t)) {
-      hopts = { code: t.parentElement?.closest(CODE_COMMENT_STRING_SELECTOR) ? 'prose' : 'identifier' };
-    }
-    return highlightTextNode(t, this.matchWord, (left) => this.processed.add(left), hopts);
+  /** 文本节点的高亮选项：代码中的文本按标识符拆分（注释/字符串不跳过编程熟词）；只看 DOM，不读样式 */
+  private highlightOpts(t: Text): HighlightOptions | undefined {
+    if (!this.opts.code?.enabled || !codeRootOf(t)) return undefined;
+    return { code: t.parentElement?.closest(CODE_COMMENT_STRING_SELECTOR) ? 'prose' : 'identifier' };
   }
 
   /** 当前生效的匹配：matcher 结果再排除乐观移除的词条 */
@@ -293,11 +297,18 @@ export class HighlightEngine {
     if (owners.size === 0) return;
     const newMarks: HTMLElement[] = [];
     this.withoutObserving(() => {
-      for (const o of owners) {
+      // 先读：原节点留在原位置，新 mark 的父元素就是原节点的父元素，写之前读好它的上下文（见 drain）
+      const batch = [...owners].map((o) => {
+        const hopts = this.highlightOpts(o);
+        return { o, hopts, ctx: this.readMarkContext(o.parentElement, !!hopts?.code) };
+      });
+      const items = batch.map(({ o, hopts, ctx }) => {
         this.unobserveMarks(restoreGroup(o));
-        newMarks.push(...this.highlight(o));
-      }
-      this.markContexts(newMarks);
+        const marks = wrapHits(o, findHits(o, this.matchWord, hopts), (left) => this.processed.add(left), hopts);
+        newMarks.push(...marks);
+        return { marks, ctx };
+      });
+      this.applyMarkContexts(items);
     });
     // 重做的切分组立即写入译文（取缓存），不走懒插入，避免同一段落的其他生词译文闪烁
     void this.fillTranslations(newMarks.filter((m) => m.isConnected), true);
@@ -396,25 +407,39 @@ export class HighlightEngine {
     // 首个切片由 start() 直接调用，此时已登记的空闲回调仍会到来（届时继续处理剩余部分），不能清掉 scheduled
     if (!first) this.scheduled = false;
     if (this.stopped) return;
-    const deadline = performance.now() + (first ? budgetMs : Math.min(Math.max(budgetMs, SLICE_MIN_MS), SLICE_MAX_MS));
+    const sliceMs = first ? budgetMs : Math.min(Math.max(budgetMs, SLICE_MIN_MS), SLICE_MAX_MS);
+    const readDeadline = performance.now() + sliceMs * SLICE_READ_RATIO;
     let newMarks: HTMLElement[] = [];
     this.withoutObserving(() => {
+      // 读阶段：遍历、匹配，再读命中文本所在元素的计算样式（深色/受限容器/flex），不改 DOM。
+      // 必须先读后写：写入 mark 后再读 getComputedStyle/clientHeight 会同步触发整页样式重算与布局，
+      // 大 DOM 页面（GitHub 约 7000 节点）单次就要 100ms 以上，且发生在一次调用内，按节点检查的时间预算挡不住。
+      // 空闲回调通常紧跟在一帧渲染之后，此时样式是干净的，读取几乎不花时间（结果按元素缓存）
+      const found: { t: Text; hits: TextHit[]; hopts?: HighlightOptions }[] = [];
       let t: Text | null;
-      while (performance.now() < deadline && (t = this.nextTextNode())) {
+      while (performance.now() < readDeadline && (t = this.nextTextNode())) {
         if (!t.isConnected) continue;
         // 页面仍在解析：文档末尾的文本节点可能还会被解析器追加文字（网络分块），解析完再处理
         if (this.parsing && isAtDocumentEnd(t, this.opts.root)) {
           this.deferredUntilParsed.push(t);
           continue;
         }
-        newMarks.push(...this.highlight(t));
+        const hopts = this.highlightOpts(t);
+        const hits = findHits(t, this.matchWord, hopts);
+        if (hits.length > 0) found.push({ t, hits, hopts });
         // 原节点处理后只剩首个命中词之前的文字，记为已处理；内容被改写时会从集合移除
         this.processed.add(t);
       }
-      // 一片中的写操作全部完成后再统一读取计算样式，只触发一次样式计算
-      this.markContexts(newMarks);
+      const batch = found.map((f) => ({ ...f, ctx: this.readMarkContext(f.t.parentElement, !!f.hopts?.code) }));
+      // 写阶段：包裹 mark 并按读阶段的结果打标记，之后不再读样式/布局
+      const items = batch.map(({ t, hits, hopts, ctx }) => {
+        const marks = wrapHits(t, hits, (left) => this.processed.add(left), hopts);
+        newMarks.push(...marks);
+        return { marks, ctx };
+      });
+      this.applyMarkContexts(items);
     });
-    // markContexts 可能撤销了 flex/grid 直接子文本中的高亮（见 markContexts）
+    // applyMarkContexts 可能撤销了 flex/grid 直接子文本中的高亮（见 applyMarkContexts）
     newMarks = newMarks.filter((m) => m.isConnected);
     if (newMarks.length > 0) {
       let changed = false;
@@ -452,60 +477,66 @@ export class HighlightEngine {
   // ---------------- 深色上下文 ----------------
 
   /**
-   * 给 mark 打上下文标记（先统一读、再统一写）：
-   * - 深色上下文：依据父元素的计算文字颜色，浅色文字 ≈ 深色背景，比逐级查找背景色（透明、背景图）更可靠也更便宜；
-   *   链接常用中等亮度的强调色，改用链接外层元素的文字颜色判断
-   * - 链接内：只看 DOM，不读样式
-   * - 受限容器：见 isTightContext（代码中的 mark 本来就不占位，不必判断）
-   * ruby 模式下，正文 mark 在同一帧插入占位注解，预留行高（见 style.ts）。
+   * 给已在文档中的 mark 打上下文标记（先统一读、再统一写），用于页面主题切换后的重判。
+   * 新建 mark 不走这里：drain/redoGroups 在写入 mark 之前就读好上下文，见 readMarkContext。
    */
   private markContexts(marks: HTMLElement[]): void {
     if (marks.length === 0) return;
-    const flags = marks.map((m) => {
-      const parent = m.parentElement;
-      const code = m.hasAttribute(ATTR_CODE);
-      return {
-        dark: this.isDarkContext(parent),
-        link: !!parent?.closest('a'),
-        tight: !code && this.isTightContext(parent),
-        heading: !!parent?.closest(HEADING_SELECTOR),
-        spaceLost: !code && this.isFlexItemBoundary(m, parent),
-      };
-    });
+    const items = marks.map((m) => ({ marks: [m], ctx: this.readMarkContext(m.parentElement, m.hasAttribute(ATTR_CODE)) }));
+    this.applyMarkContexts(items);
+  }
+
+  /**
+   * 读 mark 所在元素（mark 的父元素，也就是被高亮文本节点的父元素）的上下文，只读不写：
+   * - 深色上下文：依据父元素的计算文字颜色，浅色文字 ≈ 深色背景，比逐级查找背景色（透明、背景图）更可靠也更便宜；
+   *   链接常用中等亮度的强调色，改用链接外层元素的文字颜色判断
+   * - 链接内、标题内：只看 DOM，不读样式
+   * - 受限容器：见 isTightContext（代码中的 mark 本来就不占位，不必判断）
+   * - flex/grid 容器：见 applyMarkContexts 的空格折叠处理
+   */
+  private readMarkContext(parent: Element | null, code: boolean): MarkContext {
+    return {
+      dark: this.isDarkContext(parent),
+      link: !!parent?.closest('a'),
+      tight: !code && this.isTightContext(parent),
+      heading: !!parent?.closest(HEADING_SELECTOR),
+      flex: !code && this.isFlexContainer(parent),
+    };
+  }
+
+  /**
+   * 按读好的上下文给 mark 写标记（只写，不读样式/布局）。
+   * ruby 模式下，正文 mark 在同一帧插入占位注解，预留行高（见 style.ts）。
+   */
+  private applyMarkContexts(items: { marks: HTMLElement[]; ctx: MarkContext }[]): void {
     const ruby = this.opts.inlineTranslation === 'ruby';
     const undo = new Set<Text>();
-    marks.forEach((m, i) => {
-      const f = flags[i]!;
-      if (f.spaceLost) {
-        const owner = ownerTextOf(m);
-        if (owner) undo.add(owner);
-        return;
+    for (const { marks, ctx } of items) {
+      for (const m of marks) {
+        if (ctx.flex && isFlexItemBoundary(m)) {
+          const owner = ownerTextOf(m);
+          if (owner) undo.add(owner);
+          continue;
+        }
+        m.toggleAttribute(ATTR_ON_DARK, ctx.dark);
+        m.toggleAttribute(ATTR_IN_LINK, ctx.link);
+        m.toggleAttribute(ATTR_TIGHT, ctx.tight);
+        // 链接、标题、低置信度、受限容器、代码中不显示占位译文，不预留
+        if (ruby && !ctx.tight && !ctx.link && !ctx.heading && !m.hasAttribute(ATTR_CODE) && !m.hasAttribute(ATTR_LOW_CONFIDENCE)) {
+          reserveTranslationSlot(m);
+        }
       }
-      m.toggleAttribute(ATTR_ON_DARK, f.dark);
-      m.toggleAttribute(ATTR_IN_LINK, f.link);
-      m.toggleAttribute(ATTR_TIGHT, f.tight);
-      // 链接、标题、低置信度、受限容器、代码中不显示占位译文，不预留
-      if (ruby && !f.tight && !f.link && !f.heading && !m.hasAttribute(ATTR_CODE) && !m.hasAttribute(ATTR_LOW_CONFIDENCE)) {
-        reserveTranslationSlot(m);
-      }
-    });
+    }
     // flex/grid 容器的直接子文本被切开后，每段文字成为独立的 flex 项目，切口处的空格被折叠
     // （“Print subscriptions” 显示成 “Printsubscriptions”）：撤销这段文字的高亮，保持原样
     for (const owner of undo) restoreGroup(owner);
   }
 
-  /**
-   * mark 的父元素是 flex/grid 容器，且 mark 紧邻的文字片段在切口处有空白：空白会随 flex 项目边缘被折叠。
-   * 只在读阶段调用（getComputedStyle 在一片写完后统一计算一次）。
-   */
-  private isFlexItemBoundary(m: Element, parent: Element | null): boolean {
+  /** 元素是否为 flex/grid 容器（只在读阶段调用，见 readMarkContext） */
+  private isFlexContainer(parent: Element | null): boolean {
     if (!parent) return false;
     const view = parent.ownerDocument.defaultView;
-    const display = view?.getComputedStyle(parent).display ?? '';
-    if (!/flex|grid/.test(display)) return false;
-    const prev = m.previousSibling;
-    const next = m.nextSibling;
-    return (prev?.nodeType === Node.TEXT_NODE && /\s$/.test((prev as Text).data)) || (next?.nodeType === Node.TEXT_NODE && /^\s/.test((next as Text).data));
+    return /flex|grid/.test(view?.getComputedStyle(parent).display ?? '');
   }
 
   /**
@@ -866,6 +897,27 @@ export class HighlightEngine {
     clearTimeout(this.reportTimer);
     this.reportTimer = setTimeout(() => this.opts.onLemmasChanged?.(this.matchedLemmas), REPORT_DELAY_MS);
   }
+}
+
+
+/** mark 所在元素的上下文（写入 mark 之前读好，见 HighlightEngine#readMarkContext） */
+interface MarkContext {
+  dark: boolean;
+  link: boolean;
+  tight: boolean;
+  heading: boolean;
+  /** 父元素是 flex/grid 容器（代码中不判断） */
+  flex: boolean;
+}
+
+/**
+ * flex/grid 容器中的 mark 紧邻的文字片段在切口处有空白：空白会随 flex 项目边缘被折叠。
+ * 只看兄弟文本节点内容，不读样式（父元素是否 flex/grid 已在读阶段判断）。
+ */
+function isFlexItemBoundary(m: Element): boolean {
+  const prev = m.previousSibling;
+  const next = m.nextSibling;
+  return (prev?.nodeType === Node.TEXT_NODE && /\s$/.test((prev as Text).data)) || (next?.nodeType === Node.TEXT_NODE && /^\s/.test((next as Text).data));
 }
 
 /** 文本节点之后（root 范围内）是否再没有任何节点：解析中的文档里，只有这个位置的文本还可能被追加 */

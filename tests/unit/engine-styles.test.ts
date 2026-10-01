@@ -174,6 +174,18 @@ const volatileElement = 1;</code></pre><p>see <code>scrutinizeInput</code></p>
     expect(all).toEqual(['// abandon it', 'const volatileElement = 1;', 'see', 'scrutinizeInput']);
   });
 
+  it('GitHub 新代码视图（div 行，无 pre/code）同样受开关与范围控制', () => {
+    document.body.innerHTML = `<div class="react-code-lines"><div class="react-code-text react-code-line-contents"><div>
+      <div class="react-file-line html-div" data-testid="code-cell"><span class="pl-c">// abandon the directory</span></div>
+      <div class="react-file-line html-div" data-testid="code-cell"><span class="pl-k">import</span> volatileElement <span class="pl-s">'premium'</span></div>
+      </div></div></div><p>see it</p>`;
+    expect(collectTextNodes(document.body).map((t) => t.data)).toEqual(['see it']);
+    const comments = collectTextNodes(document.body, undefined, { codeEnabled: true, codeScope: 'comments' }).map((t) => t.data);
+    expect(comments).toEqual(['// abandon the directory', "'premium'", 'see it']);
+    const all = collectTextNodes(document.body, undefined, { codeEnabled: true, codeScope: 'all' }).map((t) => t.data.trim());
+    expect(all).toContain('volatileElement');
+  });
+
   it('代码中高亮落在子串上、跳过编程熟词、不插入译文，复制文本不变', async () => {
     document.body.innerHTML = `<pre><code>function getElementById(premium) { return abandonDefault; }</code></pre>`;
     const dict: Dictionary = {

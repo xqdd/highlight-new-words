@@ -64,10 +64,12 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
   const active = () => settings.enabled && !isSiteDisabled(settings, location.hostname);
   // 未开启预隐藏、不标注、或标注不改变排版时不需要预隐藏：设置读到后立即释放（通常早于首次绘制；未开启时页面本来就没有隐藏）
   if (!settings.performance.prehide || !active() || !layoutAffectingSettings(settings)) releasePrehide();
+  /** 短释义分片预载（after/ruby 模式）；首次启动 engine 前等它就绪，见 startEngine */
+  let dictPreload: Promise<unknown> = Promise.resolve();
   if (active() && (settings.inlineTranslation.mode === 'after' || settings.inlineTranslation.mode === 'ruby')) {
     // 首屏要尽早写好译文（预隐藏时要在显示前写好）：读到设置后立即预载全部短释义分片（按首字母，共约 2MB），与词书、词形数据并行。
     // 页面解析繁忙后扩展资源请求会明显变慢（维基大页面首屏查释义要多等 200–300ms），趁解析刚开始时发出
-    void packagedDict.lookupMany(DICT_SHARD_PROBES);
+    dictPreload = packagedDict.lookupMany(DICT_SHARD_PROBES).catch(() => {});
   }
 
   /** 加载启用的词书与熟词本，构造 matcher 与组合词典 */
@@ -144,6 +146,9 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
   async function startEngine(): Promise<void> {
     const matcher = await buildMatcher();
     await firstScreenParsed(doc);
+    // 等短释义分片就绪（最多 DICT_PRELOAD_MAX_WAIT_MS）：这样首屏 mark 与译文在同一任务内写入、一起首次绘制。
+    // 否则 mark 先显示、译文下一帧才插入，mark 后面已显示的文字整体推移，“词后”模式 CLS 明显变大（兼容性测试 spring-boot +0.04）
+    await Promise.race([dictPreload, new Promise((r) => setTimeout(r, DICT_PRELOAD_MAX_WAIT_MS))]);
     // frameset 等没有 body 的文档不处理
     if (!doc.body) {
       releasePrehide();
@@ -274,6 +279,8 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
 const PARSE_POLL_MS = 25;
 /** 最长等待（ms）：样式表一直加载不完等异常情况下也会启动（预隐藏有自己的兜底，见 prehide.ts） */
 const FIRST_SCREEN_MAX_WAIT_MS = 1500;
+/** 启动 engine 前等待短释义分片预载的上限：超过后照常先高亮，译文到达后再懒插入 */
+const DICT_PRELOAD_MAX_WAIT_MS = 400;
 /** 不参与布局的元素：判断解析进度时跳过 */
 const NON_LAYOUT_TAGS = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'TEMPLATE', 'NOSCRIPT']);
 
