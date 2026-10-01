@@ -51,6 +51,29 @@ describe('migrateLegacy', () => {
   it('无旧数据', () => {
     expect(hasLegacyData({})).toBe(false);
   });
+
+  it('新安装默认不启用任何云端来源，默认词书不变', () => {
+    const d = createDefaultSettings();
+    expect(Object.values(d.sources).every((src) => !src.enabled)).toBe(true);
+    expect(d.books.enabled).toEqual(['cet6']);
+  });
+
+  it('旧版有道用户只同步过（syncTime>0）但生词本为空：仍启用有道，保留同步时间供每天自动同步', () => {
+    const { settings, sourceBook } = migrateLegacy({ ttsVoices: { lang: 'en' }, dictionaryType: 0, syncTime: 456, newWords: { wordInfos: {} } });
+    expect(settings.sources.youdao).toMatchObject({ enabled: true, autoSync: true });
+    expect(settings.sources.eudic?.enabled).toBe(false);
+    expect(settings.books.enabled).toEqual(['src:youdao:default']);
+    expect(sourceBook?.state).toMatchObject({ status: 'empty', lastSyncAt: 456 });
+  });
+
+  it('旧版从未用过云端生词本（无生词、syncTime=0）：与新安装一致不启用来源，沿用默认词书', () => {
+    const { settings, sourceBook } = migrateLegacy({ toggle: true, ttsVoices: { lang: 'en' }, dictionaryType: 0, autoSync: false, syncTime: 0 });
+    expect(Object.values(settings.sources).every((src) => !src.enabled)).toBe(true);
+    // 旧版的自动同步偏好保留，用户日后开启来源时沿用
+    expect(settings.sources.youdao?.autoSync).toBe(false);
+    expect(settings.books.enabled).toEqual(createDefaultSettings().books.enabled);
+    expect(sourceBook).toBeUndefined();
+  });
 });
 
 describe('migrateSettingsV2（v3 开发期结构）', () => {
@@ -89,9 +112,15 @@ describe('normalizeSettings', () => {
     expect(s.books.enabled).toEqual(['gre']);
     expect(s.style.perBook.gre).toEqual({ themeId: 'rose' });
     expect(s.style.themeId).toBe(d.style.themeId);
-    expect(s.sources.youdao).toEqual({ enabled: true, autoSync: true, deleteOnKnown: true });
+    // 只写了 deleteOnKnown：其余字段按默认值补齐（云端来源默认关闭）
+    expect(s.sources.youdao).toEqual({ enabled: false, autoSync: true, deleteOnKnown: true });
     expect(s.sources.future?.enabled).toBe(true);
     expect(s.tts).toEqual(d.tts);
+  });
+  it('已启用的来源升级后仍是启用状态，不被新默认值（关闭）覆盖', () => {
+    const s = normalizeSettings({ sources: { youdao: { enabled: true, autoSync: true, deleteOnKnown: false }, eudic: { enabled: true, autoSync: false, deleteOnKnown: true } } });
+    expect(s.sources.youdao).toEqual({ enabled: true, autoSync: true, deleteOnKnown: false });
+    expect(s.sources.eudic).toEqual({ enabled: true, autoSync: false, deleteOnKnown: true });
   });
   it('非对象输入返回默认值', () => {
     expect(normalizeSettings(undefined)).toEqual(createDefaultSettings());

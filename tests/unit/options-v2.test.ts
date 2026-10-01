@@ -22,7 +22,8 @@ const STATES = [YD0, YD12, MASTERED, EU1];
 describe('options：单词操作目标', () => {
   it('按角色与能力列出目标：只读熟词本置灰并给出原因，“我的生词本”未创建时也可选', () => {
     const s = createDefaultSettings();
-    // 欧路默认关闭；来源关闭时的置灰说明见 options-fix.test.ts（O6），这里先打开以校验能力相关的原因
+    // 云端来源默认全部关闭；来源关闭时的置灰说明见 options-fix.test.ts（O6），这里先打开以校验能力相关的原因
+    s.sources.youdao!.enabled = true;
     s.sources.eudic!.enabled = true;
     const o = wordActionOptions(s, [] as BookMeta[], STATES);
     expect(o.addTargets.map((x) => x.id)).toEqual([MY_WORDS_BOOK_ID, YD0.id, YD12.id, EU1.id]);
@@ -37,6 +38,7 @@ describe('options：单词操作目标', () => {
   it('auto 移除目标 = 加入目标中的本地书 + 开启 deleteOnKnown 的来源可删生词本', () => {
     const s = createDefaultSettings();
     expect(resolveAutoKnownRemoveFrom(s, STATES)).toEqual([MY_WORDS_BOOK_ID]);
+    s.sources.youdao!.enabled = true;
     s.sources.youdao!.deleteOnKnown = true;
     expect(resolveAutoKnownRemoveFrom(s, STATES)).toEqual([MY_WORDS_BOOK_ID, YD0.id, YD12.id]);
   });

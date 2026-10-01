@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SimpleLemmatizer } from '@/core/lemma/simple';
 import { getKnownWords } from '@/core/known/store';
-import { getSettings, patchSettings } from '@/core/settings/store';
+import { getSettings, patchSettings, runMigrationIfNeeded } from '@/core/settings/store';
 import { SourceError } from '@/core/source/types';
 import { getSourceBook, getSourceIndex, patchSourceBookState, saveSourceBook, updateSourceIndex } from '@/core/wordbook/user-store';
 import { youdaoProvider } from '@/background/sources/youdao';
@@ -268,24 +268,96 @@ describe('来源同步服务', () => {
     expect((await getSourceIndex()).books['src:youdao:0']).toMatchObject({ status: 'error', error: '同步被中断，请重试' });
   });
 
-  it('自动同步：超过 24 小时且距上次尝试超过 1 小时才请求；从未同步过的来源（旧版 syncTime=0）每天自动尝试一次', async () => {
-    const now = 10 * 24 * 3600_000;
-    // 从未同步过：与旧版一致自动同步一次（刷新列表 + 逐本同步）
-    const first = youdaoLoggedIn();
-    await autoSyncIfDue(now);
-    expect(first.some((c) => /webapi\/books/.test(c.url))).toBe(true);
-    // 未登录的新用户：一天内不重复尝试
-    fakeBrowser.reset();
-    await updateSourceIndex((idx) => void (idx.providers.youdao = { lastListAt: now - 3600_000, error: '未登录' }));
+  it('自动同步：新安装默认不启用任何云端来源，后台不发任何请求', async () => {
     const calls = youdaoLoggedIn();
+    await autoSyncIfDue(10 * 24 * 3600_000);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('自动同步：启用但从未同步成功过的来源不自动请求（由用户开启来源时同步）', async () => {
+    const now = 10 * 24 * 3600_000;
+    await patchSettings({ sources: { youdao: { enabled: true }, eudic: { enabled: true } } });
+    const calls = youdaoLoggedIn();
+    // 没有任何书
+    await autoSyncIfDue(now);
+    expect(calls).toHaveLength(0);
+    // 列表里有书但从未成功同步（上次失败在很久以前）
+    await patchSourceBookState({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签' }, { status: 'error', lastSyncAt: 0, lastAttemptAt: 0 });
+    await updateSourceIndex((idx) => void (idx.providers.youdao = { lastListAt: 0, error: '未登录' }));
+    await autoSyncIfDue(now);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('自动同步：同步成功过的来源超过 24 小时且距上次尝试超过 1 小时才请求', async () => {
+    const now = 10 * 24 * 3600_000;
+    await patchSettings({ sources: { youdao: { enabled: true } } });
+    const calls = youdaoLoggedIn();
+    await patchSourceBookState({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签' }, { status: 'ok', lastSyncAt: now - 3600_000, lastAttemptAt: now - 3600_000 });
     await autoSyncIfDue(now);
     expect(calls).toHaveLength(0);
     await patchSourceBookState({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签' }, { status: 'error', lastSyncAt: now - 25 * 3600_000, lastAttemptAt: now - 10 * 60_000 });
     await autoSyncIfDue(now);
     expect(calls).toHaveLength(0);
+    // autoSync 关闭时不请求
     await patchSourceBookState({ id: 'src:youdao:0', providerId: 'youdao', remoteId: '0', name: '无标签' }, { lastAttemptAt: now - 2 * 3600_000 });
+    await patchSettings({ sources: { youdao: { autoSync: false } } });
     await autoSyncIfDue(now);
+    expect(calls).toHaveLength(0);
+    await patchSettings({ sources: { youdao: { autoSync: true } } });
+    await autoSyncIfDue(now);
+    expect(calls.some((c) => /webapi\/books/.test(c.url))).toBe(true);
     expect(calls.some((c) => /webapi\/words/.test(c.url))).toBe(true);
+  });
+});
+
+describe('旧版迁移与自动同步', () => {
+  const now = 10 * 24 * 3600_000;
+
+  it('v2 有道用户：迁移后有道保持启用，超过 24 小时自动同步照常请求', async () => {
+    await fakeBrowser.storage.local.set({
+      ttsVoices: { lang: 'en' },
+      dictionaryType: 0,
+      autoSync: true,
+      syncTime: now - 2 * 24 * 3600_000,
+      newWords: { wordInfos: { run: { word: 'run', itemId: 1 } } },
+    });
+    expect(await runMigrationIfNeeded()).toBe(true);
+    expect((await getSettings()).sources.youdao?.enabled).toBe(true);
+    const calls = youdaoLoggedIn();
+    await autoSyncIfDue(now);
+    expect(calls.some((c) => /dict\.youdao\.com/.test(c.url))).toBe(true);
+  });
+
+  it('v2 欧路用户：迁移后欧路保持启用、有道关闭，自动同步只请求欧路', async () => {
+    await fakeBrowser.storage.local.set({
+      ttsVoices: { lang: 'en' },
+      dictionaryType: 1,
+      syncTime: now - 2 * 24 * 3600_000,
+      newWords: { wordInfos: { apple: { word: 'apple', link: 'Apple' } } },
+    });
+    expect(await runMigrationIfNeeded()).toBe(true);
+    const s = await getSettings();
+    expect(s.sources.eudic?.enabled).toBe(true);
+    expect(s.sources.youdao?.enabled).toBe(false);
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return new Response('', { status: 401 });
+    }));
+    await autoSyncIfDue(now);
+    expect(urls.length).toBeGreaterThan(0);
+    expect(urls.every((u) => /eudic|frdic/.test(u))).toBe(true);
+  });
+
+  it('新安装：迁移只写默认设置，不启用任何来源，自动同步不发请求', async () => {
+    // 全新安装不算迁移（返回 false），只写入默认设置
+    expect(await runMigrationIfNeeded()).toBe(false);
+    const s = await getSettings();
+    expect(Object.values(s.sources).every((src) => !src.enabled)).toBe(true);
+    const fetchSpy = vi.fn(async () => new Response('{}'));
+    vi.stubGlobal('fetch', fetchSpy);
+    await autoSyncIfDue(now);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -310,7 +382,7 @@ describe('删词、熟词与撤销', () => {
 
   it('deleteOnKnown 开启：删除原形相同的全部词形（run/runs），不删 runner；撤销时加回并更新句柄', async () => {
     await seedYoudao();
-    await patchSettings({ sources: { youdao: { deleteOnKnown: true } } });
+    await patchSettings({ sources: { youdao: { enabled: true, deleteOnKnown: true } } });
     const calls = youdaoLoggedIn([on(/ajax\/add/, () => json(YD_MISC.add))]);
     const res = await markKnown('running', 'run');
     expect(res.deleted[0]!.deleted.sort()).toEqual(['run', 'runs']);
@@ -333,7 +405,7 @@ describe('删词、熟词与撤销', () => {
 
   it('来源未登录时熟词照常写入，删除失败写进提示且本地缓存保留', async () => {
     await seedYoudao();
-    await patchSettings({ sources: { youdao: { deleteOnKnown: true } } });
+    await patchSettings({ sources: { youdao: { enabled: true, deleteOnKnown: true } } });
     youdaoAnonymous();
     const res = await markKnown('run', 'run');
     expect(res.ok).toBe(true);

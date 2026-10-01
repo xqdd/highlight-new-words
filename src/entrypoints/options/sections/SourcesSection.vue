@@ -5,15 +5,16 @@ import { effectiveBookRole } from '@/core/known/sources';
 import { sendToBackground } from '@/core/messaging';
 import { requestDataCollection } from '@/core/platform';
 import { createDefaultSourceSettings } from '@/core/settings/defaults';
-import type { BookRole } from '@/core/settings/schema';
+import type { BookRole, SourceSettings } from '@/core/settings/schema';
 import { EUDIC_PROVIDER_ID, SOURCE_PROVIDER_INFOS } from '@/core/source/providers';
+import type { SourceProviderInfo } from '@/core/source/types';
 import type { BookMeta, SourceSyncStatus } from '@/core/wordbook/types';
 import AppIcon from '@/ui/components/AppIcon.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
 import ToggleSwitch from '@/ui/components/ToggleSwitch.vue';
 import { formatCount, isBookEnabled, toggleBook } from '../lib/books';
 import { useOptions } from '../lib/context';
-import { bookSyncLine, sourceCardSummary } from '../lib/source-card';
+import { bookSyncLine, sourceCardSummary, sourceConnectFeedback } from '../lib/source-card';
 import { useSourceIndex } from '../lib/source-index';
 import { canAddSourceBook, canDeleteSourceBook, setSourceBookRole, toggleSourceKnownBook } from '../lib/word-actions';
 import { errorText, showToast } from '../lib/toast';
@@ -139,18 +140,46 @@ function capabilityNote(b: BookMeta): string | undefined {
 }
 
 /**
- * 开启来源：Firefox 需先取得“发送认证信息”数据收集授权（Chrome/Edge 直接返回 true）。
+ * 开启来源 = 连接：Firefox 需先取得“发送认证信息”数据收集授权（Chrome/Edge 直接返回 true），
+ * 授权后立即同步一次该来源，并反馈结果（成功几本、几个词，或“未登录有道”这类原因 + 去登录入口）。
+ * 云端来源默认关闭、后台只自动同步连接成功过的来源（见 background autoSyncIfDue），所以这里是新用户首次请求第三方的唯一入口。
  * requestDataCollection 必须是点击处理里的第一个异步调用（Firefox 要求在用户操作的同步调用栈内发起）。
  */
-function setProviderEnabled(cfg: { enabled: boolean }, on: boolean) {
+function setProviderEnabled(p: { info: SourceProviderInfo; cfg: SourceSettings }, on: boolean) {
   if (!on) {
-    cfg.enabled = false;
+    p.cfg.enabled = false;
     return;
   }
   void requestDataCollection(['authenticationInfo']).then((granted) => {
-    if (granted) cfg.enabled = true;
-    else showToast('未授权发送登录信息，无法同步该来源', { tone: 'error' });
+    if (!granted) {
+      showToast('未授权发送登录信息，无法同步该来源', { tone: 'error' });
+      return;
+    }
+    p.cfg.enabled = true;
+    // 等设置防抖保存（useSettings 150ms）落盘后再同步：首次同步成功时 background 会写 settings 自动启用新书，
+    // 先落盘可避免本页稍后的防抖保存用旧的 books.enabled 覆盖它
+    setTimeout(() => void connectProvider(p.info, p.cfg), CONNECT_SAVE_WAIT_MS);
   });
+}
+const CONNECT_SAVE_WAIT_MS = 400;
+
+/** 连接（开启来源后的首次同步）：结果用 toast 反馈，失败且需要网页登录时附“去登录” */
+async function connectProvider(info: SourceProviderInfo, cfg: SourceSettings) {
+  if (!cfg.enabled) return; // 等待期间又被关掉
+  setBusy(info.id, true);
+  try {
+    const results = await sendToBackground('syncSourceBooks', { providerId: info.id });
+    const fb = sourceConnectFeedback(info.name, results, info.capabilities.apiToken && !!cfg.apiToken?.trim());
+    showToast(fb.message, {
+      tone: fb.tone,
+      action: fb.login ? { label: '去登录', run: () => open(info.loginUrl) } : undefined,
+      duration: fb.tone === 'error' ? 8000 : undefined,
+    });
+  } catch (err) {
+    showToast(`${info.name}连接失败：` + errorText(err), { tone: 'error', action: { label: '去登录', run: () => open(info.loginUrl) } });
+  } finally {
+    setBusy(info.id, false);
+  }
 }
 
 /**
@@ -178,7 +207,7 @@ const showTokenGuide = ref(false);
   <div id="providers" class="providers">
     <SettingsSection v-for="p in providers" :id="'provider-' + p.info.id" :key="p.info.id" :title="p.info.name" flush>
       <template #actions>
-        <ToggleSwitch :model-value="p.cfg.enabled" :aria-label="'启用' + p.info.name" @update:model-value="(v: boolean) => setProviderEnabled(p.cfg, v)" />
+        <ToggleSwitch :model-value="p.cfg.enabled" :aria-label="'启用' + p.info.name" @update:model-value="(v: boolean) => setProviderEnabled(p, v)" />
       </template>
 
       <div class="summary">
@@ -188,7 +217,7 @@ const showTokenGuide = ref(false);
             <strong :class="{ 'muted-title': p.card.tone === 'neutral' && !p.books.length }">{{ p.card.title }}</strong>
             <span class="muted">{{ p.card.subtitle }}</span>
           </template>
-          <span v-else class="muted">已关闭：不自动同步，已同步的生词本仍可在词书页启用</span>
+          <span v-else class="muted">未开启：不会访问{{ p.info.name }}。开启即连接并同步一次，之后每天自动同步；已同步的生词本仍可在词书页启用</span>
         </div>
       </div>
 

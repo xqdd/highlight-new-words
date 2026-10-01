@@ -1,4 +1,5 @@
 import { isSourceNotConnected, SOURCE_NOT_CONNECTED_TEXT } from '@/core/source/connect-status';
+import type { SourceSyncResult } from '@/core/messaging/protocol';
 import type { BookRole } from '@/core/settings/schema';
 import type { BookMeta } from '@/core/wordbook/types';
 import { formatCount, relativeTime } from './books';
@@ -94,4 +95,29 @@ export function bookSyncLine(b: BookMeta, now = Date.now()): string {
   if (st.lastSyncAt) return `${count} · ${relativeTime(st.lastSyncAt, now)}`;
   if (st.status === 'empty' && st.lastAttemptAt) return `${count} · 同步于 ${relativeTime(st.lastAttemptAt, now)}`;
   return `${count} · 从未同步`;
+}
+
+/** 开启来源（连接）后首次同步的反馈 */
+export interface SourceConnectFeedback {
+  message: string;
+  tone: 'info' | 'error';
+  /** 是否附“去登录”入口（失败且需要网页登录时） */
+  login: boolean;
+}
+
+/**
+ * 开启来源即连接：把首次同步结果转成一句反馈。
+ * - 全部成功：“已连接有道词典：同步 N 本，共 M 词”
+ * - 有失败：列出失败原因（如“未登录有道或登录已失效…”），未填 token 的来源附“去登录”入口
+ * - 没有任何书：多为未登录（有道未登录时分组列表为空），同样给“去登录”
+ */
+export function sourceConnectFeedback(name: string, results: SourceSyncResult[], hasToken: boolean): SourceConnectFeedback {
+  const failed = results.filter((r) => !r.ok);
+  if (!results.length) return { message: `没有从${name}获取到生词本，请确认已登录`, tone: 'error', login: !hasToken };
+  if (failed.length) {
+    const reasons = [...new Set(failed.map((r) => r.message))].join('；');
+    return { message: `${name}连接失败：${reasons}`, tone: 'error', login: !hasToken };
+  }
+  const words = results.reduce((n, r) => n + (r.count ?? 0), 0);
+  return { message: `已连接${name}：同步 ${results.length} 本，共 ${formatCount(words)} 词`, tone: 'info', login: false };
 }

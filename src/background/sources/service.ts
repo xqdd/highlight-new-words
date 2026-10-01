@@ -220,8 +220,9 @@ let autoSyncRunning: Promise<void> | undefined;
 /**
  * 每天自动同步（旧版逻辑：autoSync 开启且距上次同步超过 24 小时）。SW 每次启动都会调用，条件不满足时不发请求：
  * - 来源启用且 autoSync
- * - 同步过的来源：有书距上次成功同步超过 24 小时，且距上次尝试超过 1 小时（失败后不在每次唤醒时重试）
- * - 从未同步成功的来源（旧版 syncTime=0 也会自动同步）：距上次尝试超过 24 小时
+ * - 只对用户真正连接过的来源生效：至少有一本书成功同步过（lastSyncAt > 0，含旧版迁移来的 syncTime）。
+ *   从未同步成功的来源（新用户、开着但从未登录）不在后台自动请求，由用户在选项页开启来源（开启即同步一次）或手动同步
+ * - 有书距上次成功同步超过 24 小时，且距上次尝试超过 1 小时（失败后不在每次唤醒时重试）
  */
 export function autoSyncIfDue(now = Date.now()): Promise<void> {
   autoSyncRunning ??= (async () => {
@@ -231,13 +232,7 @@ export function autoSyncIfDue(now = Date.now()): Promise<void> {
       const src = settings.sources[provider.id];
       if (!src?.enabled || !src.autoSync) continue;
       const books = booksOf(index, provider.id).filter((b) => !b.orphaned);
-      const everSynced = books.some((b) => b.lastSyncAt > 0);
-      // 从未成功同步过的来源（新用户刚登录）：与旧版 v2（syncTime=0 时自动同步）一致也自动同步，
-      // 但每天最多尝试一次（以列表刷新/逐本尝试的最近时间为准），未登录时不会在每次 SW 唤醒时重复报错
-      const lastTry = Math.max(index.providers[provider.id]?.lastListAt ?? 0, ...books.map((b) => b.lastAttemptAt));
-      const due = everSynced
-        ? books.some((b) => b.lastSyncAt > 0 && now - b.lastSyncAt > DAY_MS && now - b.lastAttemptAt > AUTO_RETRY_MS)
-        : now - lastTry > DAY_MS;
+      const due = books.some((b) => b.lastSyncAt > 0 && now - b.lastSyncAt > DAY_MS && now - b.lastAttemptAt > AUTO_RETRY_MS);
       if (!due) continue;
       const results = await syncProvider(provider.id);
       console.log('[hnw] 自动同步', provider.id, results.map((r) => `${r.bookId}: ${r.message}`));

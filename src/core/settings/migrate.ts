@@ -87,7 +87,9 @@ const LEGACY_DEFAULT_BUBBLE_BG = '#FFE4C4';
 
 /**
  * 旧版（v2.x）存储 -> 新结构（纯函数，便于单测）。
- * - 旧用户只用云端生词本：迁移为对应来源（dictionaryType 0=有道 1=欧路）的一本来源词书，且只启用这本，保持原有高亮行为
+ * - 旧用户用过云端生词本（syncTime>0 或有 newWords.wordInfos）：迁移为对应来源（dictionaryType 0=有道 1=欧路）的一本来源词书，
+ *   只启用该来源和这本书，保持原有高亮行为与每天自动同步
+ * - 旧版从未用过云端生词本：与新安装一致，不启用任何来源、沿用默认词书
  * - 旧 cookie 键仅为记录用途（请求由浏览器自动携带 cookie），不再迁移
  * - 旧用户改过颜色则主题切为 custom，否则使用新默认主题
  */
@@ -100,8 +102,11 @@ export function migrateLegacy(legacy: LegacyStorage): MigrationResult {
     settings.tts.voice = { voiceName, lang, extensionId };
   }
   const provider = Number(legacy.dictionaryType) === 1 ? EUDIC_PROVIDER_ID : YOUDAO_PROVIDER_ID;
-  enableOnlySource(settings, provider, typeof legacy.autoSync === 'boolean' ? legacy.autoSync : true);
+  const autoSync = typeof legacy.autoSync === 'boolean' ? legacy.autoSync : true;
   const syncTime = typeof legacy.syncTime === 'number' ? legacy.syncTime : 0;
+  const legacyWordInfos = legacy.newWords?.wordInfos ?? {};
+  // 旧版确实用过云端生词本（同步成功过或本地有生词）才启用对应来源；dictionaryType 旧版默认就是有道，不能作为“用过”的依据
+  const usedCloudSource = syncTime > 0 || Object.keys(legacyWordInfos).length > 0;
 
   // 颜色：旧版文字色为空串表示继承
   const custom = settings.style.custom;
@@ -116,14 +121,21 @@ export function migrateLegacy(legacy: LegacyStorage): MigrationResult {
     !!legacy.bubbleText?.trim();
   if (colorCustomized) settings.style.themeId = CUSTOM_THEME_ID;
 
-  // 来源词书总是创建（即使旧版无生词），保证 books.enabled 中的 id 有对应索引，用户点同步即可拉取
+  settings.schemaVersion = SETTINGS_SCHEMA_VERSION;
+  if (!usedCloudSource) {
+    // 旧版从未同步过也没有生词：与新安装一致，不启用任何云端来源（不向第三方发请求），沿用默认词书；只保留旧版自动同步偏好
+    settings.sources[provider]!.autoSync = autoSync;
+    return { settings };
+  }
+  enableOnlySource(settings, provider, autoSync);
+  // 来源词书总是创建（即使同步过但为空），保证 books.enabled 中的 id 有对应索引，用户点同步即可拉取；
+  // lastSyncAt 沿用旧版 syncTime，autoSyncIfDue 据此把该来源视为“连接过”，照常每天自动同步
   const words: UserWordMap = {};
-  for (const [key, info] of Object.entries(legacy.newWords?.wordInfos ?? {})) {
+  for (const [key, info] of Object.entries(legacyWordInfos)) {
     setOwn(words, key.toLowerCase(), normalizeLegacyWord(key, info, provider));
   }
   const sourceBook = makeSourceBook(provider, words, syncTime);
   settings.books.enabled = [sourceBook.state.id];
-  settings.schemaVersion = SETTINGS_SCHEMA_VERSION;
   return { settings, sourceBook };
 }
 
