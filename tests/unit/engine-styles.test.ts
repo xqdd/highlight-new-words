@@ -79,7 +79,7 @@ describe('v5 样式契约', () => {
     expect(pill).toContain('box-shadow: 0 0 0 .16em');
   });
 
-  it('“仅括号译文”等预设携带建议译文模式，applyThemePreset 一并应用', () => {
+  it('“不高亮，仅译文”等预设携带建议译文模式，applyThemePreset 一并应用', () => {
     const s = createDefaultSettings();
     applyThemePreset(s, 'gloss-only');
     expect(s.style.themeId).toBe('gloss-only');
@@ -91,6 +91,11 @@ describe('v5 样式契约', () => {
     // 不带译文建议的预设不改动译文设置
     applyThemePreset(s, 'highlighter');
     expect(s.inlineTranslation.mode).toBe('ruby');
+    // “不高亮，仅译文”：译文已开时沿用当前位置与模糊自测，不写入 onlyIfOff
+    s.inlineTranslation = { ...s.inlineTranslation, mode: 'below', blur: true };
+    applyThemePreset(s, 'gloss-only');
+    expect(s.inlineTranslation).toMatchObject({ mode: 'below', blur: true });
+    expect(s.inlineTranslation).not.toHaveProperty('onlyIfOff');
   });
 
   it('每套预设在亮色页与暗色页可读：文字色对比度、装饰色可见', () => {

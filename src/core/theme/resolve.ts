@@ -195,12 +195,15 @@ export function matchTranslationPreset(t: { mode: InlineTranslationMode } & Tran
 }
 
 /**
- * 选择预设（预设画廊点选时调用）：设置全局主题；预设带建议译文（如“仅括号译文”）时一并应用译文模式与样式。
+ * 选择预设（预设画廊点选时调用）：设置全局主题；预设带建议译文（如“下划线 + 括号译文”）时一并应用译文模式与样式；
+ * 建议标了 onlyIfOff 的（“不高亮，仅译文”）只在译文关闭时打开，已开的译文位置与样式不动。
  * 直接修改传入的 settings（options 中为响应式对象）并返回它。
  */
 export function applyThemePreset(settings: Settings, themeId: string): Settings {
   settings.style.themeId = themeId;
   const t = findTheme(themeId)?.translation;
-  if (t) settings.inlineTranslation = { ...settings.inlineTranslation, blur: false, ...t };
+  if (!t || (t.onlyIfOff && settings.inlineTranslation.mode !== 'off')) return settings;
+  const { onlyIfOff: _onlyIfOff, ...suggested } = t;
+  settings.inlineTranslation = { ...settings.inlineTranslation, blur: false, ...suggested };
   return settings;
 }

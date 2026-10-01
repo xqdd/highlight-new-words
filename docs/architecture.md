@@ -350,14 +350,14 @@ flowchart LR
 | 文字 | `color`、`fontWeight`（inherit/medium/bold）、`italic` | 粗体会让单词略变宽，是唯一可能改变换行的维度 |
 | 背景 | `background`、`backgroundKind`（block/marker/pill）、`backgroundOpacity`（与颜色 alpha 相乘，用 `color-mix`）、`rounded` | 马克笔用 `background-image` 只画下半部；胶囊用同色 `box-shadow` 做留白，不占位 |
 | 边框 | `border`（none/solid/dashed/dotted）、`borderColor` | 用 `outline` 画，不占布局空间 |
-| 无样式 | 全部为空/none | 配合行内译文即“仅括号译文” |
+| 无样式 | 全部为空/none | 配合行内译文即“不高亮，仅译文” |
 
 - 渲染：`markStyleParts(s)` 返回 `{ decls, bgImage }`，`markStyleToCss(s)` 拼成一串声明，`MarkPreview` 等预览直接使用。页面规则由 engine 的 `buildPageCss` 生成，在此基础上加悬停叠色（与马克笔色带一起写进 background-image）、深色上下文修正（文字色/线色/边框色提亮，半透明背景的不透明度压到 0.32 以下）和链接内修正（保留链接色与下划线、只用底色，见 4.5 `data-hnw-link`）。深色上下文中暖色（色相 <75° 或 >330°）的半透明底（荧光黄、杏色）不再压暗铺底（会发灰发脏），改为提亮的同色文字 + 同色 1.5px 下划线；冷色底仍按不透明度上限压低。标题内底色类样式降级为下划线；代码中的装饰线统一为 1px 直线、偏移 1px（代码行距紧，波浪线会压到下一行）。
 - 行内译文与生词样式相互独立，见 4.1 的 `inlineTranslation`。`HighlightTheme.translation` 是预设建议的译文设置，`applyThemePreset(settings, id)` 在设置主题的同时应用它（options 预设画廊点选时调用）；只改 `style.themeId` 不会动译文设置。
 - 译文样式预设：`TRANSLATION_PRESETS`（themes.ts）共 8 套，只携带样式字段（`color`/`opacity`/`fontScale`/`bracket`/`background`/`italic`/`bold`），不改 `mode`/`blur`/`oncePerParagraph`：经典括号 `classic`、全角括号 `fullwidth`、方括号灰字 `square-gray`、方头括号 `lenticular`、彩色无括号 `color-plain`、标签 `tag`（浅青半透明底 + 同色字）、斜体低调 `italic-soft`、醒目加粗 `bold`。预设不设字号（各模式字号缺省值差异大）。`applyTranslationPreset(settings, id)` 先清掉全部样式字段再写入预设值，所以“经典括号”会把浓淡、字号等清回按模式的缺省值；`matchTranslationPreset(t)` 把当前设置与各预设按当前模式补齐缺省值后逐字段比较（含 `rubyBracket`），无匹配时 options 显示“自定义”。
 - 译文渲染（engine `translationRules`）：词后显示（`after` 模式、`ruby`/`below` 在受限容器中退回的词后括注）用 `bracket`，词上/词下小字用 `rubyBracket`（ruby-text 的 `::before` 同样可以带括号，只作用于已有释义的注解，占位注解仍为不换行空格）；不加括号或带底色时与单词的间距从 .1em 放大到 .25em；底色带 `padding:0 .3em` 与圆角，不加垂直内边距；`hover` 浮层使用固定的深底浅字样式，不受译文样式影响。深色上下文（`data-hnw-dark`）中，用户设了译文颜色且底色不是实心色时，颜色按 4.5:1 提亮。
 - 按词书设样式：沿用 `style.perBook[id].mark`（`Partial<MarkStyle>`，v5 字段同样可以覆盖）。
-- v5 预设：`V5_PRESET_IDS` 共 13 套，顺序即推荐的画廊顺序，每套带 `desc` 一句话说明：荧光笔 `highlighter`、波浪线 `wavy-line`、下划线 + 括号译文 `underline-gloss`、仅括号译文 `gloss-only`、粗体强调 `bold-accent`、柔和底色 `soft-tint`、暗色模式友好 `dark-friendly`、胶囊 `pill`、虚线框 `dashed-box`、双下划线 `double-underline`、词上注释 `ruby-gloss`、模糊自测 `quiz-blur`、斜体点线 `italic-dotted`。颜色都避开常见链接蓝。单测 `tests/unit/engine-styles.test.ts` 校验亮/暗页对比度；在 [engine-styles.html](../tests/fixtures/engine-styles.html)（亮色段、链接段、暗色段、受限容器、代码块）上逐套截图核对过。
+- v5 预设：`V5_PRESET_IDS` 共 13 套，顺序即推荐的画廊顺序，每套带 `desc` 一句话说明：荧光笔 `highlighter`、波浪线 `wavy-line`、下划线 + 括号译文 `underline-gloss`、不高亮，仅译文 `gloss-only`（建议译文带 `onlyIfOff`：译文已开时沿用当前位置，关闭时打开词后译文）、粗体强调 `bold-accent`、柔和底色 `soft-tint`、暗色模式友好 `dark-friendly`、胶囊 `pill`、虚线框 `dashed-box`、双下划线 `double-underline`、词上注释 `ruby-gloss`、模糊自测 `quiz-blur`、斜体点线 `italic-dotted`。颜色都避开常见链接蓝。单测 `tests/unit/engine-styles.test.ts` 校验亮/暗页对比度；在 [engine-styles.html](../tests/fixtures/engine-styles.html)（亮色段、链接段、暗色段、受限容器、代码块）上逐套截图核对过。
 
 **选项页外观约定（options 分片）**：
 

@@ -25,7 +25,7 @@ export function applyCustomMark(settings: Settings, mark: MarkStyle) {
   retintPerBook(settings);
 }
 
-/** 选择预设主题：预设带建议译文（如“仅括号译文”）时一并应用（engine 的 applyThemePreset），再重新着色按词书分色的书 */
+/** 选择预设主题：预设带建议译文（如“下划线 + 括号译文”）时一并应用（engine 的 applyThemePreset），再重新着色按词书分色的书 */
 export function applyPreset(settings: Settings, themeId: string) {
   applyThemePreset(settings, themeId);
   retintPerBook(settings);

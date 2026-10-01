@@ -105,10 +105,11 @@ export interface HighlightTheme {
   mark: MarkStyle;
   card: CardStyle;
   /**
-   * 预设建议的行内译文（v5，可选）：如“仅括号译文”需要 after 模式。
+   * 预设建议的行内译文（v5，可选）：如“下划线 + 括号译文”需要 after 模式。
    * 主题与译文设置相互独立，只有用户在预设画廊中选择该预设时才应用（见 resolve.ts#applyThemePreset）。
+   * onlyIfOff：只在译文关闭时应用（“不高亮，仅译文”只需要译文可见，已开的词上/词下等位置不改）
    */
-  translation?: { mode: InlineTranslationMode } & TranslationStyle;
+  translation?: { mode: InlineTranslationMode; onlyIfOff?: boolean } & TranslationStyle;
   /** 一句话说明（v5 预设画廊用） */
   desc?: string;
 }
@@ -252,12 +253,12 @@ export const BUILTIN_THEMES: readonly HighlightTheme[] = [
   },
   {
     id: 'gloss-only',
-    name: '仅括号译文',
+    name: '不高亮，仅译文',
     nameEn: 'Gloss only',
-    desc: '生词不加任何标记，只在词后显示译文',
+    desc: '生词不加任何标记，只显示译文（沿用当前译文位置，译文关闭时打开词后译文）',
     mark: { background: '', color: '', underline: 'none', underlineColor: '' },
     card: lightCard,
-    translation: { mode: 'after' },
+    translation: { mode: 'after', onlyIfOff: true },
   },
   {
     id: 'bold-accent',
