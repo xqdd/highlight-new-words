@@ -520,7 +520,7 @@ describe('word-actions', () => {
       added: [...added.added, { bookId: 'src:eudic:x', name: '欧路 · 外刊', ok: false, words: [], error: 'HTTP 500' }],
       message: '已加入“我的生词本”；“欧路 · 外刊”失败：HTTP 500',
     };
-    expect(addNotice(partial, 'run')).toEqual({ level: 'warn', title: '部分失败：「run」已加入“我的生词本”（1 处失败）', details: ['“欧路 · 外刊”失败：HTTP 500'] });
+    expect(addNotice(partial, 'run')).toEqual({ level: 'warn', title: '部分失败：「run」已加入“我的生词本”，“欧路 · 外刊”加入失败', details: ['“欧路 · 外刊”失败：HTTP 500'] });
     expect(removeNotice({ ok: true, removed: [{ bookId: 'local:mine', name: '我的生词本', ok: true, words: ['run'] }], message: '已从“我的生词本”删除 run' }, 'run').title).toBe(
       '「run」已移出“我的生词本”',
     );

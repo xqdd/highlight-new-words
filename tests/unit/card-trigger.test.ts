@@ -14,7 +14,7 @@ import { createDefaultSettings } from '@/core/settings/defaults';
 import { normalizeSettings } from '@/core/settings/migrate';
 
 /** 最小 CardView：只记录打开/关闭与提示 */
-function fakeView(): CardView & { hints: string[] } {
+function fakeView(contains: (e: Event) => boolean = () => false): CardView & { hints: string[] } {
   let anchor: HTMLElement | null = null;
   let open = false;
   const hints: string[] = [];
@@ -35,7 +35,7 @@ function fakeView(): CardView & { hints: string[] } {
     get anchor() {
       return anchor;
     },
-    contains: () => false,
+    contains,
     setStyle() {},
     showHint(text) {
       hints.push(text);
@@ -60,13 +60,22 @@ const key = (type: 'keydown' | 'keyup', k: string, mods: Mods = {}) => {
   return ev;
 };
 
-function setup(trigger: CardTrigger, modifier: CardModifierKey = 'alt', hintStore: TriggerHintStore | false = false) {
+function setup(trigger: CardTrigger, modifier: CardModifierKey = 'alt', hintStore: TriggerHintStore | false = false, hoverDelay?: number) {
   document.body.innerHTML =
     '<p><hnw-mark id="w1" data-lemma="abandon">abandon</hnw-mark> plain <span id="out">out</span></p>' +
     '<a id="link" href="#go"><hnw-mark id="w2" data-lemma="harbor">harbor</hnw-mark></a><input id="inp">';
   const view = fakeView();
   const onOpen = vi.fn((m: HTMLElement) => view.open(m, { surface: '', lemma: '', books: [], deletableBooks: [] }));
-  const unbind = bindCardTrigger({ doc: document, view, getTrigger: () => trigger, getModifier: () => modifier, onOpen, hintStore, mac: false });
+  const unbind = bindCardTrigger({
+    doc: document,
+    view,
+    getTrigger: () => trigger,
+    getModifier: () => modifier,
+    getHoverDelay: hoverDelay === undefined ? undefined : () => hoverDelay,
+    onOpen,
+    hintStore,
+    mac: false,
+  });
   const $ = (id: string) => document.getElementById(id)!;
   return { view, onOpen, unbind, $ };
 }
@@ -87,9 +96,13 @@ describe('trigger-config', () => {
   });
 
   it('旧设置补齐 card.modifier，旧 trigger 原样保留', () => {
-    expect(createDefaultSettings().card).toEqual({ trigger: 'auto', modifier: 'alt' });
+    expect(createDefaultSettings().card).toEqual({ trigger: 'auto', modifier: 'alt', hoverDelay: 250 });
     const old = { ...createDefaultSettings(), card: { trigger: 'click' } };
-    expect(normalizeSettings(old).card).toEqual({ trigger: 'click', modifier: 'alt' });
+    expect(normalizeSettings(old).card).toEqual({ trigger: 'click', modifier: 'alt', hoverDelay: 250 });
+    // 悬停延迟只允许 100/250/400：写坏的值按默认
+    expect(normalizeSettings({ card: { trigger: 'hover', hoverDelay: 400 } }).card.hoverDelay).toBe(400);
+    expect(normalizeSettings({ card: { trigger: 'hover', hoverDelay: 7 } }).card.hoverDelay).toBe(250);
+    expect(normalizeSettings({ card: { trigger: 'hover', hoverDelay: '250' } }).card.hoverDelay).toBe(250);
   });
 });
 
@@ -97,10 +110,10 @@ describe('bindCardTrigger v11', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it('悬停：100ms 后打开，移出 250ms 后关闭；点击不拦截链接', () => {
+  it('悬停：默认 250ms 后打开，移出 250ms 后关闭；点击不拦截链接', () => {
     const { view, onOpen, unbind, $ } = setup('hover');
     over($('w1'));
-    vi.advanceTimersByTime(99);
+    vi.advanceTimersByTime(249);
     expect(onOpen).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(onOpen).toHaveBeenCalledWith($('w1'), 'hover');
@@ -122,9 +135,9 @@ describe('bindCardTrigger v11', () => {
     expect(onOpen).toHaveBeenCalledWith($('w1'), 'modifier');
     // 用来查过词的那次按住，松开时吞掉 keyup（避免 Windows 单按 Alt 激活菜单）
     expect(key('keyup', 'Alt').defaultPrevented).toBe(true);
-    // 按住 Alt 移入另一个单词
+    // 按住 Alt 移入另一个单词（移入走悬停延迟，默认 250ms）
     over($('w2'), { altKey: true });
-    vi.advanceTimersByTime(100);
+    vi.advanceTimersByTime(250);
     expect(onOpen).toHaveBeenLastCalledWith($('w2'), 'modifier');
     unbind();
   });
@@ -155,7 +168,7 @@ describe('bindCardTrigger v11', () => {
     expect(onOpen).not.toHaveBeenCalled();
     // 正常按住 Ctrl 移入
     over($('w1'), { ctrlKey: true });
-    vi.advanceTimersByTime(100);
+    vi.advanceTimersByTime(250);
     expect(onOpen).toHaveBeenCalledTimes(1);
     unbind();
   });
@@ -210,11 +223,14 @@ describe('bindCardTrigger v11', () => {
     const w1 = document.getElementById('w1')!;
     const w2 = document.getElementById('w2')!;
     over(w1);
-    vi.advanceTimersByTime(100);
+    vi.advanceTimersByTime(250);
     expect(view.hints).toHaveLength(1);
+    // 提示可见满 1s 才记下
+    expect(saved).toBeUndefined();
+    vi.advanceTimersByTime(1000);
     expect(saved).toBe('hover');
     over(w2);
-    vi.advanceTimersByTime(100);
+    vi.advanceTimersByTime(250);
     expect(view.hints).toHaveLength(1);
     trigger = 'click';
     view.close();
@@ -225,6 +241,7 @@ describe('bindCardTrigger v11', () => {
     down(w1);
     click(w1);
     expect(view.hints).toHaveLength(2);
+    vi.advanceTimersByTime(1000);
     expect(saved).toBe('click');
     unbind();
   });
@@ -241,12 +258,168 @@ describe('bindCardTrigger v11', () => {
     });
     const tok = root.querySelector('.tok')!;
     tok.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, composed: true, pointerType: 'mouse' } as PointerEventInit));
-    vi.advanceTimersByTime(100);
+    vi.advanceTimersByTime(250);
     expect(onOpen).toHaveBeenCalledWith(tok, 'hover');
     root.querySelector('.gap')!.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, composed: true, pointerType: 'mouse' } as PointerEventInit));
     vi.advanceTimersByTime(500);
     expect(view.isOpen).toBe(true);
     off();
+    unbind();
+  });
+});
+
+describe('card 修复轮', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it.each([100, 250, 400])('C1 悬停延迟 %ims：不到不弹，满了弹出', (delay) => {
+    const { onOpen, unbind, $ } = setup('hover', 'alt', false, delay);
+    over($('w1'));
+    vi.advanceTimersByTime(delay - 1);
+    expect(onOpen).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onOpen).toHaveBeenCalledWith($('w1'), 'hover');
+    unbind();
+  });
+
+  it('C1 默认 250ms：指针扫过（停留不到 250ms 就移到别处）不弹卡', () => {
+    const { onOpen, unbind, $ } = setup('hover');
+    over($('w1'));
+    vi.advanceTimersByTime(150);
+    over($('out'));
+    vi.advanceTimersByTime(1000);
+    expect(onOpen).not.toHaveBeenCalled();
+    unbind();
+  });
+
+  it('C1 修饰键模式：移入走悬停延迟，指针已在单词上再按键仍为 180ms（不受悬停延迟影响）', () => {
+    const { onOpen, unbind, $ } = setup('modifier', 'alt', false, 400);
+    over($('w1'), { altKey: true });
+    vi.advanceTimersByTime(399);
+    expect(onOpen).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    key('keyup', 'Alt');
+    over($('w2'));
+    key('keydown', 'Alt', { altKey: true });
+    vi.advanceTimersByTime(179);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(onOpen).toHaveBeenLastCalledWith($('w2'), 'modifier');
+    unbind();
+  });
+
+  it('C2 #113 修饰键=Ctrl：按住 Ctrl 悬停链接内生词打开卡片，Ctrl+点击后卡片关闭、不拦截点击，松开 Ctrl 前不再弹', () => {
+    const { view, onOpen, unbind, $ } = setup('modifier', 'ctrl');
+    key('keydown', 'Control', { ctrlKey: true });
+    over($('w2'), { ctrlKey: true });
+    vi.advanceTimersByTime(250);
+    expect(view.isOpen).toBe(true);
+    expect(view.anchor).toBe($('w2'));
+    down($('w2'), { ctrlKey: true });
+    expect(view.isOpen).toBe(false);
+    expect(click($('w2'), { ctrlKey: true }).defaultPrevented).toBe(false);
+    vi.advanceTimersByTime(1000);
+    expect(view.isOpen).toBe(false);
+    // 仍按着 Ctrl：移入其他单词、移回原单词都不弹
+    over($('w1'), { ctrlKey: true });
+    vi.advanceTimersByTime(1000);
+    over($('w2'), { ctrlKey: true });
+    vi.advanceTimersByTime(1000);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    // 松开后重新按下 Ctrl：恢复
+    key('keyup', 'Control');
+    key('keydown', 'Control', { ctrlKey: true });
+    vi.advanceTimersByTime(180);
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    unbind();
+  });
+
+  it('C2 #113 悬停模式：⌘/Shift+点击链接内生词同样关闭卡片；修饰键松开（指针事件上已无修饰键）后恢复', () => {
+    const { view, onOpen, unbind, $ } = setup('hover');
+    over($('w2'));
+    vi.advanceTimersByTime(250);
+    expect(view.isOpen).toBe(true);
+    down($('w2'), { metaKey: true });
+    expect(view.isOpen).toBe(false);
+    expect(click($('w2'), { metaKey: true }).defaultPrevented).toBe(false);
+    over($('w1'), { metaKey: true });
+    vi.advanceTimersByTime(1000);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    // 没收到 keyup（焦点切走）时，以指针事件上的修饰键状态为准
+    over($('w1'));
+    vi.advanceTimersByTime(250);
+    expect(onOpen).toHaveBeenCalledTimes(2);
+    // Shift+点击（新窗口）
+    over($('w2'));
+    vi.advanceTimersByTime(250);
+    down($('w2'), { shiftKey: true });
+    expect(view.isOpen).toBe(false);
+    unbind();
+  });
+
+  it('C2 非链接区域行为不变：Ctrl+按下非链接中的已打开单词不关闭卡片', () => {
+    const { view, unbind, $ } = setup('hover');
+    over($('w1'));
+    vi.advanceTimersByTime(250);
+    down($('w1'), { ctrlKey: true });
+    expect(click($('w1'), { ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(view.isOpen).toBe(true);
+    expect(view.anchor).toBe($('w1'));
+    unbind();
+  });
+
+  /** 带提示存取的绑定；卡片“内部”用 #in-card 元素模拟 */
+  async function setupHint() {
+    let saved: string | undefined;
+    const store: TriggerHintStore = { load: async () => saved, save: async (s) => void (saved = s) };
+    document.body.innerHTML =
+      '<hnw-mark id="w1" data-lemma="a">a</hnw-mark><hnw-mark id="w2" data-lemma="b">b</hnw-mark><i id="out"></i><div id="in-card"><button>x</button></div>';
+    const inCard = document.getElementById('in-card')!;
+    const view = fakeView((e) => e.composedPath().includes(inCard));
+    const onOpen = vi.fn((m: HTMLElement) => view.open(m, { surface: '', lemma: '', books: [], deletableBooks: [] }));
+    const unbind = bindCardTrigger({ doc: document, view, getTrigger: () => 'hover', onOpen, hintStore: store, mac: false });
+    await vi.advanceTimersByTimeAsync(0);
+    const $ = (id: string) => document.getElementById(id)!;
+    return { view, unbind, $, inCard, saved: () => saved };
+  }
+
+  it('C3 #114 卡片不到 1 秒就关闭：不记为已提示，下次打开仍提示；持续可见满 1 秒才记下', async () => {
+    const { view, unbind, $, saved } = await setupHint();
+    over($('w1'));
+    vi.advanceTimersByTime(250);
+    expect(view.hints).toHaveLength(1);
+    // 一闪而过：移出 250ms 后关闭（打开后约 0.5s）
+    over($('out'));
+    vi.advanceTimersByTime(250);
+    expect(view.isOpen).toBe(false);
+    vi.advanceTimersByTime(2000);
+    expect(saved()).toBeUndefined();
+    // 下次打开仍显示提示
+    over($('w2'));
+    vi.advanceTimersByTime(250);
+    expect(view.hints).toHaveLength(2);
+    vi.advanceTimersByTime(999);
+    expect(saved()).toBeUndefined();
+    vi.advanceTimersByTime(1);
+    expect(saved()).toBe('hover');
+    // 已记下：之后不再提示
+    view.close();
+    over($('w1'));
+    vi.advanceTimersByTime(250);
+    expect(view.hints).toHaveLength(2);
+    unbind();
+  });
+
+  it('C3 #114 不到 1 秒但用户在卡片内按下（点按钮）：立即记为已提示', async () => {
+    const { view, unbind, $, inCard, saved } = await setupHint();
+    over($('w1'));
+    vi.advanceTimersByTime(250);
+    expect(view.hints).toHaveLength(1);
+    vi.advanceTimersByTime(300);
+    down(inCard.querySelector('button')!);
+    expect(saved()).toBe('hover');
+    expect(view.isOpen).toBe(true);
     unbind();
   });
 });

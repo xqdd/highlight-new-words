@@ -12,6 +12,7 @@ import {
   createCardBackend,
   describePreview,
   knownNotice,
+  messageParts,
   removeNotice,
   undoKnownNotice,
   type AddTargetOption,
@@ -220,6 +221,12 @@ export class ShadowCardView implements CardView {
     if (!this.isOpen) return;
     this.onceHint = text;
     this.rerender();
+  }
+
+  showMessage(message: string, ok: boolean, lemma?: string): void {
+    const [first = ok ? '已完成' : '操作失败', ...details] = messageParts(message);
+    const title = lemma ? `「${lemma}」${ok ? '' : '：'}${first}` : first;
+    this.showNotice({ level: ok ? 'ok' : 'err', title, details });
   }
 
   setStyle(style: CardStyle): void {

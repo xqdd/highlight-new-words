@@ -20,6 +20,8 @@ export interface TriggerOptions {
   getTrigger(): CardTrigger;
   /** trigger='modifier' 时按住的修饰键（v11 新增；缺省按 alt） */
   getModifier?(): CardModifierKey | undefined;
+  /** 悬停弹卡延迟 ms（settings.card.hoverDelay；缺省 DEFAULT_HOVER_SHOW_DELAY） */
+  getHoverDelay?(): number | undefined;
   /** 需要打开卡片时回调（入口负责组装数据并调用 view.open）；锚点可以是 hnw-mark 或触发区域（registerCardTriggerZone）返回的元素 */
   onOpen(mark: HTMLElement, via: CardOpenVia): void;
   /** PC 端卡片首次出现时的触发方式提示；false 关闭（缺省用 storage.local） */
@@ -55,9 +57,14 @@ export function registerCardTriggerZone(zone: CardTriggerZone): () => void {
   return () => zones.delete(zone);
 }
 
-/** 悬停显示/隐藏延迟（ms），沿用旧版 100ms，防止鼠标一闪而过 */
-const HOVER_SHOW_DELAY = 100;
+/**
+ * 悬停显示延迟缺省值（ms）：实际值读 settings.card.hoverDelay（100/250/400，默认 250）。
+ * 旧版 100ms 在指针扫过段落时容易误弹卡片，默认放宽到 250ms
+ */
+const DEFAULT_HOVER_SHOW_DELAY = 250;
 const HOVER_HIDE_DELAY = 250;
+/** 首次提示至少可见这么久（ms）才算“已看到”并记下；不到就关闭的卡片下次仍提示 */
+const HINT_SEEN_MS = 1000;
 /**
  * 指针已在单词上、再按下修饰键时的显示延迟（ms）：比悬停稍长，留出判断“组合键”的时间
  * （Ctrl+C、Alt+Tab 等在修饰键之后很快按下第二个键，这类按键不弹卡片）
@@ -80,6 +87,14 @@ function onlyModifier(e: ModifierFlags, m: CardModifierKey): boolean {
 }
 
 const anyModifier = (e: ModifierFlags) => e.altKey || e.ctrlKey || e.shiftKey || e.metaKey;
+/** 浏览器“在新标签/新窗口打开链接”的修饰键：Ctrl（Windows/Linux）、⌘（macOS）、Shift（新窗口） */
+const newTabModifier = (e: ModifierFlags) => e.ctrlKey || e.metaKey || e.shiftKey;
+const NEW_TAB_KEYS = new Set(['Control', 'Meta', 'OS', 'Shift']);
+
+/** 事件目标是否在带 href 的链接内（composedPath 可穿透 open Shadow DOM，如字幕面板中的链接） */
+function inLink(e: Event): boolean {
+  return e.composedPath().some((n) => n instanceof Element && n.matches('a[href]'));
+}
 
 /** 焦点在可编辑区域（输入框、富文本编辑器）：此时按 Shift/Alt 多半是在打字，不弹卡片 */
 function isEditing(doc: Document): boolean {
@@ -102,8 +117,8 @@ const storageHintStore: TriggerHintStore = {
 /**
  * 卡片触发逻辑。触屏（pointerType 不是 mouse）始终点按，PC 端鼠标按 settings.card.trigger：
  *
- * - 悬停（auto/hover）：鼠标悬停单词 100ms 后打开；离开单词与卡片 250ms 后关闭（在卡片内点过之后不再因移出而关闭）
- * - 修饰键 + 悬停（modifier）：只按着设定的修饰键时，指针移入单词 100ms 后打开；指针已在单词上再按下修饰键，180ms 后打开。
+ * - 悬停（auto/hover）：鼠标悬停单词 hoverDelay（默认 250ms，可选 100/400）后打开；离开单词与卡片 250ms 后关闭（在卡片内点过之后不再因移出而关闭）
+ * - 修饰键 + 悬停（modifier）：只按着设定的修饰键时，指针移入单词 hoverDelay 后打开；指针已在单词上再按下修饰键，180ms 后打开。
  *   修饰键与其他键/鼠标按下/滚轮组合（Ctrl+C、Ctrl+点击开新标签、Ctrl+滚轮缩放、Alt+Tab）时本次按住作废，直到松开；
  *   焦点在输入框时按键不触发。打开过卡片的那次按住，松开时吞掉 keyup，避免 Windows 上单按 Alt 激活浏览器菜单。
  *   关闭规则与悬停相同（松开修饰键不关闭，移出后关闭）
@@ -111,7 +126,10 @@ const storageHintStore: TriggerHintStore = {
  *   带任一修饰键的点击（Ctrl/⌘ 新标签、Shift 新窗口、Alt 下载）完全交给浏览器；拖选文字结束的点击不弹卡片
  * - 触屏点按：打开卡片并阻止默认行为；再次点按同一单词放行
  * - 鼠标在卡片外按下 / 触屏在卡片外点按（click，滑动滚动不会触发）/ Esc 关闭
- * - PC 端卡片首次出现时在卡片内提示一次当前触发方式（方式变化后再提示一次），见 CardView.showHint
+ * - 带 Ctrl/⌘/Shift 在链接内按下鼠标（新标签/新窗口打开链接，#113）：关闭卡片、取消待打开的计时，
+ *   直到这些修饰键松开都不再弹卡片，避免链接在新标签打开后卡片还留在原页；点击照常交给浏览器
+ * - PC 端卡片首次出现时在卡片内提示一次当前触发方式（方式变化后再提示一次），见 CardView.showHint；
+ *   提示可见满 1s 或用户与卡片交互（在卡片内按下）后才记为“已提示”，一闪而过的卡片下次仍提示（#114）
  * - 页面滚动由 CardView 自己处理（浮层跟随单词、单词离开视口关闭；手机底部卡片保持打开）
  * 返回解绑函数。
  */
@@ -134,8 +152,12 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
   let chord = false;
   /** 本次按住修饰键打开过卡片（松开时吞掉 keyup） */
   let openedByHold = false;
-  /** 已提示过的触发方式签名；undefined = 尚未读到（读到前不提示，避免重复） */
+  /** 带新标签修饰键点了链接（#113）：Ctrl/⌘/Shift 松开前不弹卡片 */
+  let newTabHold = false;
+  /** 已提示过（已记下）的触发方式签名；undefined = 尚未读到（读到前不提示，避免重复） */
   let hintedSig: string | undefined;
+  /** 已显示、但还没确认用户看到的提示：可见满 HINT_SEEN_MS 或在卡片内交互后才写入 hintStore */
+  let pendingHint: { sig: string; anchor: HTMLElement; timer: ReturnType<typeof setTimeout> } | null = null;
   let hintLoaded = !hintStore;
   hintStore?.load().then(
     (v) => {
@@ -160,14 +182,31 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
   /** 在卡片内或在注册区域的“保持打开”范围内 */
   const insideCard = (e: Event): boolean => view.contains(e) || [...zones].some((z) => z.contains?.(e));
 
-  /** PC 端打开后提示一次当前方式 */
+  /** 确认用户看到了提示：记下签名，之后不再提示同一方式 */
+  const commitHint = () => {
+    if (!pendingHint) return;
+    clearTimeout(pendingHint.timer);
+    hintedSig = pendingHint.sig;
+    pendingHint = null;
+    void hintStore?.save(hintedSig).catch(() => {});
+  };
+
+  /**
+   * PC 端打开后提示一次当前方式。显示时先不记下：悬停模式下卡片常一闪而过，用户还没看到提示就关了（#114）。
+   * 提示 1s 后卡片仍为同一单词打开才记下（期间在卡片内按下也算看到，见 onPointerDown）；否则下次打开再提示
+   */
   const maybeHint = (anchor: HTMLElement, t: ResolvedCardTrigger) => {
     if (!hintStore || !hintLoaded || !view.showHint) return;
     const sig = triggerSignature(t);
     if (hintedSig === sig || !view.isOpen || view.anchor !== anchor) return;
-    hintedSig = sig;
+    // 上一条未确认的提示随卡片换词已消失（CardView 换词清除提示），作废其计时
+    if (pendingHint) clearTimeout(pendingHint.timer);
     view.showHint(cardTriggerHintText(t, mac));
-    void hintStore.save(sig).catch(() => {});
+    const timer = setTimeout(() => {
+      if (view.isOpen && view.anchor === anchor) commitHint();
+      else pendingHint = null;
+    }, HINT_SEEN_MS);
+    pendingHint = { sig, anchor, timer };
   };
 
   const openNow = (anchor: HTMLElement, via: CardOpenVia) => {
@@ -193,11 +232,17 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
       clearTimeout(hideTimer);
       if (t.mode === 'click') return;
       if (view.anchor === anchor && view.isOpen) return;
+      // 新标签修饰键已松开但 keyup 没收到（如焦点切走）时，以指针事件上的修饰键状态为准解除
+      if (newTabHold && !newTabModifier(e)) newTabHold = false;
+      if (newTabHold) {
+        clearTimeout(showTimer);
+        return;
+      }
       if (t.mode === 'modifier' && (chord || !onlyModifier(e, t.modifier))) {
         clearTimeout(showTimer);
         return;
       }
-      scheduleOpen(anchor, t.mode, HOVER_SHOW_DELAY);
+      scheduleOpen(anchor, t.mode, opts.getHoverDelay?.() ?? DEFAULT_HOVER_SHOW_DELAY);
     } else if (insideCard(e)) {
       clearTimeout(hideTimer);
     } else {
@@ -236,9 +281,20 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
     if (lastPointerType === 'mouse' && anyModifier(e)) {
       chord = true;
       clearTimeout(showTimer);
+      // Ctrl/⌘/Shift + 点链接 = 新标签/新窗口打开（#113）：卡片不该留在原页，关闭并在修饰键松开前不再弹出
+      if (newTabModifier(e) && inLink(e) && !view.contains(e)) {
+        newTabHold = true;
+        clearTimeout(hideTimer);
+        if (view.isOpen) view.close();
+        return;
+      }
     }
     if (view.isOpen && insideCard(e)) {
-      if (view.contains(e)) pinnedAnchor = view.anchor;
+      if (view.contains(e)) {
+        pinnedAnchor = view.anchor;
+        // 在卡片内按下（点按钮、点“知道了”）说明用户看到了卡片，提示记为已看到
+        if (pendingHint?.anchor === view.anchor) commitHint();
+      }
       clearTimeout(hideTimer);
     }
     // 触屏的按下可能是滚动手势的开始，留到 click 再判断是否关闭
@@ -289,6 +345,7 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
     if (e.repeat) return;
     chord = false;
     openedByHold = false;
+    if (newTabHold) return;
     // 指针已在单词上时按下修饰键：稍等确认不是组合键再打开
     if (!hoverAnchor || !hoverAnchor.isConnected || !onlyModifier(e, t.modifier) || isEditing(doc)) return;
     if (view.isOpen && view.anchor === hoverAnchor) return;
@@ -296,6 +353,8 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
   };
 
   const onKeyUp = (e: KeyboardEvent) => {
+    // keyup 时事件上的修饰键状态已是松开后的状态：Ctrl/⌘/Shift 全部松开才解除
+    if (NEW_TAB_KEYS.has(e.key) && !newTabModifier(e)) newTabHold = false;
     const t = resolved();
     if (t.mode !== 'modifier' || !MODIFIER_KEYS[t.modifier].includes(e.key)) return;
     clearTimeout(showTimer);
@@ -318,6 +377,7 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
     clearTimeout(showTimer);
     chord = false;
     openedByHold = false;
+    newTabHold = false;
   };
 
   const win = doc.defaultView;
@@ -333,6 +393,7 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
   return () => {
     clearTimeout(showTimer);
     clearTimeout(hideTimer);
+    if (pendingHint) clearTimeout(pendingHint.timer);
     cancelAnimationFrame(moveRaf);
     doc.removeEventListener('pointerover', onPointerOver, true);
     doc.removeEventListener('pointermove', onPointerMove, true);

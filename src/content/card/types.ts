@@ -63,5 +63,11 @@ export interface CardView {
    * 由 bindCardTrigger 在 PC 端卡片首次出现时调用；未实现时不提示。
    */
   showHint?(text: string): void;
+  /**
+   * 可选（card 修复轮新增）：在页面底部显示一条与卡片操作同款的结果 toast（不需要卡片打开），
+   * 用于右键菜单“加入生词本/标为熟词”等后台发起的操作结果（ContentProtocol.actionNotice）。
+   * message 按“；”分段：第一段为主行，其余折叠在“详情”；ok=false 用失败样式；lemma 用于主行前缀「lemma」。
+   */
+  showMessage?(message: string, ok: boolean, lemma?: string): void;
   destroy(): void;
 }

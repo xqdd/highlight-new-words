@@ -161,7 +161,7 @@ export interface Notice {
 }
 
 /** background 的 message 按“；”分段（每段是一个目标的结果或一条说明） */
-function messageParts(message: string | undefined): string[] {
+export function messageParts(message: string | undefined): string[] {
   return (message || '')
     .split('；')
     .map((s) => s.trim())
@@ -196,7 +196,9 @@ export function knownNotice(res: MarkKnownResult, fallbackLemma: string): Notice
 export function addNotice(res: AddWordResult, fallbackLemma: string, prefix = ''): Notice {
   const lemma = res.lemma || fallbackLemma;
   const ok = res.added.filter((a) => a.ok);
-  const failed = res.added.filter((a) => !a.ok && !a.skipped).length + res.removedKnown.filter((r) => !r.ok && !r.skipped).length;
+  const failedAdd = res.added.filter((a) => !a.ok && !a.skipped);
+  const failedRemove = res.removedKnown.filter((r) => !r.ok && !r.skipped);
+  const failed = failedAdd.length + failedRemove.length;
   const skipped = res.added.filter((a) => a.skipped).length;
   const details = messageParts(res.message).filter((s) => s !== '加入失败' && !s.startsWith('已加入'));
   if (!res.ok) {
@@ -204,9 +206,11 @@ export function addNotice(res: AddWordResult, fallbackLemma: string, prefix = ''
     const reason = res.added.find((a) => !a.ok)?.error ?? (res.added.length ? undefined : res.message);
     return { level: 'err', title: `${prefix}「${lemma}」未能加入生词本${reason ? `：${reason}` : ''}`, details };
   }
+  // 只有一处失败时主行直接写出失败的本名（#82），用户不必展开详情就知道是哪本；多处失败仍写“N 处失败”，逐项见详情
+  const single = failed === 1 ? (failedAdd[0] ? `，${names(failedAdd)}加入失败` : `，未能从${names(failedRemove)}移出`) : '';
   return {
     level: failed ? 'warn' : 'ok',
-    title: `${prefix}${failed ? '部分失败：' : ''}「${lemma}」已加入${names(ok)}${countSuffix(failed, skipped)}`,
+    title: `${prefix}${failed ? '部分失败：' : ''}「${lemma}」已加入${names(ok)}${single}${countSuffix(single ? 0 : failed, skipped)}`,
     details,
   };
 }
