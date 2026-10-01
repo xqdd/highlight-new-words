@@ -5,15 +5,17 @@ import type { DictEntry, Dictionary } from '@/core/dict/types';
 import { getKnownData } from '@/core/known/store';
 import type { KnownWordsData } from '@/core/known/types';
 import { sendToBackground, sendToTab } from '@/core/messaging';
+import type { StatusSummary } from '@/core/messaging/protocol';
 import type { BookId, Settings } from '@/core/settings/schema';
 import { SESSION_KEYS, STORAGE_KEYS } from '@/core/storage/keys';
-import type { SyncStatus } from '@/core/sync/types';
+import { hasAllSitesAccess, watchHostAccess } from '@/core/platform';
+import type { BackendSyncStatus, SyncStatus } from '@/core/sync/types';
 import { DefaultWordBookRegistry, createExtensionLoaders } from '@/core/wordbook/registry';
 import type { WordBook } from '@/core/wordbook/types';
 import { UserBooksDictionary } from '@/core/wordbook/user-book';
 
 /**
- * popup 数据层：目标标签页、本页生词（实时）、熟词本、跨设备同步状态、释义查询与“单词 → 命中词书”。
+ * popup 数据层：目标标签页、网站访问权限、本页生词（实时）、熟词本、各同步后端状态、释义查询与“单词 → 命中词书”。
  * 设置读写走 useSettings、词书列表走 useBooks，这里只负责 popup 特有的数据。
  */
 
@@ -50,6 +52,12 @@ export function usePopupData(settings: Ref<Settings | null>) {
   const hiddenLemmas = ref(new Set<string>());
   const known = ref<KnownWordsData>({ words: {}, removed: {} });
   const syncStatus = ref<SyncStatus>();
+  /** WebDAV 同步状态（未开启时 enabled=false） */
+  const webdavStatus = ref<BackendSyncStatus>();
+  /** background 计算的总状态（同步后端 + 来源 + 升级提示）；后台不支持时为 undefined，界面用本地状态兜底 */
+  const statusSummary = ref<StatusSummary>();
+  /** 是否有访问所有网站的权限；undefined = 尚未检测 */
+  const hostAccess = ref<boolean>();
   /** 已查询到的释义（lemma -> 词条），按需增量补充 */
   const entries = shallowRef(new Map<string, DictEntry>());
   /** 启用的词书实例（按优先级），用于判断单词命中了哪些词书 */
@@ -104,6 +112,32 @@ export function usePopupData(settings: Ref<Settings | null>) {
     return enabledBooks.value.filter((b) => b.has(lemma)).map((b) => b.meta.id);
   }
 
+  /** 各同步后端状态；后台尚不支持 getSyncBackends 时（旧版本）退回只取 storage.sync 状态 */
+  async function loadSyncBackends(): Promise<{ storageSync?: SyncStatus; webdav?: BackendSyncStatus } | undefined> {
+    try {
+      return await sendToBackground('getSyncBackends', {});
+    } catch {
+      const storageSync = await sendToBackground('getSyncStatus', {}).catch(() => undefined);
+      return { storageSync };
+    }
+  }
+
+  /** 重新获取总状态（只读本地状态，不发网络请求）；连续的存储变化合并为一次请求 */
+  let summaryTimer: ReturnType<typeof setTimeout> | undefined;
+  function refreshSummary(delay = 150): void {
+    clearTimeout(summaryTimer);
+    summaryTimer = setTimeout(() => {
+      sendToBackground('getStatusSummary', {})
+        .then((s) => (statusSummary.value = s))
+        .catch(() => undefined);
+    }, delay);
+  }
+
+  /** 重新检测网站访问权限（授权弹窗返回后、浏览器设置中修改后） */
+  async function refreshHostAccess(): Promise<void> {
+    hostAccess.value = await hasAllSitesAccess();
+  }
+
   async function init(): Promise<void> {
     const tab = await resolveTargetTab();
     tabId.value = tab?.id;
@@ -114,16 +148,24 @@ export function usePopupData(settings: Ref<Settings | null>) {
     } catch {
       hostname.value = '';
     }
-    const [, state, knownData, status] = await Promise.all([
+    const [, state, knownData, backends, access] = await Promise.all([
       refreshPageWords(),
-      // 内容脚本可能未注入（浏览器内置页、扩展安装前打开的页面），失败视为未就绪
+      // 内容脚本可能未注入（浏览器内置页、扩展安装前打开的页面、未授权网站），失败视为未就绪
       tab?.id !== undefined ? sendToTab(tab.id, 'getPageState', {}).catch(() => null) : null,
       getKnownData(),
-      sendToBackground('getSyncStatus', {}).catch(() => undefined),
+      loadSyncBackends(),
+      hasAllSitesAccess(),
+      sendToBackground('getStatusSummary', {})
+        .then((s) => (statusSummary.value = s))
+        .catch(() => undefined),
     ]);
     contentReady.value = !!state;
     known.value = knownData;
-    syncStatus.value = status;
+    if (backends) {
+      syncStatus.value = backends.storageSync;
+      webdavStatus.value = backends.webdav;
+    }
+    hostAccess.value = access;
     loaded.value = true;
   }
 
@@ -143,9 +185,26 @@ export function usePopupData(settings: Ref<Settings | null>) {
     if (changes[STORAGE_KEYS.knownWords]) void getKnownData().then((d) => (known.value = d));
     const sync = changes[STORAGE_KEYS.syncState];
     if (sync?.newValue) syncStatus.value = sync.newValue as SyncStatus;
+    const dav = changes[STORAGE_KEYS.webdavSyncState];
+    if (dav?.newValue) webdavStatus.value = dav.newValue as BackendSyncStatus;
+    if (
+      sync ||
+      dav ||
+      changes[STORAGE_KEYS.sourceBooks] ||
+      changes[STORAGE_KEYS.settings] ||
+      changes[STORAGE_KEYS.updateNotice]
+    ) {
+      refreshSummary();
+    }
   };
   browser.storage.onChanged.addListener(onChanged);
-  onScopeDispose(() => browser.storage.onChanged.removeListener(onChanged));
+  // 用户在浏览器扩展设置里授予/收回网站权限时即时刷新提示
+  const stopWatchAccess = watchHostAccess(() => void refreshHostAccess());
+  onScopeDispose(() => {
+    browser.storage.onChanged.removeListener(onChanged);
+    stopWatchAccess();
+    clearTimeout(summaryTimer);
+  });
 
   void init();
 
@@ -160,6 +219,11 @@ export function usePopupData(settings: Ref<Settings | null>) {
     hiddenLemmas,
     known,
     syncStatus,
+    webdavStatus,
+    statusSummary,
+    refreshSummary,
+    hostAccess,
+    refreshHostAccess,
     entries,
     enabledBooks,
     dictVersion,

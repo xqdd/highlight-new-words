@@ -3,12 +3,12 @@ import type { WordRow } from '../model';
 import PopupIcon from './PopupIcon.vue';
 
 /**
- * 单词列表（本页生词 / 熟词本共用）：整行点击打开详情，右侧主操作按钮（标为熟词 / 撤销）。
+ * 单词列表（本页生词 / 熟词本共用）：整行点击打开详情，右侧发音按钮与主操作按钮（标为熟词 / 撤销）。
  * 行高 ≥ 44px（触屏）；释义单行截断。
  */
 
 defineProps<{ rows: WordRow[]; action: 'known' | 'undo'; busy?: Set<string> }>();
-const emit = defineEmits<{ open: [word: string]; act: [word: string] }>();
+const emit = defineEmits<{ open: [word: string]; speak: [word: string]; act: [word: string] }>();
 </script>
 
 <template>
@@ -21,6 +21,9 @@ const emit = defineEmits<{ open: [word: string]; act: [word: string] }>();
           <span class="meaning">{{ r.meaning || '—' }}</span>
         </span>
         <span v-if="r.badge" class="badge">{{ r.badge }}</span>
+      </button>
+      <button type="button" class="act say" title="发音" :aria-label="`朗读 ${r.word}`" @click="emit('speak', r.word)">
+        <PopupIcon name="volume" :size="16" />
       </button>
       <button
         type="button"
@@ -59,8 +62,11 @@ const emit = defineEmits<{ open: [word: string]; act: [word: string] }>();
 }
 .act:hover { background: var(--accent-soft); color: var(--accent); }
 .act:disabled { opacity: .4; cursor: default; }
+/* 发音是次要操作：比主操作窄一点，给释义留空间 */
+.act.say { width: 32px; }
 @media (pointer: coarse) {
   .main { min-height: 52px; }
   .act { width: 46px; height: 46px; }
+  .act.say { width: 40px; }
 }
 </style>
