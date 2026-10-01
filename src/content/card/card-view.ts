@@ -1,15 +1,21 @@
+import type { WordActionPreview } from '@/core/messaging/protocol';
+import type { BookId } from '@/core/settings/schema';
 import type { CardStyle } from '@/core/theme/themes';
-import type { BookMeta } from '@/core/wordbook/types';
-import { TAG_CARD_HOST } from '../engine/dom';
+import type { BookMeta, SourceBookState } from '@/core/wordbook/types';
+import { TAG_CARD_HOST, TAG_WORD } from '../engine/dom';
 import { ACTIVE_MARK_CSS, CARD_CSS } from './card-css';
+import { append, h, icon, type Child } from './h';
 import type { CardActions, CardData, CardView } from './types';
+import {
+  createCardBackend,
+  describeAddResult,
+  describeKnownResult,
+  describePreview,
+  type AddTargetOption,
+  type CardBackend,
+  type HintSegment,
+} from './word-actions';
 import { describeForm, dictLinks, formatPhonetic, parseDefinitions } from './word-info';
-
-const ICON_SPEAK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/></svg>`;
-const ICON_CLOSE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>`;
-const ICON_CHECK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
-const ICON_BOOKMARK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg>`;
-const ICON_REMOVE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/></svg>`;
 
 /** 视口宽度不超过该值（或设备无悬停能力）时使用底部卡片布局 */
 const SHEET_MAX_VIEWPORT = 600;
@@ -18,6 +24,8 @@ const SHEET_DISMISS_DRAG = 64;
 /** 释义默认展示的行数，超出时折叠并显示“展开” */
 const DEF_CLAMP_LINES = 3;
 const TOAST_MS = 5000;
+/** 带“撤销”按钮的 toast 停留更久（鼠标悬停/聚焦时暂停计时） */
+const TOAST_ACTION_MS = 9000;
 const DELETE_CONFIRM_MS = 3000;
 const ACTIVE_ATTR = 'data-hnw-active';
 const ACTIVE_STYLE_ID = 'hnw-card-active-style';
@@ -25,25 +33,54 @@ const ACTIVE_STYLE_ID = 'hnw-card-active-style';
 /** 暗色页面上使用的卡片配色（亮色主题卡片自动切换为它，保留主题强调色） */
 const DARK_CARD = { background: '#1f2329', color: '#e8eaed' };
 
+/** 卡片内联面板：加入目标选择 / 认识前确认（不可撤销的远端删除、同形异义词） */
+type Panel = 'none' | 'targets' | 'confirm-known';
+
+/** 当前单词的操作上下文（打开卡片后异步加载，切换单词时清空） */
+interface WordContext {
+  collected?: boolean;
+  collectedIn?: BookId[];
+  addPreview?: WordActionPreview;
+  knownPreview?: WordActionPreview;
+  /** deletableBooks 中各来源词书的状态（判断是否真的能删） */
+  deleteStates?: Record<BookId, SourceBookState | undefined>;
+}
+
 /**
- * 单词卡片（Shadow DOM 宿主 + 原生 DOM 渲染，不依赖框架）。
+ * 单词卡片（Shadow DOM 宿主 + 原生 DOM 渲染，不依赖框架，不使用 innerHTML）。
  *
  * - 桌面（有悬停能力且视口较宽）：贴词浮层，优先在单词下方，空间不足翻到上方；页面滚动时跟随单词，单词滚出视口则关闭
  * - 手机（无悬停能力或视口 ≤ 600px）：底部卡片，近全宽，可下滑/关闭按钮/点外部关闭；单词会被滚动到卡片上方可见处
- * - 亮暗：打开时检测单词所在区域的背景亮度，暗色页面上把亮色卡片换成暗色版本
- * - 熟词：点“认识”即时移除高亮并关闭卡片，弹出可撤销的 toast
+ * - 亮暗：打开时检测单词所在区域的背景亮度，暗色页面上把亮色卡片换成暗色版本；强调色取自该单词实际的高亮样式（跟随主题与按词书样式）
+ * - 认识：按 wordActions 写熟词本并从生词本移除；含不可撤销的远端删除或同形异义词时先在卡片内确认；完成后关闭卡片并给出可撤销的 toast
+ * - 加入生词本：默认写入设置中的目标，可在卡片上临时改选（本页有效）；结果 toast 写明加到了哪里，可撤销；不支持的目标置灰并说明原因
  */
 export class ShadowCardView implements CardView {
   private readonly host: HTMLElement;
   private readonly root: ShadowRoot;
   private readonly card: HTMLDivElement;
   private readonly toast: HTMLDivElement;
+  private readonly backend: CardBackend;
   private data: CardData | null = null;
   private _anchor: HTMLElement | null = null;
   private style: CardStyle = { background: '#ffffff', color: '#1f2328', accent: '#2563eb' };
   private sheet = false;
   /** 释义是否展开全部（切换单词时复位） */
   private expanded = false;
+  private panel: Panel = 'none';
+  private ctx: WordContext = {};
+  /** 上下文加载序号：切换单词后丢弃旧请求的结果 */
+  private ctxSeq = 0;
+  /** “加入生词本”的候选目标（每次打开卡片刷新） */
+  private addTargets: AddTargetOption[] | undefined;
+  /** 卡片上临时选择的加入目标（本页有效；null = 用设置中的默认目标） */
+  private tempAddTargets: BookId[] | null = null;
+  /** 目标面板中正在编辑的勾选 */
+  private draftTargets = new Set<BookId>();
+  /** 认识确认面板：是否同时删除同形异义词形 */
+  private confirmHomographs = false;
+  private busy: 'add' | 'known' | 'delete' | null = null;
+  private deleteConfirm = false;
   private deleteConfirmTimer: ReturnType<typeof setTimeout> | undefined;
   private toastTimer: ReturnType<typeof setTimeout> | undefined;
   private rafId = 0;
@@ -54,7 +91,12 @@ export class ShadowCardView implements CardView {
    */
   private awaitingEntry = false;
 
-  constructor(private readonly doc: Document, private readonly actions: CardActions) {
+  constructor(
+    private readonly doc: Document,
+    private readonly actions: CardActions,
+    backend?: CardBackend,
+  ) {
+    this.backend = backend ?? createCardBackend();
     this.host = doc.createElement(TAG_CARD_HOST);
     // 宿主本身也可能被页面通配样式影响（如 `html > * {display:none}`），用内联 !important 固定为不占位的透明层
     this.host.setAttribute(
@@ -65,18 +107,16 @@ export class ShadowCardView implements CardView {
     this.root = this.host.attachShadow({ mode: 'open' });
     const style = doc.createElement('style');
     style.textContent = CARD_CSS;
-    this.card = doc.createElement('div');
-    this.card.className = 'card';
+    this.card = h(doc, 'div', { class: 'card', role: 'dialog', 'aria-modal': 'false' });
     this.card.hidden = true;
-    this.card.setAttribute('role', 'dialog');
-    this.card.setAttribute('aria-modal', 'false');
-    this.toast = doc.createElement('div');
-    this.toast.className = 'toast';
+    this.toast = h(doc, 'div', { class: 'toast', role: 'status', 'aria-live': 'polite' });
     this.toast.hidden = true;
-    this.toast.setAttribute('role', 'status');
-    this.toast.setAttribute('aria-live', 'polite');
     this.root.append(style, this.card, this.toast);
     this.card.addEventListener('click', (e) => void this.onClick(e));
+    this.card.addEventListener('change', (e) => this.onChange(e));
+    // 悬停/聚焦 toast 时暂停自动消失，便于点“撤销”
+    this.toast.addEventListener('pointerenter', () => clearTimeout(this.toastTimer));
+    this.toast.addEventListener('pointerleave', () => this.scheduleToastHide(TOAST_MS));
     this.bindSheetDrag();
     doc.documentElement.appendChild(this.host);
     window.addEventListener('scroll', this.onViewportChange, { capture: true, passive: true });
@@ -96,7 +136,14 @@ export class ShadowCardView implements CardView {
     this.setActiveAnchor(anchor);
     // SPA 可能清理 documentElement 下的未知节点，打开前确保宿主仍在文档中
     if (!this.host.isConnected) this.doc.documentElement.appendChild(this.host);
-    if (!sameWord) this.expanded = false;
+    if (!sameWord) {
+      this.expanded = false;
+      this.panel = 'none';
+      this.busy = null;
+      this.resetDeleteConfirm();
+      this.ctx = data.collected === undefined ? {} : { collected: data.collected };
+      this.loadWordContext(data);
+    }
     this.sheet = this.shouldUseSheet();
     this.applyColors(anchor);
     this.awaitingEntry = !data.entry;
@@ -129,7 +176,10 @@ export class ShadowCardView implements CardView {
     this.card.style.removeProperty('--drag');
     this.setActiveAnchor(null);
     this.data = null;
-    clearTimeout(this.deleteConfirmTimer);
+    this.panel = 'none';
+    this.ctxSeq++;
+    this.resetDeleteConfirm();
+    this.toast.classList.remove('top');
   }
 
   contains(event: Event): boolean {
@@ -145,71 +195,348 @@ export class ShadowCardView implements CardView {
     window.removeEventListener('scroll', this.onViewportChange, { capture: true });
     window.removeEventListener('resize', this.onViewportChange);
     cancelAnimationFrame(this.rafId);
+    clearTimeout(this.toastTimer);
+    clearTimeout(this.deleteConfirmTimer);
     this.setActiveAnchor(null);
     this.doc.getElementById(ACTIVE_STYLE_ID)?.remove();
     this.host.remove();
   }
 
+  // ---------------- 单词操作上下文 ----------------
+
+  /**
+   * 打开新单词时并行加载：收藏状态、加入/认识的预览、加入候选目标、来源词书删除能力。
+   * 都只读本地缓存（background 不发网络请求），任一失败不影响卡片主体，只是少显示对应提示。
+   */
+  private loadWordContext(data: CardData): void {
+    const seq = ++this.ctxSeq;
+    const apply = (patch: Partial<WordContext>) => {
+      if (seq !== this.ctxSeq || this.data?.lemma !== data.lemma) return;
+      this.ctx = { ...this.ctx, ...patch };
+      this.rerender();
+    };
+    const ignore = () => {};
+    this.backend.getWordState(data.lemma).then((s) => apply({ collected: s.collected, collectedIn: s.collectedIn }), ignore);
+    this.backend.preview('add', data.surface, data.lemma).then((p) => apply({ addPreview: p }), ignore);
+    this.backend.preview('known', data.surface, data.lemma).then((p) => apply({ knownPreview: p }), ignore);
+    this.backend.listAddTargets().then((t) => {
+      this.addTargets = t;
+      apply({});
+    }, ignore);
+    if (data.deletableBooks.length) {
+      this.backend.sourceStates(data.deletableBooks.map((b) => b.id)).then((s) => apply({ deleteStates: s }), ignore);
+    }
+  }
+
+  /** 加入/移出生词本后，“认识”要移除的生词本随之变化，重新取预览 */
+  private refreshKnownPreview(data: CardData): void {
+    const seq = this.ctxSeq;
+    this.backend.preview('known', data.surface, data.lemma).then(
+      (p) => {
+        if (seq !== this.ctxSeq || this.data?.lemma !== data.lemma) return;
+        this.ctx = { ...this.ctx, knownPreview: p };
+        this.rerender();
+      },
+      () => {},
+    );
+  }
+
+  /** 实际生效的加入目标：临时选择 > 设置默认（候选未加载时为 undefined） */
+  private effectiveAddTargets(): AddTargetOption[] | undefined {
+    const all = this.addTargets;
+    if (!all) return undefined;
+    if (this.tempAddTargets) return all.filter((t) => this.tempAddTargets!.includes(t.id));
+    return all.filter((t) => t.isDefault);
+  }
+
+  /** 来源删除：data.deletableBooks 中真正可删的书 + 不可删的原因 */
+  private deletable(data: CardData): { books: BookMeta[]; reason?: string } {
+    const states = this.ctx.deleteStates;
+    if (!states) return { books: data.deletableBooks };
+    const books = data.deletableBooks.filter((b) => {
+      const s = states[b.id];
+      return !s || (!s.orphaned && s.canDelete !== false);
+    });
+    if (books.length) return { books };
+    const s = states[data.deletableBooks[0]?.id ?? ''];
+    return { books, reason: s?.orphaned ? '远端已没有该生词本' : (s?.readOnlyReason ?? '该生词本不支持删除') };
+  }
+
   // ---------------- 渲染 ----------------
+
+  private rerender(): void {
+    if (!this.isOpen || !this.data) return;
+    this.render(this.data);
+    this.layout();
+  }
 
   private render(data: CardData): void {
     this.data = data;
+    const d = this.doc;
     const e = data.entry;
     const loading = !e && this.awaitingEntry;
     const phon = formatPhonetic(e?.phonetic);
     const form = describeForm(data.surface, data.lemma);
     const defs = parseDefinitions(e?.short, e?.full);
     const clamp = !this.expanded && defs.length > DEF_CLAMP_LINES;
-    const collectable = data.collected !== undefined && !!this.actions.setCollected;
 
-    const defsHtml = defs.length
-      ? `<ul class="defs${clamp ? ' clamp' : ''}">${defs
-          .map((d) => `<li>${d.pos ? `<span class="pos">${esc(d.pos)}</span>` : ''}${esc(d.text)}</li>`)
-          .join('')}</ul>${clamp ? `<button class="more" data-act="expand">展开全部 ${defs.length} 条释义</button>` : ''}`
-      : loading
-        ? '<span class="loading"></span><span class="loading s"></span>'
-        : '<div class="empty">暂无释义，可在下方词典中查询</div>';
+    let defsNode: Child[];
+    if (defs.length) {
+      defsNode = [
+        h(d, 'ul', { class: `defs${clamp ? ' clamp' : ''}` }, ...defs.map((x) => h(d, 'li', {}, x.pos && h(d, 'span', { class: 'pos' }, x.pos), x.text))),
+        clamp && h(d, 'button', { class: 'more', 'data-act': 'expand' }, `展开全部 ${defs.length} 条释义`),
+      ];
+    } else if (loading) {
+      defsNode = [h(d, 'span', { class: 'loading' }), h(d, 'span', { class: 'loading s' })];
+    } else {
+      defsNode = [h(d, 'div', { class: 'empty' }, '暂无释义，可在下方词典中查询')];
+    }
 
     this.card.setAttribute('aria-label', `单词 ${data.lemma}`);
-    this.card.className = `card${this.sheet ? ' sheet' : ' popover'}${this.card.classList.contains('dark') ? ' dark' : ''}${this.card.classList.contains('in') ? ' in' : ''}`;
-    this.card.innerHTML = `
-      <div class="grab" aria-hidden="true"><i></i></div>
-      <div class="head">
-        <div class="row1">
-          <div class="title">
-            <span class="word" lang="en">${esc(data.lemma)}</span>
-            <button class="phon" data-act="speak" aria-label="发音" title="发音">${ICON_SPEAK}${phon ? `<span lang="en">${esc(phon)}</span>` : '<span>发音</span>'}</button>
-          </div>
-          ${
-            collectable
-              ? `<button class="icon${data.collected ? ' on' : ''}" data-act="collect" aria-pressed="${data.collected ? 'true' : 'false'}" aria-label="${data.collected ? '移出生词本' : '加入生词本'}" title="${data.collected ? '移出生词本' : '加入生词本'}">${ICON_BOOKMARK}</button>`
-              : ''
-          }
-          <button class="icon" data-act="close" aria-label="关闭" title="关闭 (Esc)">${ICON_CLOSE}</button>
-        </div>
-      </div>
-      <div class="body">
-        ${
-          form
-            ? `<div class="form"><b lang="en">${esc(data.surface)}</b><span class="rel">${esc(form)}</span><span>原形 <b lang="en">${esc(data.lemma)}</b></span></div>`
-            : ''
-        }
-        ${defsHtml}
-        ${data.books.length ? `<div class="tags">${data.books.map(bookTag).join('')}</div>` : ''}
-      </div>
-      <div class="foot">
-        <div class="actions">
-          <button class="btn primary" data-act="known" title="标为熟词：全站不再高亮，可撤销">${ICON_CHECK}<span>认识，不再高亮</span></button>
-          ${
-            data.deletableBooks.length
-              ? `<button class="btn ghost danger" data-act="delete" title="从${esc(data.deletableBooks.map((b) => b.name).join('、'))}删除">${ICON_REMOVE}<span>移出生词本</span></button>`
-              : ''
-          }
-        </div>
-        <div class="links"><span>词典</span>${dictLinks(data.lemma)
-          .map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer" data-dict="${l.id}">${esc(l.name)}</a>`)
-          .join('')}</div>
-      </div>`;
+    const keep = ['dark', 'in', 'above', 'dragging'].filter((c) => this.card.classList.contains(c));
+    this.card.className = ['card', this.sheet ? 'sheet' : 'popover', ...keep].join(' ');
+
+    const head = h(
+      d,
+      'div',
+      { class: 'head' },
+      h(
+        d,
+        'div',
+        { class: 'row1' },
+        h(
+          d,
+          'div',
+          { class: 'title' },
+          h(d, 'span', { class: 'word', lang: 'en' }, data.lemma),
+          h(d, 'button', { class: 'phon', 'data-act': 'speak', 'aria-label': '发音', title: '发音' }, icon(d, 'speak'), phon ? h(d, 'span', { lang: 'en' }, phon) : h(d, 'span', {}, '发音')),
+        ),
+        h(d, 'button', { class: 'icon', 'data-act': 'close', 'aria-label': '关闭', title: '关闭 (Esc)' }, icon(d, 'close')),
+      ),
+    );
+
+    const body = h(
+      d,
+      'div',
+      { class: 'body' },
+      form &&
+        h(d, 'div', { class: 'form' }, h(d, 'b', { lang: 'en' }, data.surface), h(d, 'span', { class: 'rel' }, form), h(d, 'span', {}, '原形 ', h(d, 'b', { lang: 'en' }, data.lemma))),
+      ...defsNode,
+      data.books.length > 0 && h(d, 'div', { class: 'tags' }, ...data.books.map((b) => bookTag(d, b))),
+    );
+
+    this.card.replaceChildren(
+      ...[h(d, 'div', { class: 'grab', 'aria-hidden': 'true' }, h(d, 'i')), head, body, this.renderPanel(data), this.renderFoot(data)].filter(
+        (n): n is HTMLElement => !!n,
+      ),
+    );
+  }
+
+  /** 底栏：认识 / 加入生词本（含目标下拉）/ 从来源删除；下方一行说明操作去向与不支持的原因；词典链接 */
+  private renderFoot(data: CardData): HTMLElement {
+    const d = this.doc;
+    const ctx = this.ctx;
+
+    // ---- 认识 ----
+    const knownBtn = h(
+      d,
+      'button',
+      { class: 'btn primary', 'data-act': 'known', disabled: this.busy === 'known', title: '标为熟词：全站不再高亮，可撤销' },
+      icon(d, 'check'),
+      h(d, 'span', {}, '认识'),
+    );
+
+    // ---- 加入生词本（主按钮 + 目标下拉） ----
+    const eff = this.effectiveAddTargets();
+    const usable = eff?.filter((t) => !t.disabledReason);
+    const addBlocked = !ctx.collected && !!eff && !usable!.length;
+    const addReason = addBlocked ? blockedText(eff!) : undefined;
+    const collected = !!ctx.collected;
+    const addLabel = this.busy === 'add' ? (collected ? '正在移出…' : '正在加入…') : collected ? '已在生词本' : '加入生词本';
+    const addTitle = collected
+      ? `已在生词本，点按移出${ctx.collectedIn?.length ? `（${this.targetNames(ctx.collectedIn)}）` : ''}`
+      : addReason
+        ? `无法加入：${addReason}`
+        : `加入到 ${usable?.map((t) => t.name).join('、') || '我的生词本'}`;
+    const split = h(
+      d,
+      'div',
+      { class: `split${collected ? ' on' : ''}${addBlocked ? ' off' : ''}${this.panel === 'targets' ? ' open' : ''}` },
+      h(
+        d,
+        'button',
+        {
+          class: 'btn ghost main',
+          'data-act': 'add',
+          'aria-pressed': collected ? 'true' : 'false',
+          'aria-disabled': addBlocked ? 'true' : undefined,
+          disabled: this.busy === 'add',
+          title: addTitle,
+        },
+        icon(d, collected ? 'bookmark' : 'bookmarkAdd'),
+        h(d, 'span', {}, addLabel),
+        this.tempAddTargets && !collected && h(d, 'i', { class: 'dot', title: '使用临时目标' }),
+      ),
+      h(
+        d,
+        'button',
+        {
+          class: 'btn ghost caret',
+          'data-act': 'targets',
+          'aria-expanded': this.panel === 'targets' ? 'true' : 'false',
+          'aria-label': '选择加入到哪本生词本',
+          title: '选择加入到哪本生词本',
+        },
+        icon(d, 'caret'),
+      ),
+    );
+
+    // ---- 从来源生词本删除（两步确认；不可删时置灰并说明） ----
+    let deleteBtn: HTMLElement | false = false;
+    let deleteReason: string | undefined;
+    if (data.deletableBooks.length) {
+      const del = this.deletable(data);
+      deleteReason = del.reason;
+      const label = this.busy === 'delete' ? '正在移出…' : this.deleteConfirm ? '确认移出？' : '';
+      deleteBtn = h(
+        d,
+        'button',
+        {
+          class: `btn ghost danger del${this.deleteConfirm ? ' confirm' : ''}${del.reason ? ' off' : ''}`,
+          'data-act': 'delete',
+          'aria-disabled': del.reason ? 'true' : undefined,
+          disabled: this.busy === 'delete',
+          'aria-label': del.reason ? `无法从来源生词本移出：${del.reason}` : `从${del.books.map((b) => b.name).join('、')}移出`,
+          title: del.reason ? `无法移出：${del.reason}` : `从${del.books.map((b) => b.name).join('、')}移出（远端同步删除）`,
+        },
+        icon(d, 'remove'),
+        label && h(d, 'span', {}, label),
+      );
+    }
+
+    // ---- 说明行 ----
+    const hints: HTMLElement[] = [];
+    if (!collected && eff) {
+      const segs: HintSegment[] = [
+        usable!.length
+          ? { text: `写入 ${usable!.map((t) => t.name).join('、')}${this.tempAddTargets ? '（临时）' : ''}`, warn: false }
+          : { text: '没有可写入的生词本', warn: true },
+      ];
+      for (const t of eff.filter((x) => x.disabledReason)) segs.push({ text: `${t.name}：${t.disabledReason}`, warn: true });
+      hints.push(hintLine(d, '加入', segs));
+    }
+    if (ctx.knownPreview) hints.push(hintLine(d, '认识', describePreview(ctx.knownPreview).segments));
+    if (deleteReason) hints.push(hintLine(d, '移出', [{ text: `来源生词本：${deleteReason}`, warn: true }]));
+
+    return h(
+      d,
+      'div',
+      { class: 'foot' },
+      h(d, 'div', { class: 'actions' }, knownBtn, split, deleteBtn),
+      hints.length > 0 && h(d, 'div', { class: 'hints' }, ...hints),
+      h(
+        d,
+        'div',
+        { class: 'links' },
+        h(d, 'span', {}, '词典'),
+        ...dictLinks(data.lemma).map((l) => h(d, 'a', { href: l.url, target: '_blank', rel: 'noopener noreferrer', 'data-dict': l.id }, l.name)),
+      ),
+    );
+  }
+
+  /** 内联面板（不用浮动下拉：手机上更好点，也不会被视口裁掉） */
+  private renderPanel(data: CardData): HTMLElement | null {
+    if (this.panel === 'targets') return this.renderTargetsPanel();
+    if (this.panel === 'confirm-known') return this.renderConfirmKnown(data);
+    return null;
+  }
+
+  private renderTargetsPanel(): HTMLElement {
+    const d = this.doc;
+    const all = this.addTargets;
+    const list = all
+      ? all.map((t) =>
+          h(
+            d,
+            'label',
+            { class: `opt${t.disabledReason ? ' off' : ''}` },
+            h(d, 'input', {
+              type: 'checkbox',
+              'data-target': t.id,
+              checked: this.draftTargets.has(t.id) && !t.disabledReason,
+              disabled: !!t.disabledReason,
+            }),
+            h(
+              d,
+              'span',
+              { class: 'opt-text' },
+              h(d, 'span', { class: 'opt-name' }, t.name, t.isDefault && h(d, 'em', {}, '默认'), t.remote && h(d, 'em', { class: 'remote' }, '远端')),
+              (t.disabledReason || t.note) && h(d, 'span', { class: 'opt-note' }, t.disabledReason ?? t.note!),
+            ),
+          ),
+        )
+      : [h(d, 'span', { class: 'loading' })];
+    const count = [...this.draftTargets].filter((id) => all?.some((t) => t.id === id && !t.disabledReason)).length;
+    return h(
+      d,
+      'div',
+      { class: 'panel', role: 'group', 'aria-label': '加入到' },
+      h(d, 'div', { class: 'panel-title' }, '加入到'),
+      h(d, 'div', { class: 'opts' }, ...list),
+      h(d, 'p', { class: 'panel-note' }, '仅对本页有效；长期修改请到 设置 → 生词本 → 单词操作'),
+      h(
+        d,
+        'div',
+        { class: 'panel-actions' },
+        this.tempAddTargets && h(d, 'button', { class: 'btn ghost', 'data-act': 'targets-reset' }, '恢复默认'),
+        h(d, 'button', { class: 'btn ghost', 'data-act': 'panel-cancel' }, '取消'),
+        h(d, 'button', { class: 'btn primary', 'data-act': 'targets-apply', disabled: count === 0 }, count ? `加入所选（${count}）` : '请选择'),
+      ),
+    );
+  }
+
+  /** 认识前确认：列出不可撤销的远端删除；同形异义词形（lie 的 lay）默认不删，可勾选一并删除 */
+  private renderConfirmKnown(data: CardData): HTMLElement {
+    const d = this.doc;
+    const p = this.ctx.knownPreview;
+    const remote = p?.remove.filter((r) => r.ok && r.remote) ?? [];
+    const homographs = [...new Set(remote.flatMap((r) => r.homographs ?? []))];
+    const items = remote.map((r) => {
+      const words = r.words.filter((w) => !r.homographs?.includes(w));
+      return words.length ? h(d, 'li', {}, `从“${r.name}”删除 `, h(d, 'b', { lang: 'en' }, words.join('、')), r.undoable ? '' : '（撤销时无法恢复）') : null;
+    });
+    return h(
+      d,
+      'div',
+      { class: 'panel warn', role: 'alertdialog', 'aria-label': '确认认识' },
+      h(d, 'div', { class: 'panel-title' }, icon(d, 'info'), `认识「${data.lemma}」将同时修改远端生词本`),
+      h(d, 'ul', { class: 'confirm-list' }, ...items),
+      homographs.length > 0 &&
+        h(
+          d,
+          'label',
+          { class: 'opt' },
+          h(d, 'input', { type: 'checkbox', 'data-homographs': '', checked: this.confirmHomographs }),
+          h(
+            d,
+            'span',
+            { class: 'opt-text' },
+            h(d, 'span', { class: 'opt-name' }, '同时删除 ', h(d, 'b', { lang: 'en' }, homographs.join('、'))),
+            h(d, 'span', { class: 'opt-note' }, '它们也是独立的单词，默认保留'),
+          ),
+        ),
+      h(
+        d,
+        'div',
+        { class: 'panel-actions' },
+        h(d, 'button', { class: 'btn ghost', 'data-act': 'panel-cancel' }, '取消'),
+        h(d, 'button', { class: 'btn primary', 'data-act': 'known-confirm' }, '确认认识'),
+      ),
+    );
+  }
+
+  private targetNames(ids: BookId[]): string {
+    return ids.map((id) => this.addTargets?.find((t) => t.id === id)?.name ?? id).join('、');
   }
 
   // ---------------- 布局 ----------------
@@ -222,6 +549,7 @@ export class ShadowCardView implements CardView {
   }
 
   private layout(): void {
+    this.toast.classList.toggle('top', this.isOpen && this.sheet);
     if (this.sheet) {
       // 底部卡片的位置完全由 CSS 决定
       this.card.style.removeProperty('top');
@@ -279,6 +607,7 @@ export class ShadowCardView implements CardView {
         // 旋转屏幕/调整窗口跨过阈值时切换布局
         this.sheet = wantSheet;
         this.render(this.data);
+        this.layout();
       }
       if (this.sheet) return;
       const r = anchor.getBoundingClientRect();
@@ -318,20 +647,35 @@ export class ShadowCardView implements CardView {
 
   // ---------------- 主题 ----------------
 
-  /** 按主题色 + 页面亮暗设置卡片颜色；激活单词的叠加色取强调色 */
+  /**
+   * 卡片配色：底色/文字色来自主题 CardStyle（暗色页面换暗色卡片）；强调色优先取该单词实际渲染的高亮颜色
+   * （下划线色 / 马克笔或底色 / 文字色，跟随全局主题与按词书样式），再调整明度保证在卡片底色上可读，
+   * 单词没有可用颜色（如“无样式”只显示括号译文）时用主题的 accent。
+   */
   private applyColors(anchor: HTMLElement): void {
     const pageDark = isDarkBackground(anchor);
     const cardIsLight = luminance(this.style.background) > 0.5;
     const useDark = pageDark && cardIsLight;
     const bg = useDark ? DARK_CARD.background : this.style.background;
     const fg = useDark ? DARK_CARD.color : this.style.color;
-    // 暗色卡片上把强调色提亮，保证按钮/标签文字对比度
-    const accent = useDark ? `color-mix(in srgb, ${this.style.accent} 70%, #ffffff)` : this.style.accent;
+    const themeAccent = parseColor(this.style.accent);
+    const fromMark = markAccent(anchor);
+    // 单词颜色与主题强调色同一色系时用主题调好的强调色（如琥珀主题的 #b45309 比机械调暗的黄色更好看）；
+    // 不同色系（按词书另设颜色、v5 自定义样式）时跟随单词颜色
+    const base = fromMark && !(themeAccent && hueDistance(fromMark, themeAccent) < 40) ? fromMark : (themeAccent ?? fromMark);
+    const bgRgb = parseColor(bg) ?? [255, 255, 255, 1];
+    const accentRgb = base ? fitContrast(base, bgRgb, 4.5) : null;
+    const accent = accentRgb ? rgbText(accentRgb) : this.style.accent;
+    // 主按钮文字：白/近黑中对比度更高者
+    const accentFg = accentRgb && contrast(accentRgb, [255, 255, 255, 1]) >= contrast(accentRgb, [17, 17, 17, 1]) ? '#fff' : '#111';
     this.card.style.setProperty('--bg', bg);
     this.card.style.setProperty('--fg', fg);
     this.card.style.setProperty('--accent', accent);
-    this.card.classList.toggle('dark', useDark || luminance(this.style.background) < 0.35);
-    this.doc.documentElement.style.setProperty('--hnw-active', `color-mix(in srgb, ${this.style.accent} ${pageDark ? 34 : 18}%, transparent)`);
+    this.card.style.setProperty('--accent-fg', accentFg);
+    const dark = useDark || luminance(this.style.background) < 0.35;
+    this.card.classList.toggle('dark', dark);
+    this.toast.style.setProperty('--accent', accent);
+    this.doc.documentElement.style.setProperty('--hnw-active', `color-mix(in srgb, ${accent} ${pageDark ? 34 : 18}%, transparent)`);
   }
 
   private setActiveAnchor(anchor: HTMLElement | null): void {
@@ -349,10 +693,27 @@ export class ShadowCardView implements CardView {
 
   // ---------------- 交互 ----------------
 
+  private onChange(e: Event): void {
+    const input = e.target as HTMLInputElement;
+    if (input.dataset.target) {
+      if (input.checked) this.draftTargets.add(input.dataset.target);
+      else this.draftTargets.delete(input.dataset.target);
+      // 只更新“加入所选（n）”按钮，不整卡重绘（保留焦点）
+      const apply = this.card.querySelector<HTMLButtonElement>('[data-act="targets-apply"]');
+      const n = [...this.draftTargets].filter((id) => this.addTargets?.some((t) => t.id === id && !t.disabledReason)).length;
+      if (apply) {
+        apply.disabled = n === 0;
+        apply.textContent = n ? `加入所选（${n}）` : '请选择';
+      }
+    } else if (input.hasAttribute('data-homographs')) {
+      this.confirmHomographs = input.checked;
+    }
+  }
+
   private async onClick(e: MouseEvent): Promise<void> {
     const btn = (e.target as Element).closest<HTMLElement>('[data-act]');
     const data = this.data;
-    if (!btn || !data) return;
+    if (!btn || !data || btn.hasAttribute('disabled')) return;
     switch (btn.dataset.act) {
       case 'speak':
         this.actions.speak(data.lemma);
@@ -362,106 +723,261 @@ export class ShadowCardView implements CardView {
         break;
       case 'expand':
         this.expanded = true;
-        this.render(data);
-        this.layout();
+        this.rerender();
         break;
       case 'known':
-        await this.markKnown(data, btn);
+        await this.onKnown(data);
+        break;
+      case 'known-confirm':
+        await this.markKnown(data, this.confirmHomographs);
+        break;
+      case 'add':
+        await this.onAdd(data);
+        break;
+      case 'targets':
+        this.togglePanel('targets');
+        break;
+      case 'targets-apply':
+        await this.applyTempTargets(data);
+        break;
+      case 'targets-reset':
+        this.tempAddTargets = null;
+        this.draftTargets = new Set(this.addTargets?.filter((t) => t.isDefault).map((t) => t.id));
+        this.rerender();
+        this.showToast('已恢复为设置中的默认生词本');
+        break;
+      case 'panel-cancel':
+        this.togglePanel('none');
         break;
       case 'delete':
-        await this.deleteFromSources(data, btn);
-        break;
-      case 'collect':
-        await this.toggleCollect(data, btn);
+        await this.deleteFromSources(data);
         break;
     }
   }
 
-  /** 认识：入口会先乐观移除页面高亮；卡片立即关闭并给出可撤销的 toast */
-  private async markKnown(data: CardData, btn: HTMLElement): Promise<void> {
-    btn.setAttribute('disabled', '');
+  private togglePanel(panel: Panel): void {
+    this.panel = this.panel === panel ? 'none' : panel;
+    if (this.panel === 'targets') {
+      const current = this.effectiveAddTargets() ?? [];
+      this.draftTargets = new Set(current.map((t) => t.id));
+    }
+    if (this.panel === 'confirm-known') this.confirmHomographs = false;
+    this.rerender();
+  }
+
+  /**
+   * 点“认识”：预览中含不可撤销的远端删除或同形异义词形时，先在卡片内确认；否则直接执行。
+   * 预览尚未返回时等它（只读本地缓存，通常几毫秒），失败则直接执行（background 自身也会扣下同形异义词）。
+   */
+  private async onKnown(data: CardData): Promise<void> {
+    let p = this.ctx.knownPreview;
+    if (!p) {
+      p = await this.backend.preview('known', data.surface, data.lemma).catch(() => undefined);
+      if (this.data !== data) return;
+      if (p) this.ctx = { ...this.ctx, knownPreview: p };
+    }
+    const risky = p?.remove.some((r) => r.ok && r.remote && (!r.undoable || r.homographs?.length));
+    if (risky) {
+      this.togglePanel('confirm-known');
+      return;
+    }
+    await this.markKnown(data, false);
+  }
+
+  /** 认识：入口会先乐观移除页面高亮；卡片立即关闭，结果 toast 写明记入哪里、移除了什么，并可撤销 */
+  private async markKnown(data: CardData, withHomographs: boolean): Promise<void> {
+    this.busy = 'known';
     const pending = this.actions.markKnown(data.lemma, data.surface);
     this.close();
     try {
-      const res = await pending;
-      const extra = res.deleted.length && res.message ? `；${res.message}` : '';
-      this.showToast(`已认识「${res.lemma || data.lemma}」，不再高亮${extra}`, '撤销', async () => {
-        await this.actions.unmarkKnown(data.lemma);
-        this.showToast(`已撤销，「${data.lemma}」恢复高亮`);
+      let res = await pending;
+      // 用户勾选了同形异义词：background 第一次调用扣下了它们（withheld），带 confirmed 再调一次（幂等）
+      if (withHomographs && res.withheld?.length) res = await this.backend.confirmKnown(data.surface, data.lemma);
+      this.showToast(describeKnownResult(res, data.lemma), {
+        label: '撤销',
+        run: async () => {
+          const undo = await this.actions.unmarkKnown(data.lemma);
+          this.showToast(undo && undo.message ? `「${data.lemma}」${undo.message}` : `已撤销，「${data.lemma}」恢复高亮`);
+        },
       });
     } catch (err) {
-      this.showToast(`标记失败：${errorText(err)}`);
+      this.showToast(`标记失败：${errorText(err)}`, undefined, true);
+    } finally {
+      this.busy = null;
     }
   }
 
-  /** 从来源生词本删除：第一次点击进入确认态（3 秒内再点确认），避免误触 */
-  private async deleteFromSources(data: CardData, btn: HTMLElement): Promise<void> {
-    if (!btn.classList.contains('confirm')) {
-      btn.classList.add('confirm');
-      btn.querySelector('span')!.textContent = '确认移出？';
+  /** 加入生词本主按钮：未收藏 -> 加入当前目标；已收藏 -> 移出；没有可写目标 -> 说明原因并打开目标选择 */
+  private async onAdd(data: CardData): Promise<void> {
+    if (this.ctx.collected) {
+      await this.removeCollected(data);
+      return;
+    }
+    const eff = this.effectiveAddTargets();
+    if (eff && !eff.some((t) => !t.disabledReason)) {
+      this.showToast(`无法加入：${blockedText(eff)}。请选择其他生词本`, undefined, true);
+      if (this.panel !== 'targets') this.togglePanel('targets');
+      return;
+    }
+    await this.addWord(data, this.tempAddTargets ?? undefined);
+  }
+
+  private async applyTempTargets(data: CardData): Promise<void> {
+    const valid = [...this.draftTargets].filter((id) => this.addTargets?.some((t) => t.id === id && !t.disabledReason));
+    if (!valid.length) return;
+    const defaults = this.addTargets?.filter((t) => t.isDefault && !t.disabledReason).map((t) => t.id) ?? [];
+    // 选择与默认目标完全一致时不算临时目标
+    const same = valid.length === defaults.length && valid.every((id) => defaults.includes(id));
+    this.tempAddTargets = same ? null : valid;
+    this.panel = 'none';
+    if (this.ctx.collected) {
+      this.rerender();
+      return;
+    }
+    await this.addWord(data, this.tempAddTargets ?? undefined);
+  }
+
+  private async addWord(data: CardData, targets: BookId[] | undefined): Promise<void> {
+    this.busy = 'add';
+    this.rerender();
+    try {
+      const res = await this.backend.addWord({
+        word: data.surface,
+        lemma: data.lemma,
+        ...(data.entry?.short ? { trans: data.entry.short } : {}),
+        ...(data.entry?.phonetic ? { phonetic: data.entry.phonetic } : {}),
+        ...(targets ? { targets } : {}),
+      });
+      const addedIds = res.added.filter((a) => a.ok).map((a) => a.bookId);
+      if (res.ok && this.data?.lemma === data.lemma) this.ctx = { ...this.ctx, collected: true, collectedIn: addedIds };
+      this.refreshKnownPreview(data);
+      this.showToast(
+        describeAddResult(res, targets),
+        res.ok
+          ? {
+              label: '撤销',
+              run: async () => {
+                const undo = await this.backend.removeWord(data.lemma, addedIds);
+                if (this.data?.lemma === data.lemma) this.ctx = { ...this.ctx, collected: false, collectedIn: [] };
+                this.rerender();
+                this.showToast(undo.ok ? `已撤销加入：${undo.message}` : `撤销未完成：${undo.message}`, undefined, !undo.ok);
+              },
+            }
+          : undefined,
+        !res.ok,
+      );
+    } catch (err) {
+      this.showToast(`加入失败：${errorText(err)}`, undefined, true);
+    } finally {
+      this.busy = null;
+      this.rerender();
+    }
+  }
+
+  /** 取消收藏：从已收藏的生词本移出（只处理该原形本身），可撤销（加回同样的生词本） */
+  private async removeCollected(data: CardData): Promise<void> {
+    const ids = this.ctx.collectedIn?.length ? this.ctx.collectedIn : undefined;
+    this.busy = 'add';
+    this.rerender();
+    try {
+      const res = await this.backend.removeWord(data.lemma, ids);
+      if (this.data?.lemma === data.lemma && res.ok) this.ctx = { ...this.ctx, collected: false, collectedIn: [] };
+      this.refreshKnownPreview(data);
+      const removedIds = res.removed.filter((r) => r.ok && r.words.length).map((r) => r.bookId);
+      this.showToast(
+        res.message,
+        res.ok && removedIds.length
+          ? {
+              label: '撤销',
+              run: async () => {
+                const again = await this.backend.addWord({ word: data.surface, lemma: data.lemma, targets: removedIds });
+                if (this.data?.lemma === data.lemma && again.ok) this.ctx = { ...this.ctx, collected: true, collectedIn: removedIds };
+                this.rerender();
+                this.showToast(describeAddResult(again, removedIds), undefined, !again.ok);
+              },
+            }
+          : undefined,
+        !res.ok,
+      );
+    } catch (err) {
+      this.showToast(`移出失败：${errorText(err)}`, undefined, true);
+    } finally {
+      this.busy = null;
+      this.rerender();
+    }
+  }
+
+  /** 从来源生词本删除：第一次点击进入确认态（3 秒内再点确认），避免误触；不可删时只说明原因 */
+  private async deleteFromSources(data: CardData): Promise<void> {
+    const del = this.deletable(data);
+    if (del.reason) {
+      this.showToast(`无法从来源生词本移出：${del.reason}`, undefined, true);
+      return;
+    }
+    if (!this.deleteConfirm) {
+      this.deleteConfirm = true;
+      this.rerender();
       clearTimeout(this.deleteConfirmTimer);
       this.deleteConfirmTimer = setTimeout(() => {
-        btn.classList.remove('confirm');
-        const label = btn.querySelector('span');
-        if (label) label.textContent = '移出生词本';
+        this.deleteConfirm = false;
+        this.rerender();
       }, DELETE_CONFIRM_MS);
       return;
     }
-    clearTimeout(this.deleteConfirmTimer);
-    btn.setAttribute('disabled', '');
-    btn.querySelector('span')!.textContent = '正在移出…';
+    this.resetDeleteConfirm();
+    this.busy = 'delete';
+    this.rerender();
     try {
-      const res = await this.actions.deleteFromSources(data.lemma, data.deletableBooks.map((b) => b.id));
+      const res = await this.actions.deleteFromSources(data.lemma, del.books.map((b) => b.id));
+      this.busy = null;
       this.close();
-      this.showToast(res.message || (res.ok ? `已从生词本移出「${data.lemma}」` : '移出失败'));
+      this.showToast(res.message || (res.ok ? `已从生词本移出「${data.lemma}」` : '移出失败'), undefined, !res.ok);
     } catch (err) {
-      btn.removeAttribute('disabled');
-      btn.classList.remove('confirm');
-      btn.querySelector('span')!.textContent = '移出生词本';
-      this.showToast(`移出失败：${errorText(err)}`);
+      this.busy = null;
+      this.rerender();
+      this.showToast(`移出失败：${errorText(err)}`, undefined, true);
     }
   }
 
-  /** 收藏切换：先乐观切换按钮状态，失败回滚 */
-  private async toggleCollect(data: CardData, btn: HTMLElement): Promise<void> {
-    const next = !data.collected;
-    const apply = (on: boolean) => {
-      btn.classList.toggle('on', on);
-      btn.setAttribute('aria-pressed', String(on));
-      btn.setAttribute('aria-label', on ? '移出生词本' : '加入生词本');
-      btn.title = on ? '移出生词本' : '加入生词本';
-    };
-    apply(next);
-    try {
-      const res = await this.actions.setCollected!(data.lemma, data.surface, next);
-      if (!res.ok) throw new Error(res.message || '操作失败');
-      if (this.data === data) this.data = { ...data, collected: next };
-      this.showToast(res.message || (next ? `已加入生词本「${data.lemma}」` : `已移出生词本「${data.lemma}」`));
-    } catch (err) {
-      apply(!next);
-      this.showToast(errorText(err));
-    }
+  private resetDeleteConfirm(): void {
+    clearTimeout(this.deleteConfirmTimer);
+    this.deleteConfirm = false;
   }
 
-  private showToast(message: string, actionLabel?: string, action?: () => Promise<void>): void {
-    if (!this.host.isConnected) this.doc.documentElement.appendChild(this.host);
+  // ---------------- toast ----------------
+
+  /** 结果提示：底部卡片打开时显示在顶部（不挡卡片）；error=true 时用警示样式 */
+  private showToast(message: string, action?: { label: string; run: () => Promise<void> }, error = false): void {
+    const d = this.doc;
+    if (!this.host.isConnected) d.documentElement.appendChild(this.host);
     clearTimeout(this.toastTimer);
-    this.toast.innerHTML = `<span class="msg">${esc(message)}</span>${actionLabel ? `<button data-act="toast">${esc(actionLabel)}</button>` : ''}`;
-    const btn = this.toast.querySelector('button');
-    if (btn && action) {
-      btn.addEventListener('click', async () => {
-        btn.setAttribute('disabled', '');
-        try {
-          await action();
-        } catch (err) {
-          this.showToast(`操作失败：${errorText(err)}`);
-        }
-      });
-    }
+    const btn =
+      action &&
+      h(d, 'button', {
+        'data-act': 'toast',
+        onclick: async () => {
+          btn!.setAttribute('disabled', '');
+          try {
+            await action.run();
+          } catch (err) {
+            this.showToast(`操作失败：${errorText(err)}`, undefined, true);
+          }
+        },
+      }, action.label);
+    this.toast.replaceChildren();
+    append(this.toast, [h(d, 'span', { class: 'msg' }, message), btn]);
+    this.toast.classList.toggle('err', error);
+    this.toast.classList.toggle('top', this.isOpen && this.sheet);
     this.toast.hidden = false;
     void this.toast.offsetWidth;
     this.toast.classList.add('in');
-    this.toastTimer = setTimeout(() => this.hideToast(), TOAST_MS);
+    this.scheduleToastHide(action ? TOAST_ACTION_MS : TOAST_MS);
+  }
+
+  private scheduleToastHide(ms: number): void {
+    clearTimeout(this.toastTimer);
+    if (this.toast.hidden) return;
+    this.toastTimer = setTimeout(() => this.hideToast(), ms);
   }
 
   private hideToast(): void {
@@ -472,23 +988,40 @@ export class ShadowCardView implements CardView {
   }
 }
 
-function bookTag(b: BookMeta): string {
+function bookTag(d: Document, b: BookMeta): HTMLElement {
   const user = b.kind !== 'builtin';
-  const label = user ? b.name : b.short || b.name;
-  return `<span class="tag${user ? ' user' : ''}" title="${esc(b.name)}">${esc(label)}</span>`;
+  return h(d, 'span', { class: `tag${user ? ' user' : ''}`, title: b.name }, user ? b.name : b.short || b.name);
 }
 
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+/** 说明行：标签 + 若干段（警示段用警示色），段间用分号分隔 */
+function hintLine(d: Document, label: string, segments: HintSegment[]): HTMLElement {
+  const full = segments.map((x) => x.text).join('；');
+  return h(
+    d,
+    'p',
+    { class: `hint${segments.some((x) => x.warn) ? ' has-warn' : ''}`, title: full },
+    h(d, 'b', {}, label),
+    ...segments.map((x, i) => h(d, 'span', x.warn ? { class: 'warn' } : {}, i ? `；${x.text}` : x.text)),
+  );
+}
+
+/** 目标都不可用时的原因汇总 */
+function blockedText(targets: AddTargetOption[]): string {
+  if (!targets.length) return '没有选择生词本';
+  return targets.map((t) => `${t.name}${t.disabledReason ? `（${t.disabledReason}）` : ''}`).join('、');
 }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+// ---------------- 颜色工具 ----------------
+
+type Rgba = [number, number, number, number];
+
 /** 解析 #rgb/#rrggbb(aa)/rgb()/rgba() 为相对亮度 0~1；无法解析时按亮色处理 */
-export function luminance(color: string): number {
-  const rgba = parseColor(color);
+export function luminance(color: string | Rgba): number {
+  const rgba = typeof color === 'string' ? parseColor(color) : color;
   if (!rgba) return 1;
   const [r, g, b] = rgba.slice(0, 3).map((v) => {
     const c = v / 255;
@@ -497,11 +1030,11 @@ export function luminance(color: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-function parseColor(color: string): [number, number, number, number] | null {
+function parseColor(color: string): Rgba | null {
   const c = color.trim().toLowerCase();
   const hex = /^#([0-9a-f]{3,8})$/.exec(c)?.[1];
   if (hex) {
-    const full = hex.length <= 4 ? [...hex].map((h) => h + h).join('') : hex;
+    const full = hex.length <= 4 ? [...hex].map((x) => x + x).join('') : hex;
     const n = (i: number) => parseInt(full.slice(i, i + 2), 16);
     return [n(0), n(2), n(4), full.length === 8 ? n(6) / 255 : 1];
   }
@@ -512,6 +1045,111 @@ function parseColor(color: string): [number, number, number, number] | null {
   return [parts[0]!, parts[1]!, parts[2]!, parts[3] ?? 1];
 }
 
+function contrast(a: Rgba, b: Rgba): number {
+  const la = luminance(a);
+  const lb = luminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+function rgbText(c: Rgba): string {
+  return `rgb(${Math.round(c[0])}, ${Math.round(c[1])}, ${Math.round(c[2])})`;
+}
+
+/**
+ * 在保持色相/饱和度的前提下调整明度，使颜色在背景上达到对比度 min（亮底变暗、暗底变亮）。
+ * 马克笔黄这类浅色直接当文字色不可读，调暗后仍是同一色系。
+ */
+export function fitContrast(color: Rgba, bg: Rgba, min: number): Rgba {
+  const opaque: Rgba = [color[0], color[1], color[2], 1];
+  if (contrast(opaque, bg) >= min) return opaque;
+  const [hue0, sat, light] = rgbToHsl(opaque);
+  const darken = luminance(bg) > 0.4;
+  // 黄色（约 40°~70°）直接调暗会发灰发绿，调暗时同时往橙色偏一点
+  const hue = darken && hue0 > 40 / 360 && hue0 < 70 / 360 ? hue0 - 12 / 360 : hue0;
+  let best = opaque;
+  for (let i = 1; i <= 20; i++) {
+    const l = darken ? light * (1 - i / 20) : light + (1 - light) * (i / 20);
+    best = hslToRgb(hue, sat, l);
+    if (contrast(best, bg) >= min) break;
+  }
+  return best;
+}
+
+/** 两个颜色的色相差（度，0~180）；任一接近灰色时视为不同色系 */
+function hueDistance(a: Rgba, b: Rgba): number {
+  const [ha, sa] = rgbToHsl(a);
+  const [hb, sb] = rgbToHsl(b);
+  if (sa < 0.15 || sb < 0.15) return 180;
+  const diff = Math.abs(ha - hb) * 360;
+  return Math.min(diff, 360 - diff);
+}
+
+function rgbToHsl([r, g, b]: Rgba): [number, number, number] {
+  const [rr, gg, bb] = [r / 255, g / 255, b / 255];
+  const max = Math.max(rr, gg, bb);
+  const min = Math.min(rr, gg, bb);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const dd = max - min;
+  const s = l > 0.5 ? dd / (2 - max - min) : dd / (max + min);
+  let hh: number;
+  if (max === rr) hh = (gg - bb) / dd + (gg < bb ? 6 : 0);
+  else if (max === gg) hh = (bb - rr) / dd + 2;
+  else hh = (rr - gg) / dd + 4;
+  return [hh / 6, s, l];
+}
+
+function hslToRgb(hh: number, s: number, l: number): Rgba {
+  if (s === 0) return [l * 255, l * 255, l * 255, 1];
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const f = (t: number) => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return [f(hh + 1 / 3) * 255, f(hh) * 255, f(hh - 1 / 3) * 255, 1];
+}
+
+/**
+ * 从单词实际渲染的高亮样式中取强调色（跟随 engine 的主题/按词书样式，不依赖样式数据结构）：
+ * 装饰线颜色 > 背景图（马克笔渐变）中的颜色 > 背景色 > 边框色 > 与父元素不同的文字色。都没有时返回 null。
+ */
+export function markAccent(anchor: Element): Rgba | null {
+  const view = anchor.ownerDocument.defaultView;
+  if (!view) return null;
+  const target = anchor.querySelector(TAG_WORD) ?? anchor;
+  const cs = view.getComputedStyle(target);
+  const visible = (c: Rgba | null): c is Rgba => !!c && c[3] > 0.05;
+  const line = cs.textDecorationLine || '';
+  if (line && line !== 'none') {
+    const c = parseColor(cs.textDecorationColor || '');
+    if (visible(c)) return c;
+  }
+  const img = cs.backgroundImage || '';
+  if (img && img !== 'none') {
+    const m = /rgba?\([^)]+\)/.exec(img);
+    const c = m ? parseColor(m[0]) : null;
+    if (visible(c)) return c;
+  }
+  const bgc = parseColor(cs.backgroundColor || '');
+  if (visible(bgc)) return bgc;
+  if (cs.borderBottomStyle && cs.borderBottomStyle !== 'none' && parseFloat(cs.borderBottomWidth) > 0) {
+    const c = parseColor(cs.borderBottomColor || '');
+    if (visible(c)) return c;
+  }
+  const parent = anchor.parentElement;
+  if (parent) {
+    const own = parseColor(cs.color || '');
+    const inherited = parseColor(view.getComputedStyle(parent).color || '');
+    if (visible(own) && (!inherited || own.slice(0, 3).join() !== inherited.slice(0, 3).join())) return own;
+  }
+  return null;
+}
+
 /**
  * 单词所在区域是否为暗色背景：从单词向上找第一个不透明背景色；都透明时看根元素 color-scheme 与系统偏好。
  */
@@ -520,7 +1158,7 @@ export function isDarkBackground(el: Element): boolean {
   if (!view) return false;
   for (let node: Element | null = el; node; node = node.parentElement) {
     const rgba = parseColor(view.getComputedStyle(node).backgroundColor);
-    if (rgba && rgba[3] > 0.5) return luminance(view.getComputedStyle(node).backgroundColor) < 0.18;
+    if (rgba && rgba[3] > 0.5) return luminance(rgba) < 0.18;
   }
   const scheme = view.getComputedStyle(el.ownerDocument.documentElement).colorScheme || '';
   return scheme.includes('dark') && typeof view.matchMedia === 'function' && view.matchMedia('(prefers-color-scheme: dark)').matches;

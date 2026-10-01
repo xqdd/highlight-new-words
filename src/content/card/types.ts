@@ -16,8 +16,8 @@ export interface CardData {
   /** 命中的、且 provider 支持删除的来源词书（非空时显示“从生词本删除”） */
   deletableBooks: BookMeta[];
   /**
-   * 可选：该词是否已在“我的生词本”（收藏）中。undefined 表示入口未接入收藏能力，卡片不显示收藏按钮；
-   * 需与 `CardActions.setCollected` 同时提供。
+   * 可选：该词是否已在“加入生词本”的默认目标中。不传时卡片自己通过 background `getWordState` 查询
+   * （card 第二阶段起“加入生词本”由卡片直接调用 background，见 word-actions.ts）。
    */
   collected?: boolean;
 }
@@ -30,13 +30,15 @@ export interface CardActions {
    * 结果中的 message 可直接展示（如 toast），并可配合 unmarkKnown 提供“撤销”。
    */
   markKnown(lemma: string, surface: string): Promise<MarkKnownResult>;
-  /** 撤销熟词（不恢复已删除的来源单词） */
-  unmarkKnown(lemma: string): Promise<void>;
+  /**
+   * 撤销熟词。可返回 background `unmarkKnown` 的结果（含“已加回 …/无法加回 …”说明），卡片用其 message 作为 toast；
+   * 返回 void 时卡片显示通用文案。
+   */
+  unmarkKnown(lemma: string): Promise<void | { ok: boolean; restored?: string[]; message?: string }>;
   /** 从来源生词本删除（lemma 为命中词条；bookIds 为 deletableBooks 的 id） */
   deleteFromSources(lemma: string, bookIds: string[]): Promise<DeleteWordsResult>;
   /**
-   * 可选：加入（collected=true）/移出“我的生词本”。未注入时卡片不显示收藏按钮。
-   * 返回的 message 用于 toast 展示；ok=false 时卡片回滚按钮状态。
+   * @deprecated card 第二阶段起卡片直接调用 background 的 addWord/removeWord（支持临时目标、撤销），不再使用该回调；保留仅为类型兼容。
    */
   setCollected?(lemma: string, surface: string, collected: boolean): Promise<{ ok: boolean; message?: string }>;
 }

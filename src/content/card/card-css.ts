@@ -1,7 +1,7 @@
 /**
  * 卡片样式（注入 Shadow DOM，不受页面 CSS 影响也不污染页面）。
  *
- * 颜色只由三个变量驱动：--bg / --fg / --accent（来自主题 CardStyle，暗色页面下由 card-view 换成暗色版本），
+ * 颜色只由变量驱动：--bg / --fg（来自主题 CardStyle，暗色页面下由 card-view 换成暗色版本）、--accent（取自单词的高亮颜色）与 --accent-fg，
  * 其余层次色通过 color-mix 派生，保证任意主题色下对比度一致。
  * 两种布局：
  * - `.card.popover`：桌面贴词浮层，宽 340px，跟随单词定位
@@ -29,7 +29,7 @@ export const CARD_CSS = `
   -webkit-tap-highlight-color: transparent; -webkit-font-smoothing: antialiased; overflow: hidden;
   opacity: 0; transform: translateY(4px); transition: opacity .12s ease-out, transform .12s ease-out;
 }
-.card.dark { box-shadow: 0 12px 32px -6px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .04); --danger: #ff6b5e; --accent-fg: #111; }
+.card.dark { box-shadow: 0 12px 32px -6px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255, 255, 255, .04); --danger: #ff6b5e; }
 .card.above { transform: translateY(-4px); }
 .card.in { opacity: 1; transform: none; }
 .card[hidden] { display: none; }
@@ -77,6 +77,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 /* ---------- 正文 ---------- */
 .body { padding: 10px 16px 4px; overflow: auto; overscroll-behavior: contain; flex: 1 1 auto; min-height: 0; }
+/* 面板打开时释义区至少保留约两行，其余空间不足时面板与释义各自滚动 */
+.body:has(~ .panel) { min-height: 64px; }
 .sheet .body { padding: 12px 18px 4px; }
 .form { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
 .form b { font-weight: 600; color: var(--fg); }
@@ -100,11 +102,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 /* ---------- 底栏 ---------- */
 .foot { flex: none; padding: 10px 12px 12px 16px; border-top: 1px solid var(--line); background: var(--soft); }
 .sheet .foot { padding: 12px 14px 14px 18px; }
-.actions { display: flex; gap: 8px; }
+.actions { display: flex; gap: 8px; align-items: stretch; }
 .btn {
-  flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0;
   min-height: 36px; padding: 6px 12px; border-radius: 10px; font-size: 14px; font-weight: 600; white-space: nowrap;
 }
+.btn span { overflow: hidden; text-overflow: ellipsis; }
 .sheet .btn { min-height: 44px; font-size: 15px; }
 .btn svg { width: 17px; height: 17px; flex: none; }
 .btn.primary { background: var(--accent); color: var(--accent-fg); }
@@ -114,11 +117,61 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .btn.ghost.danger { color: var(--danger); }
 .btn.ghost.confirm { color: #fff; background: var(--danger); border-color: var(--danger); }
 .btn[disabled] { opacity: .6; cursor: progress; }
+/* 不支持的操作：置灰但仍可点（点按后说明原因，触屏没有 tooltip） */
+.btn.off, .split.off .main { opacity: .5; cursor: not-allowed; }
+.actions > .btn.primary { flex: 0 1 auto; padding: 6px 16px; }
+/* 加入生词本：主按钮 + 目标下拉，视觉上是一个分段按钮 */
+.split { flex: 1 1 auto; display: flex; min-width: 0; }
+.split .main { border-radius: 10px 0 0 10px; flex: 1 1 auto; position: relative; }
+.split .caret { flex: none; width: 34px; padding: 0; border-left: 0; border-radius: 0 10px 10px 0; color: var(--muted); }
+.sheet .split .caret { width: 44px; }
+.split .caret svg { width: 16px; height: 16px; transition: transform .15s ease-out; }
+.split.open .caret svg { transform: rotate(180deg); }
+.split.on .main { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); background: var(--accent-soft); }
+.split.on .main svg { fill: currentColor; }
+.split .dot { position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.btn.del { flex: none; width: 40px; padding: 0; }
+.sheet .btn.del { width: 46px; }
+.btn.del.confirm { width: auto; padding: 0 12px; }
+.hints { margin-top: 8px; display: grid; gap: 2px; }
+.hint {
+  margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+}
+.sheet .hint { font-size: 13px; }
+.hint b { font-weight: 600; color: var(--fg); margin-right: 6px; }
+.hint .warn { color: color-mix(in srgb, var(--danger) 75%, var(--fg)); }
+.hint.has-warn { -webkit-line-clamp: 3; }
 .links { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .links a { padding: 2px 6px; border-radius: 6px; color: var(--muted); }
 .links a:hover { color: var(--accent); background: var(--hover); }
 .sheet .links { font-size: 14px; margin-top: 6px; }
 .sheet .links a { min-height: 44px; min-width: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; }
+
+/* ---------- 内联面板：加入目标 / 认识确认 ---------- */
+.panel { flex: 0 1 auto; min-height: 96px; padding: 10px 12px 12px 16px; border-top: 1px solid var(--line); background: var(--bg); max-height: 46vh; overflow: auto; overscroll-behavior: contain; }
+.sheet .panel { padding: 12px 14px 12px 18px; }
+.panel.warn { background: color-mix(in srgb, var(--danger) 6%, var(--bg)); }
+.panel-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.panel-title svg { width: 16px; height: 16px; color: var(--danger); flex: none; }
+.opts { display: grid; gap: 2px; }
+.opt { display: flex; align-items: flex-start; gap: 10px; min-height: 36px; padding: 6px 8px; margin: 0 -8px; border-radius: 8px; cursor: pointer; }
+.sheet .opt { min-height: 44px; }
+.opt:hover { background: var(--hover); }
+.opt.off { cursor: not-allowed; }
+.opt.off .opt-name { color: var(--muted); }
+.opt input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); cursor: inherit; }
+.sheet .opt input { width: 20px; height: 20px; }
+.opt-text { display: grid; gap: 1px; min-width: 0; }
+.opt-name { font-size: 14px; overflow-wrap: anywhere; }
+.opt-name em { font-style: normal; font-size: 11px; line-height: 16px; padding: 0 6px; margin-left: 6px; border-radius: 999px; color: var(--accent); background: var(--accent-soft); white-space: nowrap; }
+.opt-name em.remote { color: var(--muted); background: var(--soft); }
+.opt-note { font-size: 12px; color: var(--muted); }
+.panel-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.panel-actions { display: flex; gap: 8px; margin-top: 10px; }
+.panel-actions .btn { flex: 1 1 auto; }
+.confirm-list { margin: 0 0 6px; padding-left: 18px; font-size: 13px; }
+.confirm-list li { margin: 2px 0; overflow-wrap: anywhere; }
 
 /* ---------- toast（熟词撤销、操作结果） ---------- */
 .toast {
@@ -131,7 +184,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .toast.in { transform: none; opacity: 1; }
 .toast[hidden] { display: none; }
 .toast .msg { flex: 1; overflow-wrap: anywhere; }
-.toast button { min-height: 36px; min-width: 44px; padding: 0 12px; border-radius: 8px; color: #8ab4ff; font-weight: 600; }
+.toast.err { background: #3b1715; color: #ffe4e1; }
+/* 底部卡片打开时 toast 放到顶部，避免挡住卡片 */
+.toast.top { top: calc(12px + env(safe-area-inset-top, 0px)); bottom: auto; transform: translateY(-12px); }
+.toast.top.in { transform: none; }
+.toast button { flex: none; min-height: 36px; min-width: 44px; padding: 0 12px; border-radius: 8px; color: color-mix(in srgb, var(--accent, #8ab4ff) 45%, #fff); font-weight: 600; }
 .toast button:hover { background: rgba(255,255,255,.08); }
 @media (pointer: coarse) { .toast button { min-height: 44px; } }
 

@@ -16,7 +16,7 @@ const HOVER_HIDE_DELAY = 250;
 
 /**
  * 卡片触发逻辑（桌面悬停 + 移动端点按）：
- * - 鼠标悬停 mark 100ms 后打开；离开 mark 与卡片 250ms 后关闭
+ * - 鼠标悬停 mark 100ms 后打开；离开 mark 与卡片 250ms 后关闭（在卡片内点过之后不再因移出而关闭）
  * - 触屏点按 mark：打开卡片，并阻止默认行为（避免点到链接内的单词直接跳转）；再次点按同一单词则放行
  * - 鼠标在卡片外按下 / 触屏在卡片外点按（click，滑动滚动不会触发）/ Esc 关闭
  * - 页面滚动由 CardView 自己处理（浮层跟随单词、单词离开视口关闭；手机底部卡片保持打开）
@@ -28,6 +28,11 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
   /** 最近一次 pointerdown 的指针类型，用于在 click 中区分触屏与鼠标 */
   let lastPointerType = 'mouse';
+  /**
+   * 用户在卡片内按下过鼠标（点了按钮、展开了面板）后，该卡片“钉住”：鼠标移出不再自动关闭，
+   * 只由点外部 / Esc / 关闭按钮关闭。否则面板收起导致卡片变矮、指针落到卡片外时会被误关。
+   */
+  let pinnedAnchor: HTMLElement | null = null;
 
   const markOf = (e: Event): HTMLElement | null => {
     const t = e.target;
@@ -42,12 +47,15 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
       clearTimeout(hideTimer);
       if (view.anchor === mark && view.isOpen) return;
       clearTimeout(showTimer);
-      showTimer = setTimeout(() => opts.onOpen(mark, 'hover'), HOVER_SHOW_DELAY);
+      showTimer = setTimeout(() => {
+        pinnedAnchor = null;
+        opts.onOpen(mark, 'hover');
+      }, HOVER_SHOW_DELAY);
     } else if (view.contains(e)) {
       clearTimeout(hideTimer);
     } else {
       clearTimeout(showTimer);
-      if (view.isOpen) {
+      if (view.isOpen && !(pinnedAnchor && pinnedAnchor === view.anchor)) {
         clearTimeout(hideTimer);
         hideTimer = setTimeout(() => view.close(), HOVER_HIDE_DELAY);
       }
@@ -56,6 +64,10 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
 
   const onPointerDown = (e: PointerEvent) => {
     lastPointerType = e.pointerType || 'mouse';
+    if (view.isOpen && view.contains(e)) {
+      pinnedAnchor = view.anchor;
+      clearTimeout(hideTimer);
+    }
     // 触屏的按下可能是滚动手势的开始，留到 click 再判断是否关闭
     if (lastPointerType === 'touch') return;
     if (view.isOpen && !view.contains(e) && !markOf(e)) view.close();
@@ -77,6 +89,7 @@ export function bindCardTrigger(opts: TriggerOptions): () => void {
     e.preventDefault();
     e.stopPropagation();
     clearTimeout(showTimer);
+    pinnedAnchor = null;
     opts.onOpen(mark, 'tap');
   };
 
