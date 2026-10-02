@@ -1,6 +1,7 @@
 # 生词高亮：网页背单词
 
-edge手机安装：https://microsoftedge.microsoft.com/addons/detail/%E7%94%9F%E8%AF%8D%E9%AB%98%E4%BA%AE%EF%BC%9A%E7%BD%91%E9%A1%B5%E8%83%8C%E5%8D%95%E8%AF%8D-%C2%B7-%E6%9C%89%E9%81%93%E6%AC%A7%E8%B7%AF%E7%94%9F%E8%AF%8D%E6%9C%AC-%C2%B7-%E5%9B%9B/mjcogijocikbafeoindkeanfpflkpkgj
+- [安装Chrome浏览器插件](https://chrome.google.com/webstore/detail/bcgjilfclghcobokbhdfphmpjkbbjlli)
+- [安装Edge手机浏览器插件](https://microsoftedge.microsoft.com/addons/detail/%E7%94%9F%E8%AF%8D%E9%AB%98%E4%BA%AE%EF%BC%9A%E7%BD%91%E9%A1%B5%E8%83%8C%E5%8D%95%E8%AF%8D-%C2%B7-%E6%9C%89%E9%81%93%E6%AC%A7%E8%B7%AF%E7%94%9F%E8%AF%8D%E6%9C%AC-%C2%B7-%E5%9B%9B/mjcogijocikbafeoindkeanfpflkpkgj)
 
 “生词高亮：网页背单词 · 有道/欧路生词本 · 四六级考研词书”（英文名 Highlight New Words – Vocabulary Builder for Youdao, Eudic, CET & IELTS）是一个浏览器扩展，适用于 Chrome、Edge（含 Edge for Android）。读英文网页或看 YouTube 视频时，它会把你要学的单词标出来。单词可以来自有道、欧路的云端生词本，也可以来自内置的四六级、考研、雅思、托福、GRE 等分级词书。悬停在单词上（手机上点按）就能看到音标、释义和词形；认识的单词标为熟词后，以后不再高亮。
 
