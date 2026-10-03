@@ -296,11 +296,11 @@ export class FloatMenu {
       const enabled = new Set(s.books.enabled);
       const sorted = [...books.filter((b) => enabled.has(b.id)), ...books.filter((b) => !enabled.has(b.id))];
       groups.push(
-        group('词书（可多选）',
+        group('词书（可多选，难度/词频分级各选一档）',
           h(doc, 'div', { class: 'chips' },
             sorted.map((b) =>
               h(doc, 'button', { type: 'button', class: 'chip', 'aria-pressed': String(enabled.has(b.id)), onclick: () =>
-                this.update((n) => void (n.books.enabled = toggleEnabledBook(n.books.enabled, b.id, !enabled.has(b.id)))) },
+                this.update((n) => void (n.books.enabled = toggleEnabledBook(n.books.enabled, b.id, !enabled.has(b.id), books))) },
                 b.short || b.name,
                 h(doc, 'span', { class: 'n' }, formatSize(b.size)),
               ),

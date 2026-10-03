@@ -175,7 +175,7 @@ const markOf = (id: BookId) => resolveMarkStyle(settings.value!, id);
 
 function toggleBook(id: BookId, on: boolean) {
   if (!settings.value) return;
-  settings.value.books.enabled = toggleEnabledBook(settings.value.books.enabled, id, on);
+  settings.value.books.enabled = toggleEnabledBook(settings.value.books.enabled, id, on, books.value);
 }
 
 // ---------------- 高亮样式预设 ----------------

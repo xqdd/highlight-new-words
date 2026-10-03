@@ -1,4 +1,5 @@
 import type { BookCategory, BookMeta } from '@/core/wordbook/types';
+import { toggleEnabledBooks } from '@/core/wordbook/enable';
 import type { KnownWordsData } from '@/core/known/types';
 import type { StatusItem, StatusLevel } from '@/core/messaging/protocol';
 import { SOURCE_NOT_CONNECTED_TEXT } from '@/core/source/connect-status';
@@ -136,10 +137,10 @@ export function groupBooks(books: BookMeta[]): BookGroup[] {
   })).filter((g) => g.books.length > 0);
 }
 
-/** 启用/停用词书：启用时追加到末尾（不改变已有优先级），停用时移除 */
-export function toggleEnabledBook(enabled: BookId[], id: BookId, on: boolean): BookId[] {
-  const rest = enabled.filter((b) => b !== id);
-  return on ? [...rest, id] : rest;
+/** 启用/停用词书：启用时追加到末尾（不改变已有优先级），停用时移除；难度分级、词频分级组内单选 */
+export function toggleEnabledBook(enabled: BookId[], id: BookId, on: boolean, books: readonly BookMeta[] = []): BookId[] {
+  // 难度分级、词频分级组内单选，见 core/wordbook/enable.ts
+  return toggleEnabledBooks(enabled, id, on, books);
 }
 
 /** 词数展示：1234 -> 1,234；>= 10000 -> 1.2万 */

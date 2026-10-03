@@ -6,6 +6,7 @@ import type { BookMeta } from '@/core/wordbook/types';
 import AppIcon from '@/ui/components/AppIcon.vue';
 import MarkPreview from '@/ui/components/MarkPreview.vue';
 import SettingsSection from '@/ui/components/SettingsSection.vue';
+import { SINGLE_CHOICE_CATEGORIES } from '@/core/wordbook/enable';
 import { CATEGORY_GROUPS, bookKindLabel, deltaCoveredBy, formatCount, isBookEnabled, isKnownRoleBook, moveBook, orderCategoryBooks, selectAllIds, toggleBook, unionWordCount } from '../lib/books';
 import { useOptions } from '../lib/context';
 import BookRow from '../components/BookRow.vue';
@@ -61,14 +62,9 @@ function groupAll(list: BookMeta[], on: boolean) {
 }
 const allSelected = (list: BookMeta[]) => selectAllIds(list).every((id) => isBookEnabled(settings.value, id));
 
-/**
- * 难度分级（level）是包含体系（选 B2 = B2+C1+C2，见 BookCategory 注释），同时启用多档没有意义，
- * 按单选处理：启用一档时停用同组其他档。
- */
+/** 难度分级、词频分级是包含体系，按组内单选处理：启用一档时停用同组其他档（见 core/wordbook/enable.ts） */
 function toggleInGroup(b: BookMeta, group: BookMeta[]) {
-  const on = !isBookEnabled(settings.value, b.id);
-  if (on && b.category === 'level') for (const other of group) if (other.id !== b.id) toggleBook(settings.value, other.id, false);
-  toggleBook(settings.value, b.id, on);
+  toggleBook(settings.value, b.id, undefined, group);
 }
 </script>
 
@@ -127,14 +123,14 @@ function toggleInGroup(b: BookMeta, group: BookMeta[]) {
         {{ allSelected(g.books) ? '全不选' : '全选' }}
       </button>
     </template>
-    <p v-if="g.category === 'frequency'" class="hint-inc muted">各档是包含关系：“3000 之外”已包含 5000、8000、12000 之外的词，选一档即可。</p>
+    <p v-if="g.category === 'frequency'" class="hint-inc muted">各档是包含关系：“3000 之外”已包含 5000、8000、12000 之外的词，只能选一档。</p>
     <ul class="list">
       <BookRow
         v-for="b in g.books"
         :key="b.id"
         :book="b"
         :on="isBookEnabled(settings, b.id)"
-        :radio="g.category === 'level'"
+        :radio="SINGLE_CHOICE_CATEGORIES.has(g.category)"
         :covered-by="deltaCoveredBy(settings, b, byId)"
         @toggle="toggleInGroup(b, g.books)"
       />

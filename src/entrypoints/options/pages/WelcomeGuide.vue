@@ -8,11 +8,12 @@ import LivePreview from '../components/LivePreview.vue';
 import PresetCard from '../components/PresetCard.vue';
 import SiteAccessBanner from '../components/SiteAccessBanner.vue';
 import { applyPreset, presetGroups } from '../lib/appearance';
+import { SINGLE_CHOICE_CATEGORIES } from '@/core/wordbook/enable';
 import { formatCount, isBookEnabled, toggleBook } from '../lib/books';
 import { useOptions } from '../lib/context';
 
 /**
- * 首次使用引导（#welcome）：① 选词书（多选组合）→ ② 选样式（预设 + 行内译文，带实时预览）→ ③ 接入生词本 / 导入熟词。
+ * 首次使用引导（#welcome）：① 选词书（多选组合；难度分级、词频分级组内单选）→ ② 选样式（预设 + 行内译文，带实时预览）→ ③ 接入生词本 / 导入熟词。
  * 对标 Relingo 三步引导，但手机 390 宽可用（Relingo 引导页在移动端两栏不折叠、横向溢出）。
  * 每一步的修改立即保存，随时可跳过。
  */
@@ -59,16 +60,16 @@ function finish(page = 'books', anchor?: string) {
 
     <section v-if="step === 0" class="body">
       <h2>想在网页上标出哪些词？</h2>
-      <p class="muted">可以多选组合，比如“六级 + 考研”。之后还能加入自己的生词本。</p>
+      <p class="muted">可以多选组合，比如“六级 + 考研”；难度分级（CEFR）和词频分级各只能选一档（选 B2 已包含 C1、C2）。之后还能加入自己的生词本。</p>
       <div class="cards">
         <button
           v-for="b in builtin"
           :key="b.id"
           type="button"
           class="card"
-          role="switch"
+          :role="SINGLE_CHOICE_CATEGORIES.has(b.category) ? 'radio' : 'switch'"
           :aria-checked="isBookEnabled(settings, b.id)"
-          @click="toggleBook(settings, b.id)"
+          @click="toggleBook(settings, b.id, undefined, builtin)"
         >
           <span class="card-top">
             <strong>{{ b.name }}</strong>

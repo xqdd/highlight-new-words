@@ -1,6 +1,7 @@
 import { effectiveBookRole } from '@/core/known/sources';
 import { MY_WORDS_BOOK_ID, type Settings } from '@/core/settings/schema';
 import { getProviderInfo } from '@/core/source/providers';
+import { toggleEnabledBooks } from '@/core/wordbook/enable';
 import type { BookCategory, BookMeta } from '@/core/wordbook/types';
 
 /** 词书分组标题与顺序（分组按 BookMeta.category；data 分片新增分类时在此补充标题即可，未知分类归入“其他”） */
@@ -35,10 +36,12 @@ export function isBookEnabled(settings: Settings, id: string): boolean {
   return settings.books.enabled.includes(id);
 }
 
-/** 启用/停用词书：启用时追加到末尾（优先级最低），停用时移除 */
-export function toggleBook(settings: Settings, id: string, on = !isBookEnabled(settings, id)) {
-  const list = settings.books.enabled.filter((x) => x !== id);
-  settings.books.enabled = on ? [...list, id] : list;
+/**
+ * 启用/停用词书：启用时追加到末尾（优先级最低），停用时移除。
+ * 传入 books（词书元数据）时，难度分级、词频分级按组内单选处理（见 core/wordbook/enable.ts）
+ */
+export function toggleBook(settings: Settings, id: string, on = !isBookEnabled(settings, id), books: readonly BookMeta[] = []) {
+  settings.books.enabled = toggleEnabledBooks(settings.books.enabled, id, on, books);
 }
 
 /** 调整启用顺序（优先级），delta=-1 上移 */

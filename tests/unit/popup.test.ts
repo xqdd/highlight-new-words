@@ -76,6 +76,19 @@ describe('popup model', () => {
     expect(toggleEnabledBook(['cet6', 'gre'], 'cet4', true)).toEqual(['cet6', 'gre', 'cet4']);
     expect(toggleEnabledBook(['cet6', 'gre'], 'cet6', false)).toEqual(['gre']);
     expect(toggleEnabledBook(['cet6'], 'cet6', true)).toEqual(['cet6']);
+    // 难度分级、词频分级组内单选：启用一档时停用同组其他档，其他分类不受影响
+    const metas = [
+      { id: 'cefr-b1', category: 'level' },
+      { id: 'cefr-b2', category: 'level' },
+      { id: 'coca-3k', category: 'frequency' },
+      { id: 'coca-5k', category: 'frequency' },
+      { id: 'cet4', category: 'exam' },
+      { id: 'cet6', category: 'exam' },
+    ] as BookMeta[];
+    expect(toggleEnabledBook(['cet4', 'cefr-b1', 'coca-3k'], 'cefr-b2', true, metas)).toEqual(['cet4', 'coca-3k', 'cefr-b2']);
+    expect(toggleEnabledBook(['cet4', 'cefr-b2', 'coca-3k'], 'coca-5k', true, metas)).toEqual(['cet4', 'cefr-b2', 'coca-5k']);
+    expect(toggleEnabledBook(['cet4'], 'cet6', true, metas)).toEqual(['cet4', 'cet6']);
+    expect(toggleEnabledBook(['cefr-b2', 'coca-5k'], 'coca-5k', false, metas)).toEqual(['cefr-b2']);
   });
 
   it('groupBooks 按 用户/考试/词频 分组并丢弃空组', () => {
