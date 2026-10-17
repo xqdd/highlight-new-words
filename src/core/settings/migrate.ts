@@ -5,6 +5,9 @@ import { EUDIC_PROVIDER_ID, LEGACY_REMOTE_BOOK_ID, YOUDAO_PROVIDER_ID } from '..
 import { localBookId, sourceBookId } from '../wordbook/ids';
 import type { LocalBookMeta, SourceBookState, UserWord, UserWordMap } from '../wordbook/types';
 import { setOwn } from '../storage/own-record';
+import { normalizeReadingSettings } from '../reading/settings';
+import { normalizeReadingPresetState } from '../reading/presets';
+import { normalizeSiteRules } from '../sites/rules';
 
 /** 旧版 chrome.storage.local 内容（v2.x jQuery 版） */
 export interface LegacyStorage {
@@ -211,6 +214,12 @@ export function normalizeSettings(raw: unknown): Settings {
   if (!raw || typeof raw !== 'object') return defaults;
   const merged = deepMerge(defaults, raw as Record<string, unknown>) as Settings;
   merged.schemaVersion = SETTINGS_SCHEMA_VERSION;
+  merged.sites = normalizeSiteRules((raw as Record<string, unknown>).sites);
+  const readingSites = (raw as Record<string, unknown>).readingSites;
+  if (readingSites && typeof readingSites === 'object' && !Array.isArray(readingSites)) merged.readingSites = normalizeSiteRules(readingSites);
+  else delete merged.readingSites;
+  merged.reading = normalizeReadingSettings((raw as Record<string, unknown>).reading);
+  merged.readingPresets = normalizeReadingPresetState((raw as Record<string, unknown>).readingPresets, merged.reading);
   // 悬停弹卡延迟只允许固定档位：被写坏或来自未来版本的值按默认处理（缺省时 deepMerge 已补齐）
   if (!CARD_HOVER_DELAYS.includes(merged.card.hoverDelay)) merged.card.hoverDelay = defaults.card.hoverDelay;
   return merged;

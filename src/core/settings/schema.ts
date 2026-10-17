@@ -1,5 +1,8 @@
 import type { CardStyle, InlineTranslationMode, MarkStyle, TranslationStyle } from '../theme/themes';
 import type { CaptionGlossStyle } from '../theme/caption-style';
+import type { ReadingSettings } from '../reading/settings';
+import type { ReadingPresetState } from '../reading/presets';
+import type { SiteRules } from '../sites/rules';
 
 /**
  * 设置契约（存储于 chrome.storage.local 的 `settings` 键，单对象）。
@@ -218,6 +221,10 @@ export interface BookStyleOverride {
 export type TtsSource = 'system' | 'youdao-us' | 'youdao-uk' | 'eudic-us' | 'eudic-uk';
 
 export interface Settings {
+  /** 本地阅读辅助：词性线索、词首加粗、语义强调和短语释义。 */
+  reading: ReadingSettings;
+  /** 预设选择与自定义快照，不参与正文渲染配置。 */
+  readingPresets: ReadingPresetState;
   schemaVersion: number;
   /** 最近一次修改时间 ms（saveSettings 自动维护），多设备同步时按此做 LWW */
   updatedAt: number;
@@ -296,10 +303,10 @@ export interface Settings {
   ui: {
     theme: UiTheme;
   };
-  sites: {
-    /** 禁用高亮的站点 hostname 列表（精确匹配或后缀匹配，见 isSiteDisabled） */
-    disabled: string[];
-  };
+  /** 高亮网站规则：黑名单优先；白名单模式只在允许站点生效。 */
+  sites: SiteRules;
+  /** 未设置时阅读辅助继承高亮网站规则；独立规则不参与阅读样式预设。 */
+  readingSites?: SiteRules;
 }
 
 export type { MarkStyle, CardStyle, InlineTranslationMode, TranslationStyle };

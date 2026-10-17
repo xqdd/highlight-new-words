@@ -1,3 +1,5 @@
+import { isMediumResponseText } from '../sites/medium/dom';
+
 /**
  * 内容脚本注入到页面 DOM 中的自定义元素与属性约定（engine / card / 样式共同遵守）。
  * 使用自定义标签名而非 span+class：页面样式（如 `span {…}`）不会误伤，且易于识别“自己的节点”。
@@ -92,7 +94,7 @@ export function shouldSkipElement(el: Element, opts?: ScanOptions): boolean {
   const tag = el.tagName.toUpperCase();
   if (SKIP_TAGS.has(tag)) {
     // 代码开关打开时放行 pre/code（编辑器仍在下面跳过）
-    if (!(opts?.codeEnabled && CODE_TAGS.has(tag))) return true;
+    if (!(opts?.codeEnabled && CODE_TAGS.has(tag)) && !isMediumResponseText(el)) return true;
   }
   if ((el as HTMLElement).isContentEditable || el.getAttribute('contenteditable') === 'true') return true;
   const cls = el.classList;

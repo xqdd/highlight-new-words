@@ -23,6 +23,7 @@ import {
 import {
   dropGroup,
   hasFragments,
+  isDecorationWrite,
   findHits,
   wrapHits,
   markSurface,
@@ -133,6 +134,8 @@ export class HighlightEngine {
   private onParsed?: () => void;
   private reportTimer?: ReturnType<typeof setTimeout>;
   private recountTimer?: ReturnType<typeof setTimeout>;
+  /** 阅读包装通常是新建节点；仅摘下过含 mark 的包装需要恢复译文观察。 */
+  private detachedReadingGroups = new WeakSet<Element>();
 
   constructor(private opts: EngineOptions) {}
 
@@ -210,6 +213,7 @@ export class HighlightEngine {
     this.processed = new WeakSet();
     this.darkCache = new WeakMap();
     this.tightCache = new WeakMap();
+    this.detachedReadingGroups = new WeakSet();
     this.suppressed.clear();
     unwrapAll(this.opts.root);
     if (this.lemmas.size > 0) {
@@ -319,12 +323,16 @@ export class HighlightEngine {
   private onMutations(records: MutationRecord[]): void {
     // 重新插入文档的、尚未写入译文的 mark（见下方 addedNodes 分支）
     const reattached: HTMLElement[] = [];
+    let removedMarks = false;
     for (const r of records) {
       if (r.type === 'characterData') {
         const t = r.target as Text;
+        // 阅读模块仅把原文移入相邻视觉组；空占位不是框架改写正文。
+        if (isDecorationWrite(t)) continue;
         if (hasFragments(t)) {
           // 页面（框架）改写了原文本节点：旧片段已过时，丢弃后按新内容重做
           this.withoutObserving(() => this.unobserveMarks(dropGroup(t)));
+          removedMarks = true;
         } else if (ownerTextOf(t) || isInsideOwnNode(t)) {
           continue;
         }
@@ -337,12 +345,17 @@ export class HighlightEngine {
         if (n.nodeType === Node.TEXT_NODE && hasFragments(n as Text)) {
           this.withoutObserving(() => this.unobserveMarks(restoreGroup(n as Text)));
           this.processed.delete(n as Text);
+          removedMarks = true;
         } else if (n.nodeType === Node.ELEMENT_NODE && !n.isConnected) {
           // 页面删除了含 mark 的子树：尚未进入视口的 mark 仍被懒插入观察者持有，停止观察以便回收。
           // 仍在文档中的（被移动到别处）保留观察，否则译文永远不会写入
           const el = n as Element;
-          if (el.localName === TAG_MARK) this.unobserveMarks([el]);
-          else this.unobserveMarks(el.querySelectorAll(TAG_MARK));
+          const marks = el.localName === TAG_MARK ? [el] : el.querySelectorAll(TAG_MARK);
+          if (marks.length > 0) {
+            this.unobserveMarks(marks);
+            removedMarks = true;
+            if (el.localName === 'hnw-read') this.detachedReadingGroups.add(el);
+          }
         }
       }
       for (const n of r.addedNodes) {
@@ -351,15 +364,21 @@ export class HighlightEngine {
           // 页面把摘下的子树重新挂回（虚拟列表、keep-alive、跨任务重挂载）：其中的 mark 在删除分支已停止观察，
           // 重扫文本不会再处理它们（已高亮），需重新交给懒插入，否则永远拿不到译文。已写入译文/占位的不受影响
           const el = n as HTMLElement;
-          const marks = el.localName === TAG_MARK ? [el] : el.querySelectorAll<HTMLElement>(TAG_MARK);
-          for (const m of marks) if (!m.querySelector(TAG_TRANSLATION)) reattached.push(m);
+          // 阅读分析每段会新增大量词级包装；新包装不含待恢复的 mark，避免每词查询子树。
+          // 被页面摘下再挂回的阅读组仍需恢复观察，不能一概忽略自定义标签。
+          if (el.localName !== 'hnw-read' || this.detachedReadingGroups.has(el)) {
+            const marks = el.localName === TAG_MARK ? [el] : el.querySelectorAll<HTMLElement>(TAG_MARK);
+            for (const m of marks) if (!m.querySelector(TAG_TRANSLATION)) reattached.push(m);
+            this.detachedReadingGroups.delete(el);
+          }
         }
         if (isInsideOwnNode(n) || ownerTextOf(n)) continue;
         this.enqueue(n);
       }
     }
     if (reattached.length > 0) void this.fillTranslations(reattached);
-    if (records.some((r) => r.type === 'childList' && r.removedNodes.length > 0)) this.scheduleRecount();
+    // 阅读包装、普通文字及无关 UI 的撤销不影响徽章，避免滚动阅读时反复扫描整页。
+    if (removedMarks) this.scheduleRecount();
   }
 
   private enqueue(node: Node): void {

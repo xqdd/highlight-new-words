@@ -1,4 +1,5 @@
 import { CODE_COMMENT_STRING_SELECTOR, CODE_ROOT_SELECTOR, shouldSkipElement, type ScanOptions } from './dom';
+import { isMediumResponseText } from '../sites/medium/dom';
 
 const HAS_LETTER = /[A-Za-z]{2}/;
 
@@ -42,9 +43,12 @@ export function isRootSkipped(el: Element, opts?: ScanOptions): boolean {
  * 不在代码中返回 null。取最外层是为了让同一代码块（如 GitHub 整个文件视图）共用一个根，浮动小标注按整块重排。
  */
 export function codeRootOf(node: Node): Element | null {
-  let root = node.nodeType === Node.ELEMENT_NODE ? (node as Element).closest(CODE_ROOT_SELECTOR) : node.parentElement?.closest(CODE_ROOT_SELECTOR);
-  if (!root) return null;
-  for (let up = root.parentElement?.closest(CODE_ROOT_SELECTOR); up; up = up.parentElement?.closest(CODE_ROOT_SELECTOR)) root = up;
+  let root: Element | null = null;
+  let candidate = node.nodeType === Node.ELEMENT_NODE ? (node as Element).closest(CODE_ROOT_SELECTOR) : node.parentElement?.closest(CODE_ROOT_SELECTOR);
+  // 响应正文的 pre 不限制为代码注释，也不参与代码译文浮层；内嵌的真正 code 仍按代码处理。
+  for (; candidate; candidate = candidate.parentElement?.closest(CODE_ROOT_SELECTOR)) {
+    if (!isMediumResponseText(candidate)) root = candidate;
+  }
   return root;
 }
 

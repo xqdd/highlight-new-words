@@ -2,6 +2,7 @@ import { browser } from 'wxt/browser';
 import { DEV_LEGACY_KEYS, LEGACY_KEYS, STORAGE_KEYS, localBookKey, sourceBookKey } from '../storage/keys';
 import { SETTINGS_SCHEMA_VERSION, type Settings } from './schema';
 import { createDefaultSettings } from './defaults';
+import { evaluateSiteRules } from '../sites/rules';
 import {
   deepMerge,
   hasLegacyData,
@@ -82,13 +83,14 @@ export function watchSettings(cb: (next: Settings) => void): () => void {
 
 // ---------------- 站点禁用 ----------------
 
-/** hostname 是否被禁用：精确匹配，或匹配其父域（禁用 example.com 同时禁用 www.example.com） */
-export function isSiteDisabled(settings: Settings, hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  return settings.sites.disabled.some((d) => {
-    const rule = d.trim().toLowerCase();
-    return !!rule && (host === rule || host.endsWith('.' + rule));
-  });
+/** 网站是否被禁用：裸域名含子域，完整 URL 同时支持路径、查询参数规则。 */
+export function isSiteDisabled(settings: Settings, url: string): boolean {
+  return evaluateSiteRules(settings.sites, url).disabled;
+}
+
+/** 阅读辅助默认继承高亮规则，配置独立列表时分别判定。 */
+export function isReadingSiteDisabled(settings: Settings, url: string): boolean {
+  return evaluateSiteRules(settings.readingSites ?? settings.sites, url).disabled;
 }
 
 // ---------------- 迁移 ----------------

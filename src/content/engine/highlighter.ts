@@ -27,6 +27,24 @@ export interface HighlightOptions {
 const fragmentsOf = new WeakMap<Text, Node[]>();
 /** mark/剩余片段 -> 所属原始文本节点 */
 const ownerOf = new WeakMap<Node, Text>();
+/** 阅读视觉包装保留原 Text；生词分组还原时必须同时取回其装饰中的文字。 */
+const textDecorations = new WeakMap<Text, HTMLElement>();
+const decorationWrites = new WeakMap<Text, string>();
+/** 视觉组写回原 Text 不是框架更新；仅在本轮 observer 派发期间忽略该精确值。 */
+export function writeDecoratedText(original: Text, value: string): void {
+  original.data = value;
+  decorationWrites.set(original, value);
+  queueMicrotask(() => { if (decorationWrites.get(original) === value) decorationWrites.delete(original); });
+}
+export function isDecorationWrite(original: Text): boolean { return decorationWrites.has(original) && decorationWrites.get(original) === original.data; }
+export function registerTextDecoration(original: Text, wrapper: HTMLElement): void { textDecorations.set(original, wrapper); }
+export function detachTextDecoration(original: Text, restore: boolean): void {
+  const wrapper = textDecorations.get(original);
+  if (!wrapper) return;
+  textDecorations.delete(original);
+  if (restore) writeDecoratedText(original, original.data + (wrapper.textContent ?? ''));
+  wrapper.remove();
+}
 
 /**
  * 高亮单个文本节点：把命中的单词包裹成 `<hnw-mark><hnw-w>词</hnw-w></hnw-mark>`。
@@ -140,11 +158,15 @@ export function restoreGroup(original: Text): Element[] {
   const fragments = fragmentsOf.get(original);
   if (!fragments) return [];
   fragmentsOf.delete(original);
+  detachTextDecoration(original, true);
   let text = '';
   const marks: Element[] = [];
   for (const f of fragments) {
     ownerOf.delete(f);
-    if (f.nodeType === Node.TEXT_NODE) text += (f as Text).data;
+    if (f.nodeType === Node.TEXT_NODE) {
+      detachTextDecoration(f as Text, true);
+      text += (f as Text).data;
+    }
     else {
       text += markSurface(f as Element);
       marks.push(f as Element);
@@ -163,8 +185,10 @@ export function dropGroup(original: Text): Element[] {
   const fragments = fragmentsOf.get(original);
   if (!fragments) return [];
   fragmentsOf.delete(original);
+  detachTextDecoration(original, false);
   const marks: Element[] = [];
   for (const f of fragments) {
+    if (f.nodeType === Node.TEXT_NODE) detachTextDecoration(f as Text, false);
     ownerOf.delete(f);
     if (f.nodeType === Node.ELEMENT_NODE) marks.push(f as Element);
     (f as ChildNode).remove();

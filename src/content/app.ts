@@ -7,7 +7,7 @@ import { WordMatcher } from '@/core/match/matcher';
 import { handleContentMessages, sendToBackground } from '@/core/messaging';
 import { getKnownWordSets, type KnownWordSets } from '@/core/known/store';
 import type { BookId, Settings } from '@/core/settings/schema';
-import { getSettings, isSiteDisabled } from '@/core/settings/store';
+import { getSettings, isSiteDisabled, isReadingSiteDisabled } from '@/core/settings/store';
 import { getProviderInfo } from '@/core/source/providers';
 import { LOCAL_BOOK_KEY_PREFIX, SOURCE_BOOK_KEY_PREFIX, STORAGE_KEYS } from '@/core/storage/keys';
 import { resolveCardStyle } from '@/core/theme/resolve';
@@ -41,6 +41,8 @@ const DICT_SHARD_PROBES = 'abcdefghijklmnopqrstuvwxyz'.split('');
 export interface ContentAppOptions {
   /** 释放首屏预隐藏（可选功能，隐藏样式由 background 动态注册，见 engine/prehide.ts）；幂等 */
   releasePrehide?: () => void;
+  /** 由 WXT 监听 SPA 地址变化，完整 URL 规则随前进后退及 pushState 重新判定。 */
+  onLocationChange?: (callback: () => void) => void;
 }
 
 export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<void> {
@@ -60,12 +62,30 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
   let knownSnapshot: KnownWordSets = { words: new Set(), builtin: new Set() };
   let userKeysSnapshot = new Set<string>();
   let engine: HighlightEngine | null = null;
+  let readingTools: ReturnType<typeof import('./reading')['createReadingTools']> | undefined;
+  let readingModule: Promise<typeof import('./reading')> | undefined;
   /** 最近一次构建的 matcher：卡片打开时查生词本里实际记的词（userEntriesOf） */
   let currentMatcher: WordMatcher | undefined;
   let card: CardView | null = null;
   const isTop = window.top === window;
 
-  const active = () => settings.enabled && !isSiteDisabled(settings, location.hostname);
+  const active = () => settings.enabled && !isSiteDisabled(settings, location.href);
+  const readingActive = () => settings.enabled && !isReadingSiteDisabled(settings, location.href);
+  /** 未启用时不初始化 NLP 和阅读事件；异步加载完成后按最新设置复核。 */
+  function syncReadingTools(): void {
+    if (!readingActive() || !settings.reading.enabled) {
+      readingTools?.stop();
+      readingTools = undefined;
+      return;
+    }
+    if (!doc.body) return;
+    readingModule ??= import('./reading');
+    void readingModule.then(({ createReadingTools }) => {
+      if (!readingActive() || !settings.reading.enabled || !doc.body) return;
+      readingTools ??= createReadingTools(doc);
+      readingTools.update(settings.reading);
+    }).catch((error) => console.warn('[hnw] 阅读辅助启动失败', error));
+  }
   // 未开启预隐藏、不标注、或标注不改变排版时不需要预隐藏：设置读到后立即释放（通常早于首次绘制；未开启时页面本来就没有隐藏）
   if (!settings.performance.prehide || !active() || !layoutAffectingSettings(settings)) releasePrehide();
   /** 短释义分片预载（after/ruby 模式）；首次启动 engine 前等它就绪，见 startEngine */
@@ -182,14 +202,19 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     if (view.anchor === mark) view.update({ ...data, entry });
   }
 
-  async function startEngine(): Promise<void> {
+  let startingEngine: Promise<void> | undefined;
+  function startEngine(): Promise<void> {
+    startingEngine ??= initializeEngine().finally(() => { startingEngine = undefined; });
+    return startingEngine;
+  }
+  async function initializeEngine(): Promise<void> {
     const matcher = await buildMatcher();
     await firstScreenParsed(doc);
     // 等短释义分片就绪（最多 DICT_PRELOAD_MAX_WAIT_MS）：这样首屏 mark 与译文在同一任务内写入、一起首次绘制。
     // 否则 mark 先显示、译文下一帧才插入，mark 后面已显示的文字整体推移，“词后”模式 CLS 明显变大（兼容性测试 spring-boot +0.04）
     await Promise.race([dictPreload, new Promise((r) => setTimeout(r, DICT_PRELOAD_MAX_WAIT_MS))]);
     // frameset 等没有 body 的文档不处理
-    if (!doc.body) {
+    if (!doc.body || !active()) {
       releasePrehide();
       return;
     }
@@ -198,6 +223,7 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     if (engine) {
       engine.setCode(settings.code);
       engine.rebuild(matcher, dictionary);
+      syncReadingTools();
       return;
     }
     engine = new HighlightEngine({
@@ -217,6 +243,7 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     } finally {
       releasePrehide();
     }
+    syncReadingTools();
   }
 
   function stopEngine(): void {
@@ -250,6 +277,14 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
       releasePrehide();
     }
   }
+  if (!active() && readingActive() && settings.reading.enabled) await firstScreenParsed(doc);
+  syncReadingTools();
+  appOpts.onLocationChange?.(() => {
+    extras.settingsChanged();
+    syncReadingTools();
+    if (!active()) stopEngine();
+    else if (!engine) void startEngine().catch(error => console.warn('[hnw] 地址变化后高亮启动失败', error));
+  });
 
   // 存储变化：设置 / 熟词本 / 用户词书
   browser.storage.onChanged.addListener(async (changes, area) => {
@@ -262,9 +297,18 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     const prev = settings;
     if (changes[STORAGE_KEYS.settings]) {
       settings = await getSettings();
-      extras.settingsChanged();
+      // 预设记忆只供设置页使用；保存快照或更新时间不应让长文重新套用样式与扫描。
+      const { readingPresets: _previousPresets, updatedAt: _previousTime, ...previousPageSettings } = prev;
+      const { readingPresets: _nextPresets, updatedAt: _nextTime, ...nextPageSettings } = settings;
+      const pageSettingsChanged = JSON.stringify(previousPageSettings) !== JSON.stringify(nextPageSettings);
+      const pageDataChanged = Object.keys(changes).some(
+        (key) => key === STORAGE_KEYS.knownWords || key.startsWith(SOURCE_BOOK_KEY_PREFIX) || key.startsWith(LOCAL_BOOK_KEY_PREFIX),
+      );
+      if (!pageSettingsChanged && !pageDataChanged) return;
+      if (pageSettingsChanged) extras.settingsChanged();
     }
-    const wasActive = prev.enabled && !isSiteDisabled(prev, location.hostname);
+    const wasActive = prev.enabled && !isSiteDisabled(prev, location.href);
+    syncReadingTools();
     if (!active()) {
       if (wasActive) stopEngine();
       return;
@@ -300,6 +344,7 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     applyPageStyle(doc, settings);
     card?.setStyle(resolveCardStyle(settings));
     engine?.setInlineTranslation(settings.inlineTranslation.mode, !!settings.inlineTranslation.blur, settings.inlineTranslation.oncePerParagraph !== false);
+    syncReadingTools();
   });
 
   if (isTop) {

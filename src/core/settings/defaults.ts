@@ -1,4 +1,6 @@
 import { DEFAULT_THEME_ID } from '../theme/themes';
+import { createDefaultReadingSettings } from '../reading/settings';
+import { createReadingPresetState } from '../reading/presets';
 import { EUDIC_PROVIDER_ID, YOUDAO_PROVIDER_ID } from '../source/providers';
 import { LOCAL_KNOWN_BOOK_ID, MY_WORDS_BOOK_ID, SETTINGS_SCHEMA_VERSION, type Settings, type SourceSettings, type WordActionSettings } from './schema';
 
@@ -31,6 +33,8 @@ export function createDefaultWordActions(): WordActionSettings {
 export function createDefaultSettings(): Settings {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
+    reading: createDefaultReadingSettings(),
+    readingPresets: createReadingPresetState(),
     updatedAt: 0,
     enabled: true,
     books: { enabled: [...DEFAULT_ENABLED_BOOKS] },
@@ -73,6 +77,6 @@ export function createDefaultSettings(): Settings {
     ui: { theme: 'auto' },
     // 首屏预隐藏默认关：隐藏会推迟首次绘制（维基桌面约 +300ms），由用户按需开启
     performance: { prehide: false },
-    sites: { disabled: [] },
+    sites: { mode: 'all', disabled: [], allowed: [] },
   };
 }

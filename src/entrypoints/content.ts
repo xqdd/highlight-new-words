@@ -11,13 +11,13 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   allFrames: true,
   runAt: 'document_start',
-  main() {
+  main(ctx) {
     // 非 HTML 文档（如 XML/SVG 直接打开）跳过；body 在 DOM 就绪后由 app 检查
     if (document.documentElement && !(document.documentElement instanceof HTMLElement)) return;
     // 首屏预隐藏（可选，默认关）：隐藏样式由 background 按设置动态注册，这里只同步检查是否生效并启动兜底计时，
     // 首屏标注与译文写完后由 app 释放；未开启时为空操作，页面照常绘制。见 prehide.ts
     const releasePrehide = prehidePage(document);
-    startContentApp({ releasePrehide }).catch((e) => {
+    startContentApp({ releasePrehide, onLocationChange: callback => ctx.addEventListener(window, 'wxt:locationchange', callback) }).catch((e) => {
       releasePrehide();
       console.warn('[hnw] 内容脚本启动失败', e);
     });

@@ -244,4 +244,59 @@ describe('页面删除未进入视口的 mark：懒插入观察者停止持有�
     expect(farMarks.every((m) => RecordingIO.held.has(m))).toBe(true);
     expect(RecordingIO.held.has(near)).toBe(false);
   });
+
+  it('阅读包装跨任务摘下再挂回时恢复已有 mark 的译文观察', async () => {
+    vi.stubGlobal('IntersectionObserver', RecordingIO);
+    document.body.innerHTML = '<hnw-read data-group><hnw-read>A premise here.</hnw-read></hnw-read>';
+    engine = startEngine();
+    await flush();
+    const group = document.querySelector('hnw-read[data-group]')!;
+    const mark = group.querySelector('hnw-mark')!;
+    expect(RecordingIO.held.has(mark)).toBe(true);
+    group.remove();
+    await flush();
+    expect(RecordingIO.held.has(mark)).toBe(false);
+    document.body.appendChild(group);
+    await flush();
+    expect(RecordingIO.held.has(mark)).toBe(true);
+  });
+});
+
+describe('阅读包装 mutation 的扫描成本', () => {
+  it('新阅读词包装保留生词扫描，但不逐词查找已有 mark；无 mark 的删除不重扫整页统计', async () => {
+    document.body.innerHTML = '<p>A premise here.</p><section></section>';
+    engine = new HighlightEngine({ root: document.body, matcher: matcherWith(), dictionary: dict, inlineTranslation: 'after', onLemmasChanged: vi.fn() });
+    engine.start();
+    await flush();
+    const section = document.querySelector('section')!;
+    const group = document.createElement('hnw-read');
+    group.innerHTML = '<hnw-read>abandon</hnw-read><hnw-read>ordinary</hnw-read>';
+    const query = vi.spyOn(group, 'querySelectorAll');
+    const rootQuery = vi.spyOn(document.body, 'querySelectorAll');
+    try {
+      section.appendChild(group);
+      await flush();
+      expect(query).not.toHaveBeenCalledWith('hnw-mark');
+      expect(group.querySelector('hnw-mark')?.getAttribute('data-lemma')).toBe('abandon');
+      group.lastElementChild!.remove();
+      await new Promise((resolve) => setTimeout(resolve, 450));
+      expect(rootQuery).not.toHaveBeenCalledWith('hnw-mark');
+    } finally {
+      query.mockRestore();
+      rootQuery.mockRestore();
+    }
+  });
+
+  it('框架把原文本改成无生词内容后同步更新徽章词条', async () => {
+    document.body.innerHTML = '<p>A premise here.</p>';
+    const original = document.querySelector('p')!.firstChild as Text;
+    const report = vi.fn();
+    engine = new HighlightEngine({ root: document.body, matcher: matcherWith(), dictionary: dict, inlineTranslation: 'after', onLemmasChanged: report });
+    engine.start();
+    await flush();
+    original.data = 'Nothing else here.';
+    await new Promise((resolve) => setTimeout(resolve, 850));
+    expect(engine.matchedLemmas).toEqual([]);
+    expect(report).toHaveBeenLastCalledWith([]);
+  });
 });
