@@ -60,7 +60,6 @@ MORE
 - Site allowlists and blocklists support domains, wildcards and restricted regular expressions. Reading aids can use separate rules or inherit the global rules. The toolbar badge and popup show page words and sync status.
 - Page text is matched locally and never uploaded. The extension has no developer server and no analytics.
 
-Privacy policy: <privacy policy URL>
 Feedback: https://github.com/xqdd/highlight-new-words/issues
 ```
 

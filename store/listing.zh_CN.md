@@ -60,7 +60,6 @@
 · 页面文字只在本地匹配，不上传任何服务器；本扩展没有开发者服务器，也不做统计。
 · 界面为简体中文。
 
-隐私政策：<隐私政策网址>
 问题反馈：https://github.com/xqdd/highlight-new-words/issues
 ```
 
