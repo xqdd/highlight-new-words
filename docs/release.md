@@ -18,7 +18,7 @@
 | [permissions.md](../store/permissions.md) | 单一用途、逐项权限说明、远程代码、数据使用披露（隐私表单填写稿） |
 | [privacy-policy.md](../store/privacy-policy.md) / [privacy-policy.en.md](../store/privacy-policy.en.md) | 隐私政策（需公开托管） |
 | [review-notes.md](../store/review-notes.md) | 审核备注（Edge “Notes for certification”），含 YouTube 字幕、手机悬浮球的测试步骤与云端来源默认不连接的说明 |
-| [images/](../store/images) | 截图（中英各 6 张：Chrome 传 1–5，Edge 全传）、宣传图、商店图标、Edge 徽标；`raw/` 为截图原始素材，已被 .gitignore 忽略，可由 store/scripts 重新生成；其余图片纳入版本控制 |
+| [images/](../store/images) | 截图（中英各 6 张：Chrome 传 1–5，Edge 全传）、宣传图、商店图标、Edge 徽标；含原文阅读效果与主题配置。`raw/` 为截图原始素材，已被 .gitignore 忽略，可由 store/scripts 重新生成；其余图片纳入版本控制 |
 | [scripts/](../store/scripts) | `capture.mjs` 采集原图，`render.mjs` 套模板出图 |
 
 ## 二、构建与打包
@@ -92,12 +92,12 @@ flowchart TD
 
 - **权限最小化**：两家都会逐项核对权限，每一项都要有真实调用（当前为 `storage`、`unlimitedStorage`、`tts`、`tabs`、`contextMenus`、`scripting`，`cookies` 已移除）。新增权限要同步更新 [permissions.md](../store/permissions.md)。
 - **广泛主机权限**：`http/https` 全站权限会触发更细的人工审核，延长审核时间；理由必须写清“内容脚本需在任意网页本地匹配，不上传页面内容”。
-- **简短描述 ≤ 132 字符**：Chrome 上传时校验，当前中文 39 字符、英文 118 字符。
+- **简短描述 ≤ 132 字符** ：Chrome 上传时校验，当前中文 70 字符、英文 126 字符。
 - **隐私披露一致**：商店表单、隐私政策、审核备注、实际网络请求必须一致；新增来源/同步方式时一起改。云端来源（有道、欧路）默认不连接，安装后不向第三方发请求；用户打开来源即同步一次，之后每天同步一次。隐私政策与审核备注都已写明，改默认值时同步修改。
 - **无远程代码**：不得从网络加载并执行脚本；内置数据只能是扩展包内 JSON。
 - **截图真实**：截图来自真实运行（[capture.mjs](../store/scripts/capture.mjs)），界面改版后要重新采集，避免与实际不符。
 - **不得堆砌关键词**、不得在描述中冒用“有道”“欧路”等品牌暗示官方合作；描述中只说明“支持同步其生词本”。
-- **单一用途**：功能都围绕“网页生词高亮与释义”，不要加入与此无关的功能（如通用翻译、广告）。
+- **单一用途** ：功能围绕英文原文阅读与词汇学习，包括生词释义及本地阅读标记；不提供通用翻译或广告。
 - **界面语言**：界面目前只有简体中文，英文描述中已注明，避免英文用户误解后差评或被认为描述不实。
 
 ## 七、隐私政策托管
@@ -116,7 +116,7 @@ flowchart TD
 
 | 素材 | Chrome | Edge | 文件 |
 | --- | --- | --- | --- |
-| 截图 | 1280x800 或 640x400，1–5 张，直角无留白 | 1280x800 或 640x480，最多 6 张 | `store/images/screenshots-zh/`、`screenshots-en/` 各 6 张 1280x800（卡片、行内释义、YouTube 字幕、手机与悬浮球、弹窗、样式）；Chrome 传 1–5 |
+| 截图 | 1280x800 或 640x400，1–5 张，直角无留白 | 1280x800 或 640x480，最多 6 张 | `store/images/screenshots-zh/`、`screenshots-en/` 各 6 张 1280x800（卡片、原文阅读与行内释义、YouTube 字幕、手机与悬浮球、弹窗、统一标记主题）；Chrome 传 1–5 |
 | 小宣传图 | 440x280，必填，不可本地化 | 440x280，可选 | `promo-small-440x280.png` |
 | 大宣传图 | 1400x560，可选 | 1400x560，可选 | `promo-marquee-1400x560.png` |
 | 图标 / 徽标 | 128x128 PNG（96 图形 + 16 透明边） | 1:1，建议 300x300 | `icon-store-128.png`、`logo-edge-300.png` |
@@ -174,14 +174,14 @@ npm run build:firefox            # 产物 ${OUT_DIR:-.output}/firefox-mv3
 
 ## 十一、发版检查清单
 
-最近一次核对：2026-10-01，版本 3.0.0，分支 `refactor/v3` 当前构建。未勾选项写明原因，发版前由人工补齐。
+最近一次本地材料更新：2026-10-16，版本 3.1.0。商店名称为“生词高亮：英文原文阅读 · 生词本与行内释义”，英文名称为“Highlight New Words: English Reading & Vocabulary”。以下本地材料已准备，商店提交与线上验证尚未执行。
 
 **代码与包**
 
-- [ ] `package.json` 版本号已递增（首发 3.0.0），与 tag 一致 —— 版本号为 3.0.1（词书扩充与“词书作熟词本”）；tag `v3.0.1` 待发版提交时打
-- [ ] `npm ci && npm run typecheck && npm test` 通过（以发版提交为准重跑；2026-10-01 最近一次全量为 485 通过、1 跳过，另有并行开发中的 `options-fix`、`lemma` 用例未收尾，发版前须全绿）
-- [x] `npm run zip` 成功；解压 chrome zip 检查 `manifest.json`：版本号 3.0.0、权限 `storage`/`unlimitedStorage`/`tts`/`tabs`/`contextMenus`/`scripting`、无 `browser_specific_settings`
-- [x] `_locales/*/messages.json`：`appName` ≤ 75 字符、`appDesc` ≤ 132 字符（中文 20/39，英文 66/118）
+- [x] `package.json` 与锁文件版本已升至 3.1.0；未创建提交或 tag
+- [x] 类型检查通过；原文阅读全量验证记录见[实现与验收](reading-progress.md)，本轮商店更新另通过发布与升级提示相关 51 项单测
+- [x] `npm run zip` 成功；chrome manifest 版本号为 3.1.0，权限不变，无 `browser_specific_settings`
+- [x] `_locales/*/messages.json`：`appName` ≤ 75 字符、`appDesc` ≤ 132 字符（中文 22/70，英文 49/126）
 - [x] 权限列表中每一项都在代码中有真实用途（`cookies` 已移除）
 - [x] 无远程代码：产物中没有对外部脚本 URL 的 `import`/`<script src>`
 
@@ -194,11 +194,12 @@ npm run build:firefox            # 产物 ${OUT_DIR:-.output}/firefox-mv3
 
 **商店材料**
 
-- [x] 截图与当前界面一致，否则重新 `capture.mjs` + `render.mjs` —— 2026-10-03 词书扩充与“词书作熟词本”改版后用当前构建全部重采：README 用的设置页截图 [options-0-welcome.png](./images/options-0-welcome.png)、[options-1-books.png](./images/options-1-books.png)（首次引导按难度/考试/词频分组单选；词书页带搜索筛选、正在使用分列生词本与熟词本、每本书的“生词”“熟词”按钮），以及商店截图 `store/images/screenshots-*`（`capture.mjs` 采桌面卡片时先打开一次让首次触发方式提示记为已看到，再重开截图；popup 熟词标签为“本地熟词”；YouTube 截图无变化，宣传图未变）
-- [x] 详细描述中列出的功能都已上线，且覆盖全部功能（YouTube 字幕、悬浮球、代码块标注、卡片触发方式、加入生词本、WebDAV 与手动备份、词书作熟词本、通用核心词与专业领域词表）；中文约 1,360 字符、英文约 3,900 字符，符合 Edge 250–10,000
+- [x] 用 3.1.0 构建重新执行 `capture.mjs` 与 `render.mjs`：中英各六张商店截图与两张宣传图已更新，第二张展示原文阅读与行内释义，第六张展示统一标记主题
+- [x] 中英文详细描述补齐 11 类词性、四类语义标记、81 套主题、自定义记忆、样式优先级、短语词典与网站规则；中文正文 1,736 字符、英文正文 5,004 字符，符合 Edge 250–10,000
 - [x] [permissions.md](../store/permissions.md) 与 manifest 权限逐项一致
 - [ ] 隐私政策已托管且可公开访问，内容与实际网络请求一致，描述中的占位网址已替换 —— 内容已与实际请求一致（含云端来源默认不连接的说明）；托管与占位网址替换待推送公开仓库后完成
-- [ ] 更新说明（GitHub Release）写明新增权限或行为变化 —— 发版时编写
+- [x] 扩展内 3.1.0 更新说明包含原文阅读、样式优先级、短语词典和网站规则；升级后首次打开设置自动显示，关闭记为已读，也可从“更多配置”重看
+- [ ] GitHub Release 与 tag —— 未执行远程发布
 
 **提交后**
 

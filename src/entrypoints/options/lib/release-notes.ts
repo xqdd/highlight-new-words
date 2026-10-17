@@ -6,7 +6,7 @@ import { STORAGE_KEYS } from '@/core/storage/keys';
  * 升级后首次打开选项页时显示的“更新说明”：只写与旧版或直觉不同的行为，每条一句话，并给出去设置的位置。
  * 内容变化时递增 RELEASE_NOTES_VERSION，已读版本存在 storage.local `uiNotesSeen`，与当前版本相等才算已读（不是“不低于”，版本只递增；自动化脚本要跳过弹窗时写入当前版本号）。
  */
-export const RELEASE_NOTES_VERSION = '3.0.1';
+export const RELEASE_NOTES_VERSION = '3.1.0';
 
 export interface ReleaseNote {
   title: string;
@@ -16,6 +16,31 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    title: '新增原文阅读',
+    body: '词首加粗、11 类词性与 4 类语义线索均在本地分析。81 套标记主题可选，开关、样式和颜色统一配置，自定义后切换预设仍可恢复。默认关闭，可按需开启。',
+    link: { page: 'reading', label: '去设置' },
+  },
+  {
+    title: '阅读样式与生词释义可以搭配',
+    body: '可选择阅读或生词样式优先；仅显示译文时也能保留阅读标记。选中短语可查看内置词典释义，不需要翻译接口。',
+    link: { page: 'reading', label: '查看' },
+  },
+  {
+    title: '文章和评论的阅读标记更完整',
+    body: '补充 YouTube 描述与动态评论、Medium 响应正文和表格的阅读标记，修复姓名紧接引号时首词漏标，并改进 someone、there、what 等词的本地词性分类。',
+    link: { page: 'reading', label: '查看' },
+  },
+  {
+    title: '长文滚动性能优化',
+    body: '扩大上下左右预读，保留最近阅读过的部分标记，减少来回滚动的重复等待；连续滚动时优先响应页面，停稳后补上新区域标记。',
+    link: { page: 'reading', label: '查看' },
+  },
+  {
+    title: '按网站控制阅读辅助',
+    body: '黑白名单支持域名、通配符和受限正则。原文阅读可单独配置，未配置时继承全局规则；更多设置分组默认收起。',
+    link: { page: 'sites', label: '去设置' },
+  },
   {
     title: '任意词书都能作熟词本',
     body: '词书页每本书有“生词”“熟词”两个按钮：学过的考试书点“熟词”，其中的词不再高亮。难度/词频分级点“熟词”表示“低于该档”的词都已掌握，可与生词档同时选；计算机三档也可生词、熟词各选一档。组标题“全选”会跳过作熟词本的书。',

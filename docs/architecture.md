@@ -93,7 +93,8 @@ flowchart LR
 | `wordActions` | 单词操作目标（见 4.9）：`sameLemma` 同原形开关（默认开）；`addTargets` 加入生词本写入的书（默认 `local:mine` “我的生词本”）；`addRemoveFromKnown` 加入时移出的熟词本（默认本地熟词本 `known:local`）；`knownTargets` 认识时写入的熟词本（默认 `known:local`）；`knownRemoveFrom` 认识时移除的生词本，`'auto'` = 沿用各来源 `deleteOnKnown` |
 | `sync` | 本机同步配置（不参与同步）：`enabled`/`include` 为 chrome.storage.sync 后端；`webdav` 为 WebDAV 后端（`enabled/url/username/password/dir/include(+sourceBooks)/autoSync{onChange,onStartup,intervalMinutes}`），见 4.11 |
 | `credentialSync` | 凭据是否随同步上传：`token:<providerId>`（来源 API token）、`webdav`（WebDAV 连接信息含密码），默认全部 false；本字段参与设置同步，各设备一致，见 4.11 |
-| `sites.disabled` | 禁用站点（含子域名，见 `isSiteDisabled`） |
+| `sites` | 生词高亮网站规则：`mode` 为所有网站或仅白名单，`disabled` 为黑名单、`allowed` 为白名单；黑名单优先，域名规则含子域名 |
+| `readingSites` | 阅读辅助独立网站规则，结构同 `sites`；缺省继承全局，显式空规则为独立允许所有网站 |
 | `ui.theme` | 扩展页面（popup/options）界面主题 `auto`/`light`/`dark`（options 分片新增，默认 `auto`）；页面在根元素设置 `data-theme`，`auto` 时不设置、跟随系统 |
 | `youtube` | YouTube 字幕（v9，floatball 负责）：`captions` 字幕中标注生词（默认开）；`captionTranslation` 字幕内生词译文 `above` 上方注解（默认）/ `below` 下方注解 / `after` 词后小字 / `off` 只高亮（手机全屏时自动生成字幕的 `above`/`below` 改用 `after`）；`captionStyle`（可选）字幕注解样式：`color`（空串=跟随字幕文字颜色，缺省暖黄）、`background`（空串=无底色，改用加重黑色描边）、`fontScale`（相对字幕字号 0.55–1，缺省 0.64）、`bracket`（缺省不加，三种模式都适用）、`bold`、`italic`，类型、缺省值、7 套预设 `CAPTION_GLOSS_PRESETS` 与 `resolveCaptionStyle`/`applyCaptionPreset`/`matchCaptionPreset` 在 [caption-style.ts](../src/core/theme/caption-style.ts)；`hoverPause` 桌面悬停字幕自动暂停（默认关）。见 4.12 |
 | `floatBall` | 通用悬浮球（v10，floatball 新增）：`enabled` 全局开关（默认开）、`hiddenSites` 隐藏悬浮球的站点（规则同 `sites.disabled`）。只在触屏/手机端显示 |
@@ -379,8 +380,8 @@ flowchart LR
 - 实时预览（`LivePreview`）直接调用 engine 的 `highlightTextNode`/`setMarkTranslation`/`buildPageCss` 生成 DOM 与样式（把 `html[data-hnw-tr=…]` 替换为容器属性选择器），engine 调整 DOM 结构或样式时预览自动一致，请保持这三个导出的签名（engine 第二阶段只给 `highlightTextNode` 追加了可选的第 4 个参数，并新增 `hover` 模式选择器，同样是 `html[data-hnw-tr="hover"]` 写法；预览要展示链接内效果时可以给 mark 加 `data-hnw-link`）。
 - [tokens.css](../src/ui/tokens.css) 支持 `:root[data-theme="light|dark"]` 强制主题，新增 `--success/--warn/--danger-soft/--overlay/--radius-lg` 令牌。
 - 释义卡片（`#appearance/card`，标题与卡片首次提示中的“设置 › 释义卡片”一致）：`CardTriggerSection` 编辑 `card.trigger`/`card.modifier`（v11），修饰键选项、显示名与平台换算直接复用 card 的 [trigger-config.ts](../src/content/card/trigger-config.ts)（`modifierChoices`/`effectiveModifier`/`modifierLabel`/`modifierShort`/`isMacPlatform`），界面上 `auto` 显示为“鼠标悬停”；带“仅电脑端”标识与就地“试一试”演示，触屏设备上额外说明本机始终点按。方式选项的副标题是与具体键无关的固定文案，修饰键冲突说明与悬停延迟三档（`card.hoverDelay`，悬停/修饰键方式显示，演示用同一延迟）的文案在 [lib/card-trigger.ts](../src/entrypoints/options/lib/card-trigger.ts)。
-- 首屏预隐藏开关（`performance.prehide`）在外观页“行内译文”的“高级”折叠区，切换时同时改本页设置并 `patchSettings` 立即落盘；生效条件说明复用 engine 的 `layoutAffectingSettings`（[lib/performance.ts](../src/entrypoints/options/lib/performance.ts)）。悬浮球（`#more/floatball`：`floatBall.enabled` 与 `hiddenSites` 逐个恢复）与 YouTube 字幕（`#more/youtube`：`youtube.captions`/`captionTranslation`/`hoverPause`）在“更多”页。
-- 选项页路由为 hash：`#books`/`#appearance`/`#sources`/`#known`/`#sync`/`#more`，可带页内锚点（如 `#appearance/per-book`、`#sources/word-actions`、`#sync/webdav`）；旧链接 `#more/sync`（及 `webdav`/`backup`/`credentials` 锚点）自动转到 `#sync`；`#welcome` 为首次使用引导，background 可在 `onInstalled(reason=install)` 时打开 `options.html#welcome`。首次打开带锚点的地址同样定位（route watch `immediate`，等设置加载、分组页渲染后瞬时滚动）；外观页把吸顶预览区高度写入 `--anchor-offset`，作为本页小节的 `scroll-margin-top`，锚点标题不被预览遮住。
+- 首屏预隐藏开关（`performance.prehide`）在外观页“行内译文”的“高级”折叠区，切换时同时改本页设置并 `patchSettings` 立即落盘；生效条件说明复用 engine 的 `layoutAffectingSettings`（[lib/performance.ts](../src/entrypoints/options/lib/performance.ts)）。发音与悬浮球位于[查词页](../src/entrypoints/options/pages/LookupPage.vue)（`#lookup/tts`、`#lookup/floatball`），网站规则位于[网站页](../src/entrypoints/options/pages/SitesPage.vue)（`#sites`），YouTube 字幕位于[阅读页](../src/entrypoints/options/pages/ReadingPage.vue)（`#reading/youtube`）。“更多”保留代码标注、界面主题及引导、更新说明、恢复默认等低频设置。
+- 选项页路由为 hash：`#books`/`#appearance`/`#reading`/`#lookup`/`#sites`/`#sources`/`#known`/`#sync`/`#more`，可带页内锚点（如 `#appearance/per-book`、`#sources/word-actions`、`#sync/webdav`）。原 `#more` 下迁出的同步、发音、悬浮球、网站和字幕锚点定位到对应分组。桌面侧栏显示全部分组，手机底部保留词书、外观、阅读、查词四个入口，其余通过“全部设置分组”菜单进入。`#welcome` 为首次使用引导，background 可在 `onInstalled(reason=install)` 时打开 `options.html#welcome`。首次打开带锚点的地址同样定位（route watch `immediate`，等设置加载、分组页渲染后瞬时滚动；异步阅读页挂载后再次定位）；外观页把吸顶预览区高度写入 `--anchor-offset`，作为本页小节的 `scroll-margin-top`，锚点标题不被预览遮住。
 
 ### 4.8 生词本来源（Source Provider）
 
@@ -527,7 +528,7 @@ flowchart LR
 
 - **`SiteContext`**（[sites/types.ts](../src/content/sites/types.ts)）：适配层与悬浮球访问 app 状态的唯一接口——设置、是否生效、卡片、`openCard(anchor)`（锚点可以是带 `data-lemma`/`data-books` 的任意元素，包括 Shadow DOM 内的元素）、`lookupMany`、`createMatcher`（与 engine 同口径的生词判断）、`lemmaCandidates`、`pageLemmas`、`markKnown`/`unmarkKnown`（与卡片“认识”同一流程）、`onSettingsChange`。
 - **浮层宿主**（[floatball/host.ts](../src/content/floatball/host.ts)）：自定义标签 + open Shadow DOM，z-index 2147483646（比卡片低 1，卡片总在面板之上）；宿主内事件不冒泡到页面；全屏时 `followFullscreen` 把悬浮球、站点面板和 `hnw-card-host` 一起迁入全屏元素（桌面 YouTube 全屏元素是 `<html>` 不用迁，m.youtube.com 是 `#movie_player`）。
-- **悬浮球**：只在 `(hover: none) and (pointer: coarse)` 时显示（不看 UA，PC 不显示），可拖动、吸附左右边缘（拖离边缘时可拖动取词，见下），3 秒无操作或滚动时缩成边缘外露出约 20px 的强调色小标签（白色内描边 + 深色外阴影，深浅背景上都看得见），上下避开状态栏与手势条。菜单里“在本站隐藏 / 全部关闭”后 toast 带“撤销”，宿主保留到 toast 结束；恢复入口在选项页“更多 › 悬浮球”。点按：取词模式中 → 退出；站点有 primary 功能项（YouTube 视频页“当前字幕”）→ 直接执行；否则打开底部抽屉菜单：取词模式、本站高亮开关、本页生词（点开卡片 / 认识）、快捷设置（行内释义、高亮样式预设、词书生词开关、YouTube 字幕译文、隐藏悬浮球；词书 chip 只做生词开关，先过滤“仅作熟词本”的书，只列已启用的书（按启用顺序在前）和难度分级/考试/词频分级三组中未启用的内置书，同 ladder/group 组内单选并维护与熟词本的互斥，其余书（通用核心词、专业领域、未启用的用户词书）由末尾“全部词书…”打开选项页 `#books`，见 `model.ts#quickBookChips`）、同步状态（点按立即同步全部；有未登录等问题时去选项页对应位置；文案中性，只写“有道待设置”之类，不常驻原始报错，见 `model.ts#syncFootText`）、完整设置。功能块与标签栏固定，只有标签页内容滚动。设置直接写 storage 中的 settings（与 popup 同一份数据），预设切换复用 options 的 `applyPreset`，站点/词书切换复用 popup `model.ts`（词书开关为 `setNewBookEnabled`）。
+- **悬浮球** ：只在 `(hover: none) and (pointer: coarse)` 时显示（不看 UA，PC 不显示），可拖动、吸附左右边缘（拖离边缘时可拖动取词，见下），3 秒无操作或滚动时缩成边缘外露出约 20px 的强调色小标签（白色内描边 + 深色外阴影，深浅背景上都看得见），上下避开状态栏与手势条。菜单里“在本站隐藏 / 全部关闭”后 toast 带“撤销”，宿主保留到 toast 结束；恢复入口在选项页“查词 › 悬浮球”。点按：取词模式中 → 退出；站点有 primary 功能项（YouTube 视频页“当前字幕”）→ 直接执行；否则打开底部抽屉菜单：取词模式、本站高亮开关、本页生词（点开卡片 / 认识）、快捷设置（行内释义、高亮样式预设、词书生词开关、YouTube 字幕译文、隐藏悬浮球；词书 chip 只做生词开关，先过滤“仅作熟词本”的书，只列已启用的书（按启用顺序在前）和难度分级/考试/词频分级三组中未启用的内置书，同 ladder/group 组内单选并维护与熟词本的互斥，其余书（通用核心词、专业领域、未启用的用户词书）由末尾“全部词书…”打开选项页 `#books`，见 `model.ts#quickBookChips`）、同步状态（点按立即同步全部；有未登录等问题时去选项页对应位置；文案中性，只写“有道待设置”之类，不常驻原始报错，见 `model.ts#syncFootText`）、完整设置。功能块与标签栏固定，只有标签页内容滚动。设置直接写 storage 中的 settings（与 popup 同一份数据），预设切换复用 options 的 `applyPreset`，站点/词书切换复用 popup `model.ts`（词书开关为 `setNewBookEnabled`）。
 - **长按选词查词**（悬浮球显示时常开）：手机长按单词时浏览器选中该词，选区恰好是一个英文单词且来自最近的触摸时直接打开卡片（`PickMode#enableLongPress`），不清除选区、不影响系统复制菜单；选区拖大成短语时收起卡片。
 - **拖动取词**：拖动悬浮球（超过 6px 才算拖动，否则仍是点按）时，球心离左右屏幕边缘超过 56px 就在球心正上方 60px 处显示准星（避开手指），每帧（rAF）最多取词一次，准星下的单词显示预览框（与卡片锚点的取词框分开）。松手时准星下有单词 → 打开该词卡片（高亮词以 `hnw-mark` 为锚点，其他词与取词模式同样放取词框），球回到拖动前的位置、不改记忆位置；准星下没有单词或球在贴边区 → 照常移到松手处吸边并记忆；`pointercancel` 不取词。准星位置与贴边区判定见 `model.ts#dragAimPoint`，命中测试复用 `PickMode#probeAt`。
 - **取词模式**：document 捕获阶段的 click + `caretPositionFromPoint`/`caretRangeFromPoint` 取点按位置的单词（必须真的落在单词框内），在悬浮球 Shadow DOM 中放一个与单词同位置的取词框作为卡片锚点，不改页面 DOM；高亮词交给通用卡片触发；取词模式中点按一律不跳链接，可编辑区除外。
@@ -579,7 +580,49 @@ node scripts/qa/shot.mjs --ext /tmp/gauntlet/out/engine/chrome-mv3 --out /tmp/ga
 
 stdout 输出每页统计 JSON（高亮数、不同词条数、行内翻译数、页面错误、卡片是否打开）。
 
-## 七、已知缺口
+## 七、阅读辅助
+
+设置入口为[阅读页](../src/entrypoints/options/pages/ReadingPage.vue)，统一配置为 `Settings.reading`。默认值、输入归一化、预设及视觉开关判断集中在[阅读设置](../src/core/reading/settings.ts)，沿用原有设置监听、同步与备份流程。
+
+两级预设与自定义快照由[预设模型](../src/core/reading/presets.ts)管理，保存在 `Settings.readingPresets`。全局、仿生阅读与统一标记主题分别保留自定义；统一主题的 `marking` 快照同时保存词性和语义配置，升级时继承已有的分组自定义。页面渲染只读取 `reading`，仅快照元数据变化不触发内容重新扫描。
+
+设置页将词性与语义标记、仿生阅读和短语释义分为独立区块，以分隔线与留白区分功能。词性与语义通过[统一标记配置](../src/core/reading/marking.ts)共用条目注册表及读取、修改接口，所有具体条目的开关、样式和颜色放在同一个默认折叠区，展开后一起显示。YouTube 字幕使用独立导航分组，原字幕锚点跳转到该分组。
+
+阅读预览在原文阅读页吸顶显示，手机上位于顶栏下方；预览正文限制高度并可独立滚动，配置项定位为预览预留空间。
+
+总配置导航在桌面侧栏和手机全部分组菜单中均将词书、外观、原文阅读、查词、生词本与熟词直接显示，其余入口放在默认折叠的“更多配置”中；当前访问其中的分组时自动展开，以显示所在位置。
+
+[设置绑定](../src/ui/composables/useSettings.ts)在防抖等待与保存期间保留本地编辑，通过修订计数屏蔽旧存储回流，并串行保存。最新修订保存后重新读取存储；没有待保存编辑时照常接收其他页面的设置更新，避免快速切换预设时丢失修改。
+
+全局提供九组预设（含全关），所有配置均移除全开预设。统一标记主题共 81 套（不含全关），文字颜色、实线、点线、波浪线、柔和底色、荧光笔和描粗每种至少九套配色，另有九套混合样式。主题一次配置十一类词性和四类语义线索，每个条目仍可独立关闭、覆盖样式和颜色；手动修改更新同一份标记自定义快照。新增词类使用色板内的混合色，整套随主题切换。界面按样式筛选并展示实际样式预览，浏览分类不修改配置。词首加粗使用比例、强度、单词间隔和最短词长，不改变网页字号、行高或正文宽度。
+
+视觉标注按文字色、线条、背景和描粗通道叠加，同一通道冲突时强调项优先。描粗使用描边保留原文宽度，背景与荧光笔使用透明色保留网页文字颜色；不修改原网页的字号、行高和正文宽度。
+
+`reading.wordStylePriority` 配置阅读或生词样式优先，默认阅读优先。阅读模块保留生词 DOM，在 `hnw-w` 上应用可撤销的样式与前缀属性，不插入嵌套包装，也不修改译文。生词后续插入或重建时仅同步对应段落的生词样式，避免双方循环重建；关闭时恢复原属性。生词优先时取消包含生词的阅读词级包装样式，正文其余阅读效果保持。
+
+本地词性覆盖十一类：动词、名词、形容词、副词、代词、限定词、介词、连词、数词、感叹词与小品词；否定、逻辑连接、数量和专名仍保留独立语义配置。分类使用 compromise 上下文标签，并将动词前的 `to` 识别为不定式标记，介词 `to` 保持介词；数量提示包含英文数词和序数词。分类依据参考 [Cambridge 词类说明](https://dictionary.cambridge.org/grammar/british-grammar/phrase)与 [compromise 标签文档](https://github.com/spencermountain/compromise/blob/master/docs/llms-full.txt)，本地规则结果不保证每句完全准确。
+
+复合不定代词使用封闭词表修正本地库的普通名词标签；`There`、`QuestionWord` 标签另行映射。存在句 there 与地点 there 分别作为代词和副词提示，what 等结合后继词区分代词与限定词，how 等保留副词用法。这些局部修正不扩展为完整句法分析。
+
+[网站规则](../src/core/sites/rules.ts)统一编译域名、通配符和受限正则。`example.com` 匹配本站和子域名；域名通配 `*.example.com` 匹配子域，URL 通配 `https://example.com/docs/**` 匹配路径。`*` 不跨 `/`，`**` 可跨；正则匹配完整 HTTP(S) URL，可用 `i`／`u` 标志。匹配包含查询参数、忽略片段与登录凭据。正则限制长度、分组及重复语法，通配符用有界动态规划，避免站点规则带来指数回溯。
+
+网站规则入口为[网站设置](../src/entrypoints/options/sections/SitesSection.vue)。阅读辅助未配置独立规则时继承生词高亮规则；显式独立后两者分别判断，扩展总开关仍控制二者。内容脚本在设置变化与 SPA 地址变化时重新评估规则，允许只开高亮或只开阅读辅助。
+
+`startContentApp#syncReadingTools` 按总开关和本站规则启停[阅读工具生命周期](../src/content/reading/index.ts)。模块包括：
+
+- [本地分析](../src/core/reading/analyze.ts)：compromise 14.18.0 按上下文提供词性标签，固定否定与连接词规则补充强调，不做主干提取。仅在分析副本中等长规范署名紧接引号、省略号黏词的边界，原文与 UTF-16 偏移不变，保留正常缩写、撇号、小数和连字符。[MIT 许可](../public/compromise-LICENSE.txt)随扩展分发。
+- [视觉标注](../src/content/reading/visual.ts)：在视口上下 1000px、左右 1600px 预读范围内按段处理，每帧最多分析一段，发现阶段限制节点数与时间。支持 `IntersectionObserver.scrollMargin` 时，额外扩张沿途滚动容器左右各 800px 的裁剪范围，为宽表格提前处理邻列；仅扩大视口的 `rootMargin` 不能穿透表格裁剪。旧浏览器保留视口预读及近期缓存，真实可见区观察器始终不加边距。连续滚动时暂停新增标注、词汇样式同步与缓存回收，停稳 90ms 后继续；已保留的段落返回时直接使用原有标记。离屏部分按最近离开次序保留，最多 64 块或 8000 个原文字符，超限后逐帧撤去最早块的逐词视觉层，保留原 Text、生词 DOM 与可撤销分组。此上限约束离屏缓存，不是整页总 DOM 上限。段落独立索引避免恢复时遍历全页，页面移除子树时撤销其标记并解除索引和观察。生词引擎跳过新建阅读包装的无效高亮查询，仅在实际移除高亮时重计数，减少阅读更新引起的重复扫描。
+- [短语释义](../src/content/reading/phrases.ts)：用户选中短语后按需读取扩展包内数据；不改变选区或正文，无上下文消歧。
+
+正文发现包含标准段落、正文标题与表格，以及 article、main 等语义正文区域内含实际英文 Text 的 div/section。遇到实际英文文本才注册块，同次发现合并同一父节点和块的重复处理；空单元格不占渲染额度。预读区与真实可见区分别用 IntersectionObserver 维护，停稳后优先处理当前可见正文，不逐帧读取队列中所有块的位置。YouTube 描述与评论有独立的自定义元素选择器；仅该站点的初始和新增 DOM 使用优先发现，推荐区、播放器、导航、控件和编辑区仍排除。初始为空或非英文的容器后补 Text 时注册视口观察，布局容器的动画属性不额外注册正文；增量发现先检查根及祖先排除规则。渲染前取走的 mutation 也走完整处理，防止断开观察时丢失新子树。
+
+[Medium 响应识别](../src/content/sites/medium/dom.ts)只放行 medium.com 及其子域上符合实际响应卡片结构的 pre：内部有普通 div、无 code，祖父卡片同时带响应选项按钮和 respond_sidebar 语义标记，仅含当前这一个 pre，且不能是文档根。这样普通 pre 不能借用页面另一张卡片的按钮通过检查。该 pre 视为普通正文而非代码根，因此阅读标记与生词扫描均不受代码开关或注释范围限制；其他 pre、内嵌代码及编辑器继续排除。
+
+短语数据由[构建脚本](../scripts/data/build-reading-phrases.mjs)从固定 SHA256 的 ECDICT 源文件确定性筛选，生成[数据](../public/data/reading-phrases.json)与[许可声明](../public/data/reading-phrases-LICENSE.txt)。执行 `node scripts/data/build-reading-phrases.mjs` 可重新生成。该子集包含固定介词、连词表达和常见动词短语，不是完整习语库。
+
+[浏览器验收脚本](../scripts/qa/reading.mjs)加载真实扩展并对比修改前相同网页：`node scripts/qa/reading.mjs --ext .output/chrome-mv3`。结果与进度见[阅读辅助验收记录](reading-progress.md)。
+
+## 八、已知缺口
 
 - 内置短释义不看上下文（thread 只给“线”，不会因技术页面变成“线程”；remains 给“残余”），按多来源义项打分 + 人工覆盖表选取，在 Relingo 行内注解采集（article/dark/dynamic 与 3 个维基页面，Relingo 是上下文相关的）上忽略“的/地”后约一半一致；ECDICT 考试标签不是官方大纲（四级约 3.8k 词，少于官方 4.5k）；有 COCA 排名的人名同形词（如 tom、ken）仍可能在 C2/考试书中误标首字母大写的人名。
 - 词形还原不带词性：同形异义词按数据取最常见原形（leaves → leave, leaf 都作候选）；派生关系靠 ECDICT 释义做语义校验，个别派生词因释义不重叠而漏还原（unhappiness、sailor），前缀派生（un-/re-）不还原。

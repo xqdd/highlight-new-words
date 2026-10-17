@@ -2,7 +2,7 @@
 
 [TOC]
 
-Targets: Chrome Web Store and Microsoft Edge Add-ons (Firefox is not listed for now). Limits and the date they were verified are recorded in docs/release.md.
+Targets: Chrome Web Store and Microsoft Edge Add-ons (Firefox is not listed for now). Release instructions: [docs/release.md](../docs/release.md).
 
 ## 1. Name and Summary (from the package manifest, shared by both stores)
 
@@ -10,16 +10,23 @@ Name and summary come from `public/_locales/en/messages.json` (`appName`, `appDe
 
 | Field | Current value | Limit | Status |
 | --- | --- | --- | --- |
-| Name `appName` | Highlight New Words – Vocabulary Builder for Youdao, Eudic, CET & IELTS | Chrome: max 75 chars | 71 chars, OK |
-| Summary `appDesc` | Highlight new words from your Youdao/Eudic word books and built-in graded word lists on web pages, with inline glosses | Chrome: max 132 chars | 118 chars, OK |
+| Name `appName` | Highlight New Words: English Reading & Vocabulary | Chrome: max 75 chars | OK |
+| Summary `appDesc` | Read English with word highlights, Chinese glosses, word-prefix emphasis and grammar cues. Custom themes and YouTube captions. | Chrome: max 132 chars | OK |
 
 ## 2. Detailed Description - Chrome Web Store
 
-Plain text only (no HTML/Markdown); keep under 16,000 characters; no keyword stuffing: do not enumerate exam names, file formats or storage brands; describe them in general terms (in 2026-10 the Chrome Web Store rejected the listing for "excessive keywords" because of such lists). The text below is about 3,900 characters and was checked against the current build on 2026-10-03. The interface is currently in Simplified Chinese, which the description states up front.
+Plain text only (no HTML/Markdown); keep under 16,000 characters. Avoid keyword stuffing. The text below describes version 3.1.0. The interface is currently in Simplified Chinese, which the description states up front.
 
 ```text
-Highlight New Words is a vocabulary builder and word highlighter for English learning: it marks the words you are studying on any web page and in YouTube captions, taken from your Youdao or Eudic word book or from the built-in graded word lists. Hover (or tap on mobile) to see phonetics, meaning and word forms, and mark a word as known in one click so it never shows up again.
+Keep reading English in its original form, with vocabulary glosses, word-prefix emphasis and visual grammar cues you can tailor to your preferences. Highlight New Words also marks the words you are studying on web pages and in YouTube captions, from your Youdao or Eudic word books or the built-in graded lists. Hover (or tap on mobile) for phonetics, meaning and word forms, and mark a word as known to stop highlighting it.
 Note: the interface and the built-in glosses are in Simplified Chinese.
+
+CUSTOMIZE YOUR ENGLISH READING
+- Optional reading aids, off by default: word-prefix emphasis (bionic reading), parts of speech and semantic cues, preserving the page's original layout.
+- Eleven word classes include pronouns, determiners, prepositions, conjunctions and numerals; four semantic cues cover negation, logical connections, quantities and proper names. Control each independently.
+- Choose from 81 themes using text colors, solid/dotted/wavy underlines, subtle backgrounds, markers, colored bold or mixed styles. Customize each item's style and color. Global and feature presets remember your custom settings separately.
+- Choose whether reading styles or vocabulary styles take priority, including when showing glosses only. Select a short phrase to look it up in the bundled dictionary.
+- Analysis and phrase lookup run locally, without an LLM or translation service. Automatic labels may be ambiguous. Reading aids do not promise faster reading or native-level proficiency.
 
 CHOOSE WHAT TO LEARN
 - Built-in graded word books covering Chinese school, university and graduate entrance exams and common study-abroad tests, plus CEFR levels, COCA frequency bands, a general core list and subject lists for academic, business, medical and computing English. Combine them freely; pick B2 to highlight B2 and above.
@@ -50,7 +57,7 @@ WORD BOOKS, KNOWN WORDS AND SYNC
 - Settings, known words and imported books can be synced or backed up in several ways, used together if you like: your browser account; WebDAV on a server you own; or a manual backup file, imported with merge or overwrite. Credentials such as the Eudic token or WebDAV password are not uploaded unless you opt in.
 
 MORE
-- Turn highlighting on or off per site; the toolbar badge shows how many new words are on the page, and the popup lists them along with sync status.
+- Site allowlists and blocklists support domains, wildcards and restricted regular expressions. Reading aids can use separate rules or inherit the global rules. The toolbar badge and popup show page words and sync status.
 - Page text is matched locally and never uploaded. The extension has no developer server and no analytics.
 
 Privacy policy: <privacy policy URL>
@@ -59,7 +66,7 @@ Feedback: https://github.com/xqdd/highlight-new-words/issues
 
 ## 3. Detailed Description - Microsoft Edge Add-ons
 
-Limit: 250 to 10,000 characters and it must describe the full functionality. Reuse section 2 (it covers every feature; about 3,960 characters with the line below) and add this line after the first paragraph:
+Limit: 250 to 10,000 characters and it must describe the full functionality. Reuse section 2 and add this line after the first paragraph:
 
 ```text
 Works on Microsoft Edge for desktop and Edge for Android.
@@ -67,14 +74,14 @@ Works on Microsoft Edge for desktop and Edge for Android.
 
 ## 4. Edge Search Terms
 
-Limit: at most 7 terms, 21 words in total, 30 characters per term; not shown to users. The 7 terms below have 18 words in total; the longest is 22 characters.
+Limit: at most 7 terms, 21 words in total, 30 characters per term; not shown to users. The 7 terms below have 17 words in total; the longest is 22 characters.
 
 ```text
 vocabulary builder
 word highlighter
 English learning
 Youdao Eudic word book
-CET IELTS TOEFL
+reading themes
 English reading
 learn English words
 ```

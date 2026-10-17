@@ -78,19 +78,19 @@ function phonesPage({ title, sub, shots }) {
 const SCREENSHOTS = {
   zh: [
     ['1-card', { title: '网页上的生词，一眼就能看到', sub: '悬停、按住修饰键或点击查看音标、释义与词形；认识了就一键标为熟词', body: `<img class="page" src="${raw('desktop-card')}">` }],
-    ['2-inline', { title: '行内释义，不打断阅读', sub: '在生词后或上方显示简短中文释义，可随时切换或关闭', body: `<img class="page" src="${raw('desktop-inline')}">` }],
+    ['2-reading', { title: '英文原文阅读，让理解跟上原文', sub: '仿生阅读、词性与语义线索，搭配行内释义；按需开启，自由定制', body: `<img class="page" src="${raw('desktop-reading')}">` }],
     ['3-youtube', { title: 'YouTube 字幕里的生词也标出来', sub: '字幕上方显示释义；Alt+L 暂停并打开当前字幕面板，逐句查词', body: `<img class="page" src="${raw('desktop-yt-panel')}">` }],
     ['4-mobile', { phones: true, title: '手机上也能用', sub: 'Edge for Android：点按生词弹出底部卡片；悬浮球查看本页生词、快捷设置', shots: ['mobile-article', 'mobile-card', 'mobile-menu'] }],
     ['5-popup', { title: '本页生词一览', sub: '工具栏弹窗：开关本站高亮、切换词书、查看本页生词与同步状态', body: `<img class="page" src="${raw('desktop-article')}"><div class="popup"><img src="${raw('desktop-popup')}"></div>` }],
-    ['6-style', { title: '分级词书 + 多种高亮样式', sub: '四六级、考研、雅思、托福、GRE、CEFR 分级与词频书，也可同步有道 / 欧路生词本', body: `<img class="page" src="${raw('desktop-options-appearance')}">` }],
+    ['6-style', { title: '81 套标记主题，选自己的阅读风格', sub: '11 类词性与 4 类语义标记，开关、样式、颜色均可自定义', body: `<img class="page" src="${raw('desktop-options-reading')}">` }],
   ],
   en: [
     ['1-card', { title: 'Spot unfamiliar words at a glance', sub: 'Hover, hold a modifier key or click for phonetics, meaning and word forms', body: `<img class="page" src="${raw('desktop-card')}">` }],
-    ['2-inline', { title: 'Inline translations that keep you reading', sub: 'Short Chinese glosses after or above each word, switchable any time', body: `<img class="page" src="${raw('desktop-inline')}">` }],
+    ['2-reading', { title: 'Keep reading English in its original form', sub: 'Optional word-prefix emphasis and grammar cues, alongside Chinese glosses', body: `<img class="page" src="${raw('desktop-reading')}">` }],
     ['3-youtube', { title: 'New words in YouTube captions, too', sub: 'Glosses above the captions; Alt+L pauses and opens the current-caption panel', body: `<img class="page" src="${raw('desktop-yt-panel')}">` }],
     ['4-mobile', { phones: true, title: 'Works on mobile too', sub: 'Edge for Android: tap for a bottom card; the floating button lists page words and quick settings', shots: ['mobile-article', 'mobile-card', 'mobile-menu'] }],
     ['5-popup', { title: 'All new words on this page', sub: 'Toolbar popup: toggle per site, switch word books, review page words and sync status', body: `<img class="page" src="${raw('desktop-article')}"><div class="popup"><img src="${raw('desktop-popup')}"></div>` }],
-    ['6-style', { title: 'Graded word books, many highlight styles', sub: 'CET, IELTS, TOEFL, GRE, CEFR levels and frequency lists, or sync your Youdao / Eudic word book', body: `<img class="page" src="${raw('desktop-options-appearance')}">` }],
+    ['6-style', { title: '81 themes for your reading preferences', sub: '11 word classes and 4 semantic cues, with individual switches, styles and colors', body: `<img class="page" src="${raw('desktop-options-reading')}">` }],
   ],
 };
 
@@ -107,7 +107,7 @@ function promoPage({ w, h, big }) {
   .demo { background: #fff; border-radius: 18px; padding: 34px 40px; font-family: Georgia, 'Noto Serif', serif; font-size: 34px; line-height: 1.9; color: #292524;
           width: 680px; box-shadow: 0 20px 50px rgba(0,0,0,.2); }
   </style>
-  <div class="brand"><div class="logo">${ICON_SVG()}</div><div class="name">生词高亮</div>${big ? '<div class="tag">网页背单词</div>' : ''}</div>
+  <div class="brand"><div class="logo">${ICON_SVG()}</div><div class="name">生词高亮</div><div class="tag">${big ? '英文原文阅读 · 母语式阅读体验' : '英文原文阅读'}</div></div>
   ${big ? `<div class="demo">The storm <span class="mark">surge</span><span class="tr">(汹涌)</span> arrived earlier than <span class="mark">anticipated</span><span class="tr">(预期)</span>, and the <span class="mark">barriers</span><span class="tr">(障碍物)</span> were no longer enough.</div>` : ''}`;
 }
 
@@ -120,6 +120,12 @@ const render = async (html, w, h, file, transparent = false) => {
   const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
   await page.setContent(html, { waitUntil: 'load' });
   await page.evaluate(() => document.fonts.ready);
+  const valid = await page.evaluate(() => [...document.images].every(img => img.complete && img.naturalWidth > 0)
+    && [...document.querySelectorAll('h1, p.sub, .name, .tag')].every(node => {
+      const rect = node.getBoundingClientRect();
+      return rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight && node.scrollWidth <= node.clientWidth;
+    }));
+  if (!valid) throw new Error(`图片未加载或宣传文案越界：${file}`);
   await page.screenshot({ path: path.join(OUT, file), omitBackground: transparent });
   await page.close();
   console.log(file);

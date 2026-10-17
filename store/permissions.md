@@ -6,8 +6,8 @@
 
 ## 一、单一用途（Single purpose）
 
-- 中文：在用户浏览的网页上高亮需要学习的英语单词（来自内置分级词书或用户自己的生词本），并显示释义，帮助用户在阅读中记单词。
-- English: Highlights English words the user is learning (from built-in graded word lists or the user's own word books) on web pages and shows their meanings, so users can build vocabulary while reading.
+- 中文：辅助阅读英文原文：高亮需要学习的英语单词并显示释义，提供可选的本地词首加粗、词性与语义标记及短语词典释义，帮助用户在阅读中理解和积累词汇。
+- English: Helps users read English and build vocabulary through word highlights and definitions, optional local word-prefix emphasis, parts-of-speech and semantic cues, and bundled phrase definitions.
 
 ## 二、权限说明
 

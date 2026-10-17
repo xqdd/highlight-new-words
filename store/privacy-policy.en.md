@@ -1,12 +1,12 @@
 # Highlight New Words Privacy Policy
 
-Effective date: October 1, 2026 (applies to version 3.0.0 and later)
+Effective date: October 16, 2026 (applies to version 3.1.0 and later)
 
 "Highlight New Words" (the "extension") is an open-source browser extension; the source code is at https://github.com/xqdd/highlight-new-words . The extension **has no developer server, and does not collect, sell or share any personal data. It contains no analytics or ad tracking.**
 
 ## 1. Data processed on your device
 
-- **Page text**: the content script reads the text of pages you open and compares it with your word books locally to highlight words. Page text is never stored and never leaves your device.
+- **Page text**: the content script compares page text with your word books locally. Optional reading aids analyze parts of speech and semantic cues locally and display word-prefix emphasis; phrase definitions come from the bundled dictionary. Page text is not persistently stored or uploaded. No LLM or external translation service is used.
 - **Your settings and word lists**: settings, known words, imported word books and word books synced from Youdao/Eudic are kept in the browser's extension storage (`storage.local`).
 - **Tab URLs**: the toolbar badge count is kept per tab in the browser's session storage (`storage.session`) and cleared when the tab navigates or the browser closes. The popup reads the current URL only to show the site name and to let you turn highlighting on or off for that site.
 - **Credentials**: the Eudic API token and WebDAV username/password are stored only on your device. They are excluded from sync by default and are uploaded to the sync location you chose only if you tick "upload with sync" for that credential.

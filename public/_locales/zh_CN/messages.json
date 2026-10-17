@@ -1,10 +1,10 @@
 {
   "appName": {
-    "message": "生词高亮：网页背单词 · 有道/欧路生词本 · 四六级考研词书",
+    "message": "生词高亮：英文原文阅读 · 生词本与行内释义",
     "description": "The title of the application, displayed in the web store."
   },
   "appDesc": {
-    "message": "在英文网页中高亮有道/欧路生词本和内置分级词书中的单词，支持行内翻译与词形还原",
+    "message": "直接读英文原文：生词高亮与行内释义，搭配词首加粗、词性与语义标记。支持有道/欧路生词本、分级词书和 YouTube 字幕，阅读主题自由定制。",
     "description": "The description of the application, displayed in the web store."
   }
 }

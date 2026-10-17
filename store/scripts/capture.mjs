@@ -56,7 +56,8 @@ async function launch(device, settingsPatch) {
     ...device,
   });
   const sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker', { timeout: 15000 }));
-  await sw.evaluate(async (patch) => {
+  const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+  await sw.evaluate(async ({ patch, version }) => {
     for (let i = 0; i < 50 && !(await chrome.storage.local.get('settings')).settings; i++) await new Promise((r) => setTimeout(r, 100));
     const cur = (await chrome.storage.local.get('settings')).settings ?? {};
     const merge = (a, b) => {
@@ -65,8 +66,8 @@ async function launch(device, settingsPatch) {
       for (const k of Object.keys(b)) out[k] = merge(a[k], b[k]);
       return out;
     };
-    await chrome.storage.local.set({ settings: merge(cur, patch ?? {}) });
-  }, settingsPatch);
+    await chrome.storage.local.set({ settings: merge(cur, patch ?? {}), uiNotesSeen: version });
+  }, { patch: settingsPatch, version });
   const extId = new URL(sw.url()).host;
   return { ctx, sw, extId, close: async () => { await ctx.close(); fs.rmSync(profile, { recursive: true, force: true }); } };
 }
@@ -179,6 +180,26 @@ const snap = async (page, name, opts = {}) => {
     await opt.waitForTimeout(1500);
     await snap(opt, `desktop-options-${hash}`);
   }
+  await b.close();
+}
+
+// 原文阅读：选择真实主题，再采集文章效果与统一主题配置页。
+{
+  const b = await launch(DESKTOP, { books: { enabled: ['cet6', 'gre'] }, inlineTranslation: { mode: 'after' } });
+  const opt = await b.ctx.newPage();
+  await opt.goto(`chrome-extension://${b.extId}/options.html#reading`);
+  await opt.getByRole('switch', { name: '开启原文阅读', exact: true }).check();
+  await opt.getByRole('combobox', { name: '标记预设样式类型', exact: true }).selectOption('wavy');
+  await opt.getByRole('radiogroup', { name: '标记预设', exact: true }).getByRole('radio', { name: '海洋波浪', exact: true }).click();
+  await opt.getByRole('radiogroup', { name: '词首加粗预设', exact: true }).getByRole('radio', { name: '轻量锚点', exact: true }).click();
+  await opt.waitForTimeout(1500);
+  await opt.locator('#reading-syntax').scrollIntoViewIfNeeded();
+  await snap(opt, 'desktop-options-reading');
+  const page = await b.ctx.newPage();
+  await page.goto(`${base}/article.html`);
+  await page.locator('hnw-read').first().waitFor();
+  await page.waitForTimeout(1500);
+  await snap(page, 'desktop-reading');
   await b.close();
 }
 

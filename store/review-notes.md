@@ -11,6 +11,7 @@ Edge 提交时填入“Notes for certification”；Chrome 没有专门的备注
 - 手机悬浮球：在 Edge for Android（或桌面浏览器开发者工具的触屏手机模拟）中打开英文网页，屏幕右侧出现悬浮球，点按打开菜单，可看到本页生词、取词模式、快捷设置和同步状态；在 YouTube 视频页点按悬浮球直接打开当前字幕面板。桌面端不显示悬浮球。
 - 安装后默认不连接任何云端生词本来源（有道、欧路都关闭），扩展不会向 `dict.youdao.com` 或欧路发出任何请求。用户在设置的“生词本来源”中打开某个来源时，立即同步一次并显示结果（未登录时提示原因并给出登录入口），之后最多每天自动同步一次；有道只依靠浏览器里已有的有道登录 cookie。除此之外不向任何服务发送数据。欧路需要用户在欧路官网生成的 OpenAPI token。审核无需测试账号也能验证其余功能。
 - 无远程代码；内置词书与词典是扩展包内 `data/` 目录下的 JSON。
+- 原文阅读默认关闭。在设置“原文阅读”中开启，选择标记主题后可查看词性、语义线索与词首加粗；展开“具体标记配置”可查看全部开关、样式与颜色。可选择阅读或生词样式优先，在“网站”中单独配置阅读规则。词性分析、短语词典均在本地运行，不调用 LLM 或翻译服务，不新增权限。
 - 构建产物由 WXT（Vite）打包压缩，源码公开在 GitHub。
 
 ## 二、English (paste this)
@@ -24,6 +25,7 @@ How to test (no account needed):
 5. The options page (gear icon) has word books, highlight styles, known words and sync settings.
 6. YouTube captions: open any YouTube video with English captions and turn captions (CC) on. New words in the captions are highlighted with short glosses above them. Press Alt+L to pause the video and open the current-caption panel; tap words to look them up, switch to the previous or next sentence, and press Esc to close it and resume playback.
 7. Mobile floating button: open an English page in Edge for Android (or in desktop DevTools device emulation with touch). A floating button appears at the right edge; tap it to open a sheet with the new words on the page, word-pick mode, quick settings and sync status. On a YouTube video page, tapping it opens the current-caption panel directly. The button is not shown on desktop.
+8. Reading aids are off by default. Open the options section labeled "原文阅读", enable it and choose a marking theme. Expand "具体标记配置" to see all item switches, styles and colors. Word-prefix emphasis is configured below. Choose reading or vocabulary style priority, and configure separate reading site rules under "网站". Analysis and phrase lookup use bundled code and data locally; no LLM or translation service is contacted and no new permission is requested.
 
 Optional word book sources: no cloud source is connected after installation (Youdao and Eudic are both off), so the extension sends no request to dict.youdao.com or Eudic. When the user turns a source on under "word book sources" in the settings, it syncs once right away and shows the result (if not logged in, the reason and a login link), then syncs at most once a day. Youdao uses only the user's existing Youdao login cookie in the browser. Nothing else is sent anywhere. Eudic uses an API token the user generates on the Eudic website.
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import BottomSheet from '@/ui/components/BottomSheet.vue';
 import { useOptions } from '../lib/context';
-import { RELEASE_NOTES, markReleaseNotesSeen } from '../lib/release-notes';
+import { RELEASE_NOTES, RELEASE_NOTES_VERSION, markReleaseNotesSeen } from '../lib/release-notes';
 
 /** 更新说明弹层（升级后首次打开自动弹出；“更多”页可再次打开）。关闭即记为已读 */
 const open = defineModel<boolean>('open', { required: true });
@@ -18,7 +18,7 @@ function go(page: string, anchor?: string) {
 </script>
 
 <template>
-  <BottomSheet :open="open" title="更新说明" description="这个版本中与之前不同的地方" @update:open="(v: boolean) => !v && close()">
+  <BottomSheet :open="open" :title="`${RELEASE_NOTES_VERSION} 更新说明`" description="这个版本中与之前不同的地方" @update:open="(v: boolean) => !v && close()">
     <ul class="notes">
       <li v-for="n in RELEASE_NOTES" :key="n.title">
         <strong>{{ n.title }}</strong>

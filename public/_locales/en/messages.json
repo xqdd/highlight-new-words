@@ -1,10 +1,10 @@
 {
   "appName": {
-    "message": "Highlight New Words – Vocabulary Builder for Youdao, Eudic, CET & IELTS",
+    "message": "Highlight New Words: English Reading & Vocabulary",
     "description": "The title of the application, displayed in the web store."
   },
   "appDesc": {
-    "message": "Highlight new words from your Youdao/Eudic word books and built-in graded word lists on web pages, with inline glosses",
+    "message": "Read English with word highlights, Chinese glosses, word-prefix emphasis and grammar cues. Custom themes and YouTube captions.",
     "description": "The description of the application, displayed in the web store."
   }
 }
