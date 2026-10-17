@@ -134,7 +134,7 @@ describe('ReadingVisual', () => {
     expect(document.querySelector('#button')).toBe(button);
   });
 
-  it('阅读生命周期即时应用范围修改，不能只保存而保留旧标记', async () => {
+  it('阅读生命周期停稳后应用范围修改，关闭即时撤销旧标记', async () => {
     document.body.innerHTML = '<article><h2>They record music.</h2><p>They record music.</p></article>';
     const tools = createReadingTools(document); active.push(tools);
     const settings = createDefaultReadingSettings(); settings.enabled = true; settings.syntax.enabled = true;
@@ -142,15 +142,19 @@ describe('ReadingVisual', () => {
     await vi.waitFor(() => expect(document.querySelector('h2 [data-pos]')).not.toBeNull());
     settings.scope.skipHeadings = true;
     tools.update(settings);
-    await vi.waitFor(() => expect(document.querySelector('p [data-pos]')).not.toBeNull());
-    expect(document.querySelector('h2 hnw-read')).toBeNull();
+    await vi.waitFor(() => {
+      expect(document.querySelector('h2 hnw-read')).toBeNull();
+      expect(document.querySelector('p [data-pos]')).not.toBeNull();
+    });
     settings.scope.minWords = 8;
     tools.update(settings);
-    await flush();
-    expect(document.querySelector('hnw-read')).toBeNull();
+    await vi.waitFor(() => expect(document.querySelector('hnw-read')).toBeNull());
     settings.scope.skipShortBlocks = false;
     tools.update(settings);
     await vi.waitFor(() => expect(document.querySelector('p [data-pos]')).not.toBeNull());
+    settings.enabled = false;
+    tools.update(settings);
+    expect(document.querySelector('hnw-read')).toBeNull();
   });
 
   it('默认跳过孤立单词和整块链接，正文内链接与连字符/斜杠词仍完整标记', async () => {
@@ -525,8 +529,14 @@ describe('ReadingVisual', () => {
     let intersect!: (entries: Array<Partial<IntersectionObserverEntry>>) => void;
     const observed = new Set<Element>();
     vi.stubGlobal('IntersectionObserver', class {
-      constructor(callback: typeof intersect, options?: IntersectionObserverInit) { if (options?.rootMargin) intersect = callback; }
-      observe(element: Element) { observed.add(element); }
+      constructor(private callback: typeof intersect, private options?: IntersectionObserverInit) {
+        if (options?.rootMargin && options.rootMargin !== '1600px') intersect = callback;
+      }
+      observe(element: Element) {
+        observed.add(element);
+        // 生词预读先创建 mark；阅读的进出视口仍由用例手动控制，译文保持未进入视口。
+        if (this.options?.rootMargin === '1600px') queueMicrotask(() => this.callback([{ target: element, isIntersecting: true }]));
+      }
       unobserve(element: Element) { observed.delete(element); }
       disconnect() {}
     });

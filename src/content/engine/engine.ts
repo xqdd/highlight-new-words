@@ -37,6 +37,7 @@ import {
 } from './highlighter';
 import { codeRootOf, createTextWalker, isRootSkipped, isTextCandidate } from './scanner';
 import { HighlightScopeFilter } from './scope';
+import { lastScrollInputAt, trackScrollActivity } from '../scroll-activity';
 
 export interface EngineOptions {
   root: HTMLElement;
@@ -78,6 +79,9 @@ const REPORT_DELAY_MS = 400;
 const THEME_RECHECK_MS = 300;
 /** 队列已消费部分超过该长度时压缩数组，避免 shift() 的 O(n) 开销 */
 const QUEUE_COMPACT_AT = 1024;
+/** 只在视口附近创建生词 DOM；发现阶段仍扫描全文，以便任意进度跳转可直接命中观察目标。 */
+const HIGHLIGHT_ROOT_MARGIN = '1600px';
+const SCROLL_QUIET_MS = 100;
 /**
  * 行内译文懒插入的视口外扩范围：单词进入“视口上下各一屏”时才插入译文。
  * 插入发生在屏外，被推移的内容用户看不到（不计入 CLS）；视口上方的插入由浏览器滚动锚定抵消。
@@ -140,22 +144,79 @@ export class HighlightEngine {
   /** 阅读包装通常是新建节点；仅摘下过含 mark 的包装需要恢复译文观察。 */
   private detachedReadingGroups = new WeakSet<Element>();
   private scopeFilter?: HighlightScopeFilter;
+  private viewportObserver?: IntersectionObserver;
+  private viewportTexts = new Map<Element, Set<Text>>();
+  private viewportVisible = new WeakSet<Element>();
+  /** display:contents 没有可观察盒，将文字转交有盒祖先；弱映射不持有已删除的容器。 */
+  private viewportDelegates = new WeakMap<Element, Element>();
+  private viewportReady: Text[] = [];
+  private viewportReadyHead = 0;
+  private scrollListener?: () => void;
+  private scrollTimer?: ReturnType<typeof setTimeout>;
+  private lastScrollAt = -Infinity;
+  private releaseScrollActivity?: () => void;
+  private pendingTranslations = new Set<Element>();
+  private translationTimer?: ReturnType<typeof setTimeout>;
 
   constructor(private opts: EngineOptions) {}
 
   start(): void {
     if (!this.stopped) return;
     this.stopped = false;
+    const view = this.opts.root.ownerDocument.defaultView;
+    if (view) this.releaseScrollActivity = trackScrollActivity(view);
+    this.lastScrollAt = lastScrollInputAt(view);
     this.scopeFilter = this.opts.highlightScope?.enabled ? new HighlightScopeFilter(this.opts.highlightScope) : undefined;
     this.observer = new MutationObserver((records) => this.onMutations(records));
     this.observer.observe(this.opts.root, { childList: true, subtree: true, characterData: true });
     this.watchPageTheme();
     this.bindQuiz();
-    const view = this.opts.root.ownerDocument.defaultView;
     if (view && typeof view.IntersectionObserver === 'function') {
+      this.viewportObserver = new view.IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          const parent = entry.target;
+          if (!parent.isConnected) {
+            this.viewportObserver?.unobserve(parent);
+            this.viewportTexts.delete(parent);
+            continue;
+          }
+          if (!entry.isIntersecting) {
+            this.viewportVisible.delete(parent);
+            // IO 对 display:contents 永不报告相交；只对零盒目标确认样式，发现全文时不逐词读样式。
+            if (entry.boundingClientRect?.width === 0 && entry.boundingClientRect.height === 0
+              && view.getComputedStyle(parent).display === 'contents') {
+              const withoutBoxes = [parent];
+              let delegate = parent.parentElement;
+              while (delegate && view.getComputedStyle(delegate).display === 'contents') {
+                withoutBoxes.push(delegate);
+                delegate = delegate.parentElement;
+              }
+              if (delegate) {
+                for (const element of withoutBoxes) this.viewportDelegates.set(element, delegate);
+                this.viewportObserver?.unobserve(parent);
+                const texts = this.viewportTexts.get(parent);
+                this.viewportTexts.delete(parent);
+                for (const text of texts ?? []) if (!this.deferOutsideViewport(text)) this.viewportReady.push(text);
+              }
+            }
+            continue;
+          }
+          this.viewportVisible.add(parent);
+          const texts = this.viewportTexts.get(parent);
+          if (!texts) continue;
+          this.viewportReady.push(...texts);
+          this.viewportTexts.delete(parent);
+        }
+        this.scheduleDrain();
+      }, { rootMargin: HIGHLIGHT_ROOT_MARGIN });
       this.translationObserver = new view.IntersectionObserver((entries) => this.onTranslationVisible(entries), {
         rootMargin: TRANSLATION_ROOT_MARGIN,
       });
+    }
+    if (view) {
+      // wheel/touchmove 先于实际 scroll 交付，提前暂停写入，避免输入与浏览器滚动启动争抢主线程。
+      this.scrollListener = () => { this.lastScrollAt = performance.now(); };
+      for (const type of ['scroll', 'wheel', 'touchmove']) view.addEventListener(type, this.scrollListener, { capture: true, passive: true });
     }
     const doc = this.opts.root.ownerDocument;
     this.parsing = doc.readyState === 'loading';
@@ -180,10 +241,26 @@ export class HighlightEngine {
    */
   async primeFirstScreen(): Promise<void> {
     if (this.stopped) return;
+    // 首屏初始化可能晚于用户输入；已显示页面上的滚动优先，后续 IO 与队列会在停稳后补标。
+    if (performance.now() - this.lastScrollAt < SCROLL_QUIET_MS) {
+      this.scheduleDrain();
+      return;
+    }
     if (this.hasPending()) this.drain(PRIME_SLICE_MS, true);
     const view = this.opts.root.ownerDocument.defaultView;
     if (!view) return;
     const vh = view.innerHeight;
+    // 预隐藏期间 IO 首次回调可能尚未交付；此处一次读完位置，再补首屏，避免显示后才插入括注。
+    if (this.viewportObserver) {
+      for (const [parent, texts] of this.viewportTexts) {
+        const rect = parent.getBoundingClientRect();
+        if (rect.bottom <= 0 || rect.top >= vh || rect.width <= 0) continue;
+        this.viewportVisible.add(parent);
+        this.viewportReady.push(...texts);
+        this.viewportTexts.delete(parent);
+      }
+      if (this.hasPending()) this.drain(PRIME_SLICE_MS, true);
+    }
     // 先统一读位置（一次布局），只取视口内需要译文的 mark
     const visible = [...this.opts.root.querySelectorAll<HTMLElement>(TAG_MARK)].filter((m) => {
       if (!this.needsTranslation(m)) return false;
@@ -206,6 +283,23 @@ export class HighlightEngine {
     this.unbindQuiz();
     this.translationObserver?.disconnect();
     this.translationObserver = undefined;
+    this.viewportObserver?.disconnect();
+    this.viewportObserver = undefined;
+    this.viewportTexts.clear();
+    this.viewportVisible = new WeakSet();
+    this.viewportDelegates = new WeakMap();
+    this.viewportReady = [];
+    this.viewportReadyHead = 0;
+    if (this.scrollListener) for (const type of ['scroll', 'wheel', 'touchmove']) this.opts.root.ownerDocument.defaultView?.removeEventListener(type, this.scrollListener, true);
+    this.scrollListener = undefined;
+    this.releaseScrollActivity?.();
+    this.releaseScrollActivity = undefined;
+    clearTimeout(this.scrollTimer);
+    this.scrollTimer = undefined;
+    this.lastScrollAt = -Infinity;
+    clearTimeout(this.translationTimer);
+    this.translationTimer = undefined;
+    this.pendingTranslations.clear();
     this.visibleQueue = [];
     if (this.visibleFrame) this.opts.root.ownerDocument.defaultView?.cancelAnimationFrame(this.visibleFrame);
     this.visibleFrame = 0;
@@ -271,7 +365,7 @@ export class HighlightEngine {
     if (prev === 'off' && mode !== 'off') {
       void this.fillTranslations([...this.opts.root.querySelectorAll<HTMLElement>(TAG_MARK)]);
     } else if (prevOnce !== oncePerParagraph) {
-      this.thinGlosses([...this.opts.root.querySelectorAll<HTMLElement>(TAG_MARK)]);
+      this.applyTranslations([...this.opts.root.querySelectorAll<HTMLElement>(TAG_MARK)]);
     }
   }
 
@@ -362,7 +456,30 @@ export class HighlightEngine {
         this.enqueue(t);
         continue;
       }
+      // 被删文字可能观察在 display:contents 的外层盒上，清理外层待处理集合，避免长期持有旧 Text。
+      let pendingParent = r.target.nodeType === Node.ELEMENT_NODE ? r.target as Element : r.target.parentElement;
+      while (pendingParent) {
+        const delegate = this.viewportDelegates.get(pendingParent);
+        if (!delegate || !delegate.contains(pendingParent)) break;
+        pendingParent = delegate;
+      }
+      if (pendingParent && r.removedNodes.length) {
+        const texts = this.viewportTexts.get(pendingParent);
+        for (const text of texts ?? []) if (!pendingParent.contains(text)) texts!.delete(text);
+      }
       for (const n of r.removedNodes) {
+        if (this.viewportObserver && n.nodeType === Node.ELEMENT_NODE && !n.isConnected) {
+          // 断开的子树不再需要预读观察；避免无限滚动列表把历史正文留在 IO 和待处理索引中。
+          const removed = n as Element;
+          for (const parent of [removed, ...removed.querySelectorAll('*')]) {
+            this.viewportObserver.unobserve(parent);
+            this.viewportTexts.delete(parent);
+            this.viewportVisible.delete(parent);
+          }
+        } else if (n.nodeType === Node.TEXT_NODE) {
+          const texts = pendingParent ? this.viewportTexts.get(pendingParent) : undefined;
+          texts?.delete(n as Text);
+        }
         if (this.scopeFilter && !isInsideOwnNode(r.target) && !ownerTextOf(n)
           && !(n.nodeType === Node.ELEMENT_NODE && (n as Element).tagName.startsWith('HNW-'))
           && !(n.nodeType === Node.TEXT_NODE && isDecorationWrite(n as Text))) {
@@ -435,6 +552,11 @@ export class HighlightEngine {
 
   private enqueue(node: Node): void {
     this.queue.push(node);
+    this.scheduleDrain();
+  }
+
+  private scheduleDrain(): void {
+    if (this.stopped || !this.hasPending()) return;
     if (!this.scheduled) {
       this.scheduled = true;
       scheduleIdle((budget) => this.drain(budget));
@@ -442,11 +564,22 @@ export class HighlightEngine {
   }
 
   /** 取下一个待处理文本节点：优先继续当前子树的遍历，遍历完再取队列中的下一个根 */
-  private nextTextNode(): Text | null {
+  private nextTextNode(deadline = Infinity): Text | null {
     for (;;) {
+      if (performance.now() >= deadline) return null;
+      // 先处理观察者刚报告的区域，随机跳到文末不必等待文档顺序的扫描队列。
+      while (this.viewportReadyHead < this.viewportReady.length) {
+        const t = this.viewportReady[this.viewportReadyHead++]!;
+        if (t.isConnected && !this.processed.has(t) && isTextCandidate(t, this.scanOpts) && !this.deferOutsideViewport(t)) return t;
+      }
+      this.viewportReady = [];
+      this.viewportReadyHead = 0;
       if (this.walker) {
         const n = this.walker.nextNode() as Text | null;
-        if (n) return n;
+        if (n) {
+          if (this.deferOutsideViewport(n)) continue;
+          return n;
+        }
         this.walker = null;
       }
       if (this.queueHead >= this.queue.length) {
@@ -462,7 +595,7 @@ export class HighlightEngine {
       if (!root.isConnected) continue;
       if (root.nodeType === Node.TEXT_NODE) {
         const t = root as Text;
-        if (!this.processed.has(t) && isTextCandidate(t, this.scanOpts)) return t;
+        if (!this.processed.has(t) && isTextCandidate(t, this.scanOpts) && !this.deferOutsideViewport(t)) return t;
         continue;
       }
       if (root.nodeType === Node.ELEMENT_NODE && isRootSkipped(root as Element, this.scanOpts)) continue;
@@ -471,7 +604,27 @@ export class HighlightEngine {
   }
 
   private hasPending(): boolean {
-    return this.walker !== null || this.queueHead < this.queue.length;
+    return this.viewportReadyHead < this.viewportReady.length || this.walker !== null || this.queueHead < this.queue.length;
+  }
+
+  /** 纯 DOM 发现，不逐节点读坐标；IO 统一计算所有候选位置，避免每个生词切片强制整页布局。 */
+  private deferOutsideViewport(text: Text): boolean {
+    let parent: Element | null = text.parentElement;
+    // 页面框架可能将原 Text 移到其他容器；不能沿用已经不再包含它的旧观察祖先。
+    while (parent) {
+      const delegate = this.viewportDelegates.get(parent);
+      if (!delegate) break;
+      if (!delegate.contains(parent)) { this.viewportDelegates.delete(parent); break; }
+      parent = delegate;
+    }
+    if (!this.viewportObserver || !parent || this.viewportVisible.has(parent)) return false;
+    let texts = this.viewportTexts.get(parent);
+    if (!texts) {
+      this.viewportTexts.set(parent, texts = new Set());
+      this.viewportObserver.observe(parent);
+    }
+    texts.add(text);
+    return true;
   }
 
   /** 按时间预算处理队列 */
@@ -479,6 +632,12 @@ export class HighlightEngine {
     // 首个切片由 start() 直接调用，此时已登记的空闲回调仍会到来（届时继续处理剩余部分），不能清掉 scheduled
     if (!first) this.scheduled = false;
     if (this.stopped) return;
+    const quietRemaining = SCROLL_QUIET_MS - (performance.now() - this.lastScrollAt);
+    if (quietRemaining > 0) {
+      clearTimeout(this.scrollTimer);
+      this.scrollTimer = setTimeout(() => { this.scrollTimer = undefined; this.scheduleDrain(); }, quietRemaining);
+      return;
+    }
     this.scopeFilter?.invalidate();
     const sliceMs = first ? budgetMs : Math.min(Math.max(budgetMs, SLICE_MIN_MS), SLICE_MAX_MS);
     const readDeadline = performance.now() + sliceMs * SLICE_READ_RATIO;
@@ -490,7 +649,7 @@ export class HighlightEngine {
       // 空闲回调通常紧跟在一帧渲染之后，此时样式是干净的，读取几乎不花时间（结果按元素缓存）
       const found: { t: Text; hits: TextHit[]; hopts?: HighlightOptions }[] = [];
       let t: Text | null;
-      while (performance.now() < readDeadline && (t = this.nextTextNode())) {
+      while (performance.now() < readDeadline && (t = this.nextTextNode(readDeadline))) {
         if (!t.isConnected) continue;
         // 页面仍在解析：文档末尾的文本节点可能还会被解析器追加文字（网络分块），解析完再处理
         if (this.parsing && isAtDocumentEnd(t, this.opts.root)) {
@@ -727,8 +886,6 @@ export class HighlightEngine {
         if (e?.shortVerb) this.verbTranslations.set(lemma, e.shortVerb);
       }
     }
-    const mode = this.opts.inlineTranslation;
-    if (mode === 'after' || isRubyMode(mode)) this.thinGlosses(targets);
     const io = immediate ? undefined : this.translationObserver;
     const now: HTMLElement[] = [];
     for (const m of targets) {
@@ -745,7 +902,7 @@ export class HighlightEngine {
    * 按段落整体重算（无状态，重做切分组后结果一致）。被省略的 mark 加 data-hnw-nogloss（CSS 隐藏其译文），
    * 仍然高亮，悬停/卡片照常可看释义；开关关闭时清掉该标记，每次出现都显示。代码中的 mark 不参与计数。
    */
-  private thinGlosses(marks: HTMLElement[]): void {
+  private thinGlosses(marks: Element[]): void {
     const once = this.opts.glossOncePerParagraph !== false;
     const blocks = new Set<Element>();
     for (const m of marks) {
@@ -794,10 +951,23 @@ export class HighlightEngine {
   }
 
   private applyTranslations(marks: Iterable<Element>): void {
+    if (this.stopped) return;
+    for (const mark of marks) if (mark.isConnected && this.needsTranslation(mark)) this.pendingTranslations.add(mark);
+    if (!this.pendingTranslations.size) return;
+    const quietRemaining = SCROLL_QUIET_MS - (performance.now() - this.lastScrollAt);
+    clearTimeout(this.translationTimer);
+    this.translationTimer = undefined;
+    if (quietRemaining > 0) {
+      // IO、词典异步返回和分段 rAF 共用此入口；连续滚动期间合并，不让任一路径提前插入译文。
+      this.translationTimer = setTimeout(() => { this.translationTimer = undefined; this.applyTranslations([]); }, quietRemaining);
+      return;
+    }
+    const ready = [...this.pendingTranslations].filter(mark => mark.isConnected && this.needsTranslation(mark));
+    this.pendingTranslations.clear();
     const floatCode = !!this.opts.code?.enabled && this.opts.code.display === 'float';
     this.withoutObserving(() => {
-      for (const m of marks) {
-        if (!m.isConnected) continue;
+      if (this.opts.inlineTranslation === 'after' || isRubyMode(this.opts.inlineTranslation)) this.thinGlosses(ready);
+      for (const m of ready) {
         const tr = this.translationOf(m);
         setMarkTranslation(m, tr ? shortenTranslation(tr) : undefined);
         if (floatCode && tr && m.hasAttribute(ATTR_CODE)) this.pendingCodeRoots.add(m.parentElement?.closest('pre,code') ?? m.parentElement!);

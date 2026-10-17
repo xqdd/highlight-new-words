@@ -1,5 +1,6 @@
 import type { BookId, TtsSource } from '../settings/schema';
 import type { SourceBookState } from '../wordbook/types';
+import type { ReadingToken } from '../reading/analyze';
 import type {
   BackendSyncStatus,
   BackupExport,
@@ -212,6 +213,8 @@ export interface SyncAllResult {
 }
 
 export interface BackgroundProtocol {
+  /** 本地阅读分析移到后台执行，避免阻塞页面滚动；单次文本不得超过 6000 个字符，不发网络请求。 */
+  analyzeReading(data: { text: string; withSyntax: boolean }): ReadingToken[];
   /**
    * 朗读单词（遵循 settings.tts 的 voice/rate；force=true 时忽略自动发音开关，用于卡片上的发音按钮）。
    * 返回 spoken=false 表示未朗读：reason='disabled' 自动发音关闭；'unavailable' 当前浏览器无 chrome.tts（如部分移动端），

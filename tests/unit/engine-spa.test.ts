@@ -163,11 +163,16 @@ describe('shortenTranslation', () => {
 });
 
 describe('页面删除未进入视口的 mark：懒插入观察者停止持有（E4）', () => {
-  /** 记录被观察节点的 IntersectionObserver 替身：永不回调（模拟一直在视口外） */
+  /** 生词发现立即可见，译文观察永不回调，独立验证已经创建的 mark 的观察生命周期。 */
   class RecordingIO {
     static held = new Set<Element>();
-    observe = vi.fn((el: Element) => RecordingIO.held.add(el));
-    unobserve = vi.fn((el: Element) => RecordingIO.held.delete(el));
+    constructor(private callback: IntersectionObserverCallback, private options?: IntersectionObserverInit) {}
+    observe = vi.fn((el: Element) => {
+      if (this.options?.rootMargin === '1600px') {
+        queueMicrotask(() => this.callback([{ target: el, isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver));
+      } else RecordingIO.held.add(el);
+    });
+    unobserve = vi.fn((el: Element) => { if (el.localName === 'hnw-mark') RecordingIO.held.delete(el); });
     disconnect() {
       RecordingIO.held.clear();
     }

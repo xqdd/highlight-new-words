@@ -26,6 +26,7 @@ import { markSurface } from './engine/highlighter';
 import { layoutAffectingSettings } from './engine/prehide';
 import { applyPageStyle, removePageStyle } from './engine/style';
 import { startPageExtras } from './sites/context';
+import { trackScrollActivity, waitForScrollQuiet } from './scroll-activity';
 
 /**
  * 内容脚本应用：组装 设置 / 词书 / 词形还原 / 匹配 / 引擎 / 卡片，并响应存储变化。
@@ -48,6 +49,8 @@ export interface ContentAppOptions {
 export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<void> {
   const releasePrehide = appOpts.releasePrehide ?? (() => {});
   const doc = document;
+  // 设置、词书加载期间用户可能已开始滚动；此文档级监听与 Window 一同回收，供晚启动引擎读取。
+  if (doc.defaultView) trackScrollActivity(doc.defaultView);
   const lemmatizer = createLemmatizer();
   // 内容脚本在 document_start 注入：词形数据、设置、词书与页面解析并行加载，DOM 就绪时尽快处理首屏，
   // 争取在首次绘制/用户开始阅读前完成首屏标注（首屏插入词后译文造成的布局推移在首次绘制前不计入 CLS）
@@ -203,20 +206,44 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
   }
 
   let startingEngine: Promise<void> | undefined;
+  let startupQuiet: AbortController | undefined;
+  let matcherRevision = 0;
+  let settingsReady: Promise<void> = Promise.resolve();
+  let settingsRefreshGeneration = 0;
   function startEngine(): Promise<void> {
     startingEngine ??= initializeEngine().finally(() => { startingEngine = undefined; });
     return startingEngine;
   }
   async function initializeEngine(): Promise<void> {
-    const matcher = await buildMatcher();
-    await firstScreenParsed(doc);
-    // 等短释义分片就绪（最多 DICT_PRELOAD_MAX_WAIT_MS）：这样首屏 mark 与译文在同一任务内写入、一起首次绘制。
-    // 否则 mark 先显示、译文下一帧才插入，mark 后面已显示的文字整体推移，“词后”模式 CLS 明显变大（兼容性测试 spring-boot +0.04）
-    await Promise.race([dictPreload, new Promise((r) => setTimeout(r, DICT_PRELOAD_MAX_WAIT_MS))]);
-    // frameset 等没有 body 的文档不处理
-    if (!doc.body || !active()) {
-      releasePrehide();
-      return;
+    let matcher: WordMatcher;
+    for (;;) {
+      // 等待期间设置与词书仍可变化；必须连同 matcher 一起重建，不能把新设置套在旧词书匹配器上。
+      const ready = settingsReady;
+      await ready;
+      if (ready !== settingsReady) continue;
+      const revision = matcherRevision;
+      matcher = await buildMatcher();
+      await firstScreenParsed(doc);
+      // 等短释义分片就绪（最多 DICT_PRELOAD_MAX_WAIT_MS）：这样首屏 mark 与译文在同一任务内写入、一起首次绘制。
+      // 否则 mark 先显示、译文下一帧才插入，mark 后面已显示的文字整体推移，“词后”模式 CLS 明显变大（兼容性测试 spring-boot +0.04）
+      await Promise.race([dictPreload, new Promise((r) => setTimeout(r, DICT_PRELOAD_MAX_WAIT_MS))]);
+      // frameset 等没有 body 的文档不处理
+      if (!doc.body || !active()) {
+        releasePrehide();
+        return;
+      }
+      // 样式表安装本身就会使大页面样式失效，必须早于引擎首片一起遵守停稳条件。
+      startupQuiet?.abort();
+      const quiet = startupQuiet = new AbortController();
+      const mayStart = doc.defaultView && await waitForScrollQuiet(doc.defaultView, quiet.signal);
+      if (startupQuiet === quiet) startupQuiet = undefined;
+      if (!doc.body || !active()) {
+        releasePrehide();
+        return;
+      }
+      if (revision !== matcherRevision) continue;
+      if (!mayStart) { releasePrehide(); return; }
+      break;
     }
     applyPageStyle(doc, settings);
     ensureCard();
@@ -249,6 +276,8 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
   }
 
   function stopEngine(): void {
+    startupQuiet?.abort();
+    startupQuiet = undefined;
     engine?.stop();
     engine = null;
     card?.close();
@@ -271,16 +300,6 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     isTop,
   });
 
-  // 首次启动
-  if (active()) {
-    try {
-      await startEngine();
-    } finally {
-      releasePrehide();
-    }
-  }
-  if (!active() && readingActive() && settings.reading.enabled) await firstScreenParsed(doc);
-  syncReadingTools();
   appOpts.onLocationChange?.(() => {
     extras.settingsChanged();
     syncReadingTools();
@@ -296,9 +315,16 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
       (k) => k === STORAGE_KEYS.settings || k === STORAGE_KEYS.knownWords || k.startsWith(SOURCE_BOOK_KEY_PREFIX) || k.startsWith(LOCAL_BOOK_KEY_PREFIX),
     );
     if (!relevant) return;
+    matcherRevision++;
     const prev = settings;
     if (changes[STORAGE_KEYS.settings]) {
-      settings = await getSettings();
+      const generation = ++settingsRefreshGeneration;
+      const refresh = getSettings().then(next => {
+        if (generation === settingsRefreshGeneration) settings = next;
+      });
+      settingsReady = refresh;
+      await refresh;
+      if (generation !== settingsRefreshGeneration) return;
       // 预设记忆只供设置页使用；保存快照或更新时间不应让长文重新套用样式与扫描。
       const { readingPresets: _previousPresets, updatedAt: _previousTime, ...previousPageSettings } = prev;
       const { readingPresets: _nextPresets, updatedAt: _nextTime, ...nextPageSettings } = settings;
@@ -373,6 +399,17 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
 
   // 便于调试：控制台可查看当前实例（隔离世界中，不会暴露给页面脚本）
   (globalThis as Record<string, unknown>).__hnw = { get engine() { return engine; }, get settings(): Settings { return settings; } };
+
+  // 首次启动：先注册所有监听，持续滚动等待停稳期间也必须即时处理关闭、词书与熟词变化。
+  if (active()) {
+    try {
+      await startEngine();
+    } finally {
+      releasePrehide();
+    }
+  }
+  if (!active() && readingActive() && settings.reading.enabled) await firstScreenParsed(doc);
+  syncReadingTools();
 }
 
 /** 判断“首屏已就绪”的轮询间隔（ms） */

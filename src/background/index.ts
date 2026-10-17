@@ -1,4 +1,5 @@
 import { browser } from 'wxt/browser';
+import { analyzeReading } from '@/core/reading/analyze';
 import { handleBackgroundMessages } from '@/core/messaging';
 import { runMigrationIfNeeded } from '@/core/settings/store';
 import { exportBackup, importBackup, previewBackupImport } from '@/core/sync/backup';
@@ -33,6 +34,12 @@ export function setupBackground(): void {
   const statusSources = { getStorageSync: () => sync.getStatus(), getWebDav: () => webdav.getStatus() };
 
   handleBackgroundMessages({
+    analyzeReading: async ({ text, withSyntax }) => {
+      // MV3 service worker 不支持动态 import；后台独立执行分析，避免阻塞页面主线程。
+      // 与页面段落分片上限一致，防止超大单次分析长时间占用后台。
+      if (text.length > 6000) throw new Error('阅读分析单次文本不能超过 6000 个字符');
+      return analyzeReading(text, withSyntax);
+    },
     tts: ({ text, force }) => speak(text, force),
     ttsAudio: ({ word, source }) => fetchVoiceAudio(word, source),
     refreshSourceBooks: async ({ providerId }) => {

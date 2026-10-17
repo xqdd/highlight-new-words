@@ -34,6 +34,26 @@ async function openExtension(directory, viewport) {
     hasTouch: viewport.width < 500, isMobile: viewport.width < 500,
     args: [`--disable-extensions-except=${directory}`, `--load-extension=${directory}`],
   });
+  await context.addInitScript(() => {
+    // 同时检查旧扩展的 DOM 词标和新扩展的原生绘制；不把空 layer 或失效 StaticRange 算作标记。
+    window.__hnwReadingCount = (selector = 'body') => {
+      const roots = [...document.querySelectorAll(selector)];
+      const words = new Set(roots.flatMap(root => [...root.querySelectorAll('hnw-read:not([data-group]),hnw-w[data-hnw-reading-word]')]));
+      let count = words.size;
+      for (const [name, layer] of CSS.highlights ?? []) {
+        if (!name.startsWith('hnw-reading-')) continue;
+        for (const range of layer) {
+          const start = range.startContainer;
+          const end = range.endContainer;
+          if (!start.isConnected || !end.isConnected || start.nodeType !== Node.TEXT_NODE || end.nodeType !== Node.TEXT_NODE) continue;
+          if (range.startOffset < 0 || range.startOffset >= start.length || range.endOffset > end.length) continue;
+          if (start === end && range.endOffset <= range.startOffset) continue;
+          if (roots.some(root => root.contains(start))) count++;
+        }
+      }
+      return count;
+    };
+  });
   const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
   await worker.evaluate(async () => {
     for (let i = 0; i < 100; i++) {
@@ -97,17 +117,17 @@ try {
       await page.waitForTimeout(1200);
       const original = await snapshot(page);
       if (reference) assert.deepEqual(original, reference, `${name}: default reading must preserve previous content`);
-      assert.equal(await page.locator('hnw-read').count(), 0);
+      assert.equal(await page.evaluate(() => window.__hnwReadingCount()), 0);
       await page.screenshot({ path: path.join(output, `${name}-default.png`) });
       await patch({ enabled: true, bionic: { enabled: true }, syntax: { enabled: true, nouns: true, adjectives: true, adverbs: true }, emphasis: { negation: true, connectives: true, numbers: true, properNouns: true }, phrases: { enabled: true } });
-      await page.waitForFunction(() => document.querySelectorAll('hnw-read').length > 10);
+      await page.waitForFunction(() => window.__hnwReadingCount() > 10);
       await page.waitForTimeout(1000);
       assert.deepEqual(await snapshot(page), original, `${name}: annotations changed content`);
-      assert.equal(await page.locator('#editor hnw-read, pre hnw-read, aside hnw-read, header hnw-read').count(), 0);
+      assert.equal(await page.evaluate(() => window.__hnwReadingCount('#editor, pre, aside, header')), 0);
       await page.screenshot({ path: path.join(output, `${name}-reading.png`) });
-      const words = await page.locator('hnw-read').count();
+      const words = await page.evaluate(() => window.__hnwReadingCount());
       await page.waitForTimeout(500);
-      assert.equal(await page.locator('hnw-read').count(), words, 'observers should settle');
+      assert.equal(await page.evaluate(() => window.__hnwReadingCount()), words, 'observers should settle');
       for (const books of [[], ['cet6']]) {
         await worker.evaluate(async books => {
           const { settings } = await chrome.storage.local.get('settings');
@@ -135,9 +155,9 @@ try {
       });
       // 正文按视口懒处理：先滚到新增段，再验证标注和框架更新。
       await page.locator('#inserted').scrollIntoViewIfNeeded();
-      await page.waitForFunction(() => document.querySelector('#inserted hnw-read'));
+      await page.waitForFunction(() => window.__hnwReadingCount('#inserted') > 0);
       await page.evaluate(() => { document.getElementById('inserted').textContent = 'They do not give up. Therefore, 42 results remain.'; });
-      await page.waitForFunction(() => document.querySelector('#inserted hnw-read'));
+      await page.waitForFunction(() => window.__hnwReadingCount('#inserted') > 0);
       assert.equal(await page.locator('#inserted').textContent(), 'They do not give up. Therefore, 42 results remain.');
 
       // Text 节点引用由页面框架持有：标注后改写或删除也不能残留旧片段。
@@ -148,7 +168,7 @@ try {
         window.__readingText = text;
       });
       await page.locator('#framework').scrollIntoViewIfNeeded();
-      await page.waitForFunction(() => document.querySelector('#framework hnw-read'));
+      await page.waitForFunction(() => window.__hnwReadingCount('#framework') > 0);
       await page.evaluate(() => { window.__readingText.data = 'The updated text must not be duplicated.'; });
       await page.waitForTimeout(500);
       assert.equal(await page.locator('#framework').textContent(), 'The updated text must not be duplicated.');
@@ -178,15 +198,15 @@ try {
       await page.screenshot({ path: path.join(output, `${name}-phrase.png`) });
       await page.keyboard.press('Escape');
       await patch({ enabled: false });
-      await page.waitForFunction(() => !document.querySelector('hnw-read'));
+      await page.waitForFunction(() => window.__hnwReadingCount() === 0);
       await page.waitForTimeout(300);
       await page.evaluate(() => { document.getElementById('inserted').remove(); document.getElementById('framework').remove(); });
       assert.deepEqual(await snapshot(page), original, `${name}: disabling did not restore content`);
       for (let i = 0; i < 2; i++) {
         await patch({ enabled: true });
-        await page.waitForFunction(() => document.querySelector('hnw-read'));
+        await page.waitForFunction(() => window.__hnwReadingCount() > 0);
         await patch({ enabled: false });
-        await page.waitForFunction(() => !document.querySelector('hnw-read'));
+        await page.waitForFunction(() => window.__hnwReadingCount() === 0);
         await page.waitForTimeout(200);
         assert.deepEqual(await snapshot(page), original, `${name}: repeated toggle changed original content`);
       }
@@ -199,7 +219,7 @@ try {
         document.querySelector('article').append(p);
       });
       await page.locator('#longword').scrollIntoViewIfNeeded();
-      await page.waitForFunction(() => document.querySelector('#longword hnw-read'));
+      await page.waitForFunction(() => window.__hnwReadingCount('#longword') > 0);
       await page.waitForTimeout(700);
       assert.equal(await page.locator('#longword').evaluate(el => el.scrollWidth <= el.clientWidth), true, `${name}: a long word overflowed at 32px`);
       await page.evaluate(() => document.getElementById('longword').remove());
@@ -209,11 +229,12 @@ try {
         await chrome.storage.local.set({ settings });
       });
       await page.waitForTimeout(500);
-      assert.equal(await page.locator('hnw-read, hnw-reading-tools, [data-hnw-ui="reading-phrase"]').count(), 0, 'site disable should clean up all reading tools');
+      assert.equal(await page.evaluate(() => window.__hnwReadingCount()), 0, 'site disable should clean up all reading marks');
+      assert.equal(await page.locator('hnw-reading-tools, [data-hnw-ui="reading-phrase"]').count(), 0, 'site disable should clean up all reading tools');
       assert.deepEqual(await snapshot(page), original);
       await patch({ enabled: true }, false);
       await page.waitForTimeout(500);
-      assert.equal(await page.locator('hnw-read').count(), 0);
+      assert.equal(await page.evaluate(() => window.__hnwReadingCount()), 0);
 
       const options = await context.newPage();
       options.on('pageerror', error => errors.push(error.message));

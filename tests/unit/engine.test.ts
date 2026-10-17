@@ -8,6 +8,7 @@ import { highlightTextNode, unwrapAll } from '@/content/engine/highlighter';
 import { collectTextNodes } from '@/content/engine/scanner';
 import { createDefaultReadingSettings } from '@/core/reading/settings';
 import { normalizeSettings } from '@/core/settings/migrate';
+import { trackScrollActivity } from '@/content/scroll-activity';
 
 const book = createSetWordBook(
   { id: 'cet4', name: 'cet4', nameEn: 'cet4', short: '四级', kind: 'builtin', category: 'exam', level: 3, size: 0 },
@@ -84,6 +85,165 @@ describe('HighlightEngine', () => {
 describe('shortenTranslation', () => {
   it('取第一个义项并去词性', () => {
     expect(shortenTranslation('vt. 放弃, 抛弃')).toBe('放弃');
+  });
+});
+
+describe('生词视口预读', () => {
+  it('零盒 display:contents 转交有盒祖先，跨容器移动后重新观察且不漏生词', async () => {
+    const observers: FakeObserver[] = [];
+    class FakeObserver {
+      targets = new Set<Element>();
+      constructor(private callback: IntersectionObserverCallback) { observers.push(this); }
+      observe(target: Element) { this.targets.add(target); }
+      unobserve(target: Element) { this.targets.delete(target); }
+      disconnect() { this.targets.clear(); }
+      report(target: Element, isIntersecting: boolean) {
+        this.callback([{ target, isIntersecting, boundingClientRect: { width: 0, height: 0 } } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    document.body.innerHTML = '<main><section style="display:contents"><span id="text" style="display:contents">abandon the premise</span></section></main><article></article>';
+    const engine = new HighlightEngine({ root: document.body, matcher: matcher(), dictionary: dict, inlineTranslation: 'off' });
+    try {
+      engine.start(); await flush();
+      const viewport = observers[0]!;
+      const text = document.querySelector('#text')!;
+      const main = document.querySelector('main')!;
+      const article = document.querySelector('article')!;
+      viewport.report(text, false);
+      expect(viewport.targets.has(text)).toBe(false);
+      expect(viewport.targets.has(main)).toBe(true);
+      // 还没进入旧祖先视口就移动，旧祖先的待处理文字必须能随新位置重新发现。
+      article.append(text); await flush();
+      expect(viewport.targets.has(text)).toBe(true);
+      viewport.report(text, false);
+      expect(viewport.targets.has(article)).toBe(true);
+      viewport.report(article, true); await flush();
+      expect(text.querySelectorAll('hnw-mark')).toHaveLength(2);
+      expect(main.querySelector('hnw-mark')).toBeNull();
+      expect(text.textContent).toBe('abandon the premise');
+      engine.stop();
+      expect(text.textContent).toBe('abandon the premise');
+      expect(text.querySelector('hnw-mark')).toBeNull();
+    } finally { engine.stop(); vi.unstubAllGlobals(); }
+  });
+
+  it('先发现全文，随机跳转只包装目标区域；移除、重挂及框架文字更新仍可处理', async () => {
+    const observers: FakeObserver[] = [];
+    class FakeObserver {
+      targets = new Set<Element>();
+      constructor(private callback: IntersectionObserverCallback) { observers.push(this); }
+      observe(target: Element) { this.targets.add(target); }
+      unobserve(target: Element) { this.targets.delete(target); }
+      disconnect() { this.targets.clear(); }
+      enter(target: Element) {
+        this.callback([{ target, isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    document.body.innerHTML = '<p id="top">abandon the premise</p><p id="bottom">scrutinize the premise</p>';
+    const original = document.body.textContent;
+    const engine = new HighlightEngine({ root: document.body, matcher: matcher(), dictionary: dict, inlineTranslation: 'off' });
+    try {
+      engine.start();
+      await flush();
+      const viewport = observers[0]!;
+      const top = document.querySelector('#top')!;
+      const bottom = document.querySelector('#bottom')!;
+      expect(viewport.targets.has(top)).toBe(true);
+      expect(viewport.targets.has(bottom)).toBe(true);
+      expect(document.querySelectorAll('hnw-mark')).toHaveLength(0);
+      viewport.enter(bottom);
+      await flush();
+      expect(bottom.querySelectorAll('hnw-mark')).toHaveLength(2);
+      expect(top.querySelectorAll('hnw-mark')).toHaveLength(0);
+      top.remove();
+      await flush();
+      expect(viewport.targets.has(top)).toBe(false);
+      document.body.append(top);
+      await flush();
+      expect(viewport.targets.has(top)).toBe(true);
+      viewport.enter(top);
+      await flush();
+      expect(top.querySelectorAll('hnw-mark')).toHaveLength(2);
+      const owner = top.firstChild as Text;
+      owner.data = 'scrutinize everything';
+      await flush();
+      expect(top.textContent).toBe('scrutinize everything');
+      expect(top.querySelector('hnw-mark')?.getAttribute('data-lemma')).toBe('scrutinize');
+      engine.stop();
+      expect(document.querySelectorAll('hnw-mark')).toHaveLength(0);
+      expect(observers.every(observer => observer.targets.size === 0)).toBe(true);
+      expect(original).toContain('abandon the premise');
+    } finally {
+      engine.stop();
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('滚动期间延迟译文写入', () => {
+  it('异步启动前已发生输入时，首片和 prime 均让出，停稳后再补标', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<p>abandon the premise</p>';
+    const release = trackScrollActivity(window);
+    const engine = new HighlightEngine({ root: document.body, matcher: matcher(), dictionary: dict, inlineTranslation: 'after' });
+    const geometry = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
+    try {
+      window.dispatchEvent(new Event('wheel'));
+      engine.start();
+      await engine.primeFirstScreen();
+      expect(document.querySelector('hnw-mark')).toBeNull();
+      expect(geometry).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(60);
+      expect(document.querySelector('hnw-mark')).toBeNull();
+      window.dispatchEvent(new Event('touchmove'));
+      await vi.advanceTimersByTimeAsync(60);
+      expect(document.querySelector('hnw-mark')).toBeNull();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(document.querySelectorAll('hnw-mark')).toHaveLength(2);
+      expect(document.querySelectorAll('hnw-tr[data-tr]')).toHaveLength(2);
+    } finally { engine.stop(); release(); geometry.mockRestore(); vi.useRealTimers(); }
+  });
+
+  it('词典异步返回后仍等待最后一次滚动输入停稳，再一次补齐译文', async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<p>abandon the premise</p>';
+    let release!: () => void;
+    const response = new Promise<void>(resolve => { release = resolve; });
+    const dictionary: Dictionary = { ...dict, lookupMany: async words => { await response; return dict.lookupMany(words); } };
+    const engine = new HighlightEngine({ root: document.body, matcher: matcher(), dictionary, inlineTranslation: 'after' });
+    try {
+      engine.start();
+      window.dispatchEvent(new Event('wheel'));
+      release();
+      await vi.advanceTimersByTimeAsync(60);
+      expect(document.querySelectorAll('hnw-mark')).toHaveLength(2);
+      expect(document.querySelector('hnw-tr')).toBeNull();
+      expect(document.querySelector('[data-hnw-nogloss]')).toBeNull();
+      window.dispatchEvent(new Event('touchmove'));
+      await vi.advanceTimersByTimeAsync(60);
+      expect(document.querySelector('hnw-tr')).toBeNull();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(document.querySelectorAll('hnw-tr[data-tr]')).toHaveLength(2);
+    } finally { engine.stop(); vi.useRealTimers(); }
+  });
+
+  it.each(['off', 'stop'])('等待期间 %s 不会在停稳后补写旧译文', async action => {
+    vi.useFakeTimers();
+    document.body.innerHTML = '<p>abandon the premise</p>';
+    const engine = new HighlightEngine({ root: document.body, matcher: matcher(), dictionary: dict, inlineTranslation: 'off' });
+    try {
+      engine.start();
+      window.dispatchEvent(new Event('wheel'));
+      engine.setInlineTranslation('after');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector('hnw-tr')).toBeNull();
+      if (action === 'stop') engine.stop(); else engine.setInlineTranslation('off');
+      await vi.advanceTimersByTimeAsync(200);
+      expect(document.querySelector('hnw-tr')).toBeNull();
+      if (action === 'stop') expect(document.querySelector('hnw-mark')).toBeNull();
+    } finally { engine.stop(); vi.useRealTimers(); }
   });
 });
 
