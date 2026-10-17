@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { analyzeReading } from '@/core/reading/analyze';
 
 describe('阅读功能词分类', () => {
+  it.each([
+    ['Self-hosted Kodus installations need read-only context.', ['Self', 'hosted', 'read', 'only']],
+    ['Allow a pre-review external agent hook in self-hosted deployments.', ['pre', 'review', 'self', 'hosted']],
+    ['Use project webhooks or CI/CD pipelines to run an external agent.', ['CI', 'CD']],
+    ['The hook receives MR/PR metadata and sandbox/checkout paths.', ['MR', 'PR', 'sandbox', 'checkout']],
+    ['Use a controlled adapter boundary for MCP/HTTP/CLI contributors.', ['MCP', 'HTTP', 'CLI']],
+  ])('GitHub issue 实际复合词的每一部分均有标记且偏移不变：%s', (text, words) => {
+    const tokens = analyzeReading(text);
+    for (const word of words) expect(tokens.find(token => token.text === word)?.pos, word).toBeDefined();
+    for (const token of tokens) expect(text.slice(token.start, token.end)).toBe(token.text);
+  });
+
   it.each(['…', '...', '....'])('省略号%s不吞掉后续代词，保持前后词的原文偏移', punctuation => {
     const text = `Ernest:“There’s always ‘beef’ emails — neighborhood beef, yoga studio beef, conference beef, business beef${punctuation}Someone has been wronged and has written a Medium hot take about it.”`;
     const tokens = analyzeReading(text);

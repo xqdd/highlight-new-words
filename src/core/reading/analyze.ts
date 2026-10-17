@@ -43,6 +43,7 @@ export function analyzeReading(text: string, withSyntax = true): ReadingToken[] 
   }
   if (!withSyntax || !/[A-Za-z]/.test(text)) return tokens;
   const byStart = new Map(tokens.map((token) => [token.start, token]));
+  const indexByStart = new Map(tokens.map((token, index) => [token.start, index]));
   // 网页常把署名和引语分在相邻行内标签里，textContent 会成为 Ripley:“We。
   // 等长替换引号，避免分析器把署名与首词黏成一个 term；冒号直连引语按句首分析。
   // 紧贴省略号的 beef…Someone 也会黏词；用等长换行边界隔开，保留正常句点、缩写和连字符。
@@ -52,7 +53,19 @@ export function analyzeReading(text: string, withSyntax = true): ReadingToken[] 
   const terms = nlp(syntaxText).terms().json({ offset: true }) as Array<{
     terms: Array<{ text: string; tags: string[]; offset?: { start: number; length: number } }>;
   }>;
-  const taggedTerms = terms.flatMap(group => group.terms);
+  const taggedTerms = terms.flatMap(group => group.terms).flatMap(term => {
+    // compromise 部分复合词只有一个 term（pre-review、CI/CD）；词级包装需要覆盖每个组成词。
+    // 沿用整个复合词的上下文标签，仅展开纯英文连字符/斜杠形式，不拆 URL、小数或混合标识符。
+    if (!term.offset || !/^[A-Za-z]+(?:['’][A-Za-z]+)?(?:[-/‐‑–—][A-Za-z]+(?:['’][A-Za-z]+)?)+$/.test(term.text)) return [term];
+    const first = indexByStart.get(term.offset.start);
+    if (first === undefined) return [term];
+    const parts = [];
+    for (let i = first; i < tokens.length && tokens[i]!.end <= term.offset.start + term.offset.length; i++) {
+      const token = tokens[i]!;
+      parts.push({ ...term, text: token.text, offset: { start: token.start, length: token.end - token.start } });
+    }
+    return parts;
+  });
   for (const [index, term] of taggedTerms.entries()) {
       if (!term.offset) continue;
       const token = byStart.get(term.offset.start);
