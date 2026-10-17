@@ -13,6 +13,8 @@ const selected = arg('--sites', '').split(',').filter(Boolean);
 const reusableProfile = arg('--profile', '');
 const bodyAnchors = process.argv.includes('--body-anchors');
 const sites = [
+  { id: 'chatgpt', url: 'https://learn.chatgpt.com/docs/config-file/config-reference', regions: { article: 'article' } },
+  { id: 'youtube-fragments', url: 'https://www.youtube.com/watch?v=mjg_JUMar04', regions: { description: '#description-inline-expander #expanded', comments: '#comments #content-text', title: 'h1' } },
   { id: 'youtube', url: 'https://www.youtube.com/watch?v=XqtnBlPJ6KE', regions: { description: '#description-inline-expander, ytd-text-inline-expander', comments: '#comments #content-text', title: 'h1' } },
   { id: 'medium', url: 'https://medium.com/blog/how-medium-moderates-its-open-platform-in-the-ai-era-6ffb28f38cf8', regions: { article: 'article' } },
   { id: 'wikipedia', url: 'https://en.wikipedia.org/wiki/Barack_Obama', regions: { article: '.mw-parser-output' } },
@@ -69,7 +71,7 @@ try {
         fs.writeFileSync(path.join(output, `${site.id}.html`), await page.content());
         continue;
       }
-      if (site.id === 'youtube') {
+      if (site.id.startsWith('youtube')) {
         const expand = page.locator('#description-inline-expander #expand, ytd-text-inline-expander #expand').first();
         if (await expand.isVisible()) await expand.click({ timeout: 3000 });
       }

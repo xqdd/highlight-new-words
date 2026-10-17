@@ -17,6 +17,11 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    title: '阅读标记更集中于正文',
+    body: '原文阅读与生词高亮可独立设置范围，分别跳过短文本、独立链接、辅助信息、标题、表格、按钮和导航；生词过滤默认关闭。正文行内链接保留标记，修复复合词连接符后部分漏标。',
+    link: { page: 'reading', anchor: 'reading-scope', label: '去设置' },
+  },
+  {
     title: '新增原文阅读',
     body: '词首加粗、11 类词性与 4 类语义线索均在本地分析。81 套标记主题可选，开关、样式和颜色统一配置，自定义后切换预设仍可恢复。默认关闭，可按需开启。',
     link: { page: 'reading', label: '去设置' },
@@ -33,7 +38,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   },
   {
     title: '长文滚动性能优化',
-    body: '扩大上下左右预读，保留最近阅读过的部分标记，减少来回滚动的重复等待；连续滚动时优先响应页面，停稳后补上新区域标记。',
+    body: '扩大正文与内层表格的预读范围，连续滚动期间分批补标，优先处理可见文字；保留近期标记，减少来回滚动的重复等待。',
     link: { page: 'reading', label: '查看' },
   },
   {
