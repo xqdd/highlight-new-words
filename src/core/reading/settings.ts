@@ -17,6 +17,7 @@ export type ReadingEmphasisStyles = Record<ReadingEmphasisKind, { mode: ReadingM
 export interface ReadingSettings {
   enabled: boolean;
   wordStylePriority: 'reading' | 'vocabulary';
+  scope: { skipShortBlocks: boolean; minWords: number; skipStandaloneLinks: boolean; skipHeadings: boolean; skipTables: boolean; skipButtons: boolean; skipNavigation: boolean; skipMetadata: boolean };
   bionic: { enabled: boolean; ratio: number; minLength: number; intensity: 'light' | 'medium' | 'strong'; interval: number };
   syntax: {
     enabled: boolean; verbs: boolean; nouns: boolean; adjectives: boolean; adverbs: boolean;
@@ -33,6 +34,7 @@ export function createDefaultReadingSettings(): ReadingSettings {
   return {
     enabled: false,
     wordStylePriority: 'reading',
+    scope: { skipShortBlocks: true, minWords: 3, skipStandaloneLinks: true, skipHeadings: false, skipTables: false, skipButtons: true, skipNavigation: true, skipMetadata: true },
     bionic: { enabled: false, ratio: 0.5, minLength: 4, intensity: 'medium', interval: 1 },
     syntax: { enabled: false, verbs: true, nouns: true, adjectives: true, adverbs: true,
       pronouns: true, determiners: true, prepositions: true, conjunctions: true, numerals: true, interjections: true, particles: true,
@@ -52,13 +54,23 @@ export function normalizeReadingSettings(raw: unknown): ReadingSettings {
   const value = object(raw);
   const bool = (v: unknown, fallback: boolean) => typeof v === 'boolean' ? v : fallback;
   const number = (v: unknown, fallback: number, min: number, max: number) => typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fallback;
-  const b = object(value.bionic), s = object(value.syntax), colors = object(s.colors), e = object(value.emphasis);
+  const b = object(value.bionic), s = object(value.syntax), colors = object(s.colors), e = object(value.emphasis), scope = object(value.scope);
   const validColor = (v: unknown, fallback: string) => typeof v === 'string' && /^#[\da-f]{6}$/i.test(v) ? v : fallback;
   const validMode = (v: unknown, fallback: ReadingMarkStyle) => READING_MARK_STYLES.includes(v as ReadingMarkStyle) ? v as ReadingMarkStyle : fallback;
   const styles = object(e.styles);
   return {
     enabled: bool(value.enabled, defaults.enabled),
     wordStylePriority: value.wordStylePriority === 'vocabulary' ? 'vocabulary' : 'reading',
+    scope: {
+      skipShortBlocks: bool(scope.skipShortBlocks, defaults.scope.skipShortBlocks),
+      minWords: Math.round(number(scope.minWords, defaults.scope.minWords, 2, 50)),
+      skipStandaloneLinks: bool(scope.skipStandaloneLinks, defaults.scope.skipStandaloneLinks),
+      skipHeadings: bool(scope.skipHeadings, defaults.scope.skipHeadings),
+      skipTables: bool(scope.skipTables, defaults.scope.skipTables),
+      skipButtons: bool(scope.skipButtons, defaults.scope.skipButtons),
+      skipNavigation: bool(scope.skipNavigation, defaults.scope.skipNavigation),
+      skipMetadata: bool(scope.skipMetadata, defaults.scope.skipMetadata),
+    },
     bionic: { enabled: bool(b.enabled, false), ratio: number(b.ratio, 0.5, 0.2, 0.8), minLength: Math.round(number(b.minLength, 4, 3, 12)), intensity: b.intensity === 'light' || b.intensity === 'strong' ? b.intensity : 'medium', interval: Math.round(number(b.interval, 1, 1, 5)) },
     syntax: {
       enabled: bool(s.enabled, false), verbs: bool(s.verbs, true), nouns: bool(s.nouns, true), adjectives: bool(s.adjectives, true), adverbs: bool(s.adverbs, true),

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ReadingVisual } from '@/content/reading/visual';
+import { createReadingTools } from '@/content/reading';
 import { analyzeReading } from '@/core/reading/analyze';
 import { createDefaultReadingSettings, READING_MARK_STYLES, type ReadingSettings } from '@/core/reading/settings';
 import { HighlightEngine } from '@/content/engine/engine';
@@ -62,7 +63,157 @@ describe('本地阅读分析', () => {
 });
 
 describe('ReadingVisual', () => {
-  it.each([true, false])('按浏览器能力启用水平滚动容器邻列预读，并保持真实可见观察与原文还原：%s', async supported => {
+  it('多行正文中的短标签、链接、话题列表和章节索引分别过滤，正常行内引用保留', async () => {
+    document.body.innerHTML = '<article><div id="description" style="white-space:pre-wrap">They record music with friends.\nTOOLS\n'
+      + '<a id="url" href="https://example.com/docs">https://example.com/full/documentation</a>\n'
+      + '<a id="chapter" href="#chapter">0:30</a> They record music together\n'
+      + '<span id="tags">#music #reading #english</span>\n'
+      + '<span id="handles">@reading @english @music</span>\n'
+      + '<span id="prose">They use <a id="reference" href="/reference">the English reference</a> with friends.</span></div>'
+      + '<p id="br">They record music.<br><span id="short">Settings</span><br><a id="br-link" href="/docs">Read the complete documentation</a></p>'
+      + '<p id="source-newline">They\n<span>record\nmusic with friends.</span></p>'
+      + '<div role="toolbar"><p>Share this article with friends</p></div><div role="status"><p>They record music.</p></div>'
+      + '<div role="tablist"><p>They record music.</p></div><div class="post-taglist"><p>They record music.</p></div>'
+      + '<ul><li id="list">They record music with friends.</li></ul><p id="inline-date">They arrived at <time>12:30</time> and recorded music.</p></article>';
+    const before = document.body.textContent;
+    const v = visual();
+    await vi.waitFor(() => expect(document.querySelector('#prose [data-pos]')).not.toBeNull());
+    expect(document.querySelector('#reference [data-pos]')).not.toBeNull();
+    expect(document.querySelector('#url hnw-read,#chapter hnw-read,#tags hnw-read,#handles hnw-read,#short hnw-read,#br-link hnw-read,[role] hnw-read,.post-taglist hnw-read')).toBeNull();
+    expect([...document.querySelectorAll('#description [data-pos]')].some(el => el.textContent === 'TOOLS')).toBe(false);
+    for (const selector of ['#source-newline', '#list', '#inline-date']) await vi.waitFor(() => expect(document.querySelector(`${selector} [data-pos]`)).not.toBeNull());
+    expect(document.body.textContent).toBe(before);
+    v.stop(); expect(document.body.textContent).toBe(before);
+  });
+
+  it('关闭辅助信息及短文本/链接过滤后，可标记索引内容，隐藏和编辑区仍排除', async () => {
+    document.body.innerHTML = '<article><div style="white-space:pre-wrap"><span id="tags">#music #reading #english</span>\n'
+      + '<span id="short">Music</span>\n<a id="url" href="/docs">Read the complete documentation</a></div>'
+      + '<div role="toolbar"><p>They record music.</p></div><div role="status" hidden><p>They record music.</p></div>'
+      + '<div role="toolbar" contenteditable="true"><p>They record music.</p></div></article>';
+    const v = visual({}, settings => { settings.scope.skipMetadata = false; settings.scope.skipShortBlocks = false; settings.scope.skipStandaloneLinks = false; });
+    await vi.waitFor(() => {
+      for (const selector of ['#tags', '#short', '#url', '[role="toolbar"]:not([contenteditable])']) expect(document.querySelector(`${selector} :is([data-pos],[data-bionic])`), selector).not.toBeNull();
+    });
+    expect(document.querySelector('[hidden] hnw-read,[contenteditable] hnw-read')).toBeNull(); v.stop();
+  });
+
+  it('按钮和导航可分别放行，实时切换不破坏控件点击与原文还原', async () => {
+    document.body.innerHTML = '<button id="button"><span>They record music.</span></button><div role="button" id="role-button">They record music.</div>'
+      + '<nav><a id="nav-link" href="#music">They record music.</a></nav><div role="navigation"><span>They record music.</span></div>'
+      + '<header>They record music.</header><footer>They record music.</footer><aside>They record music.</aside><div role="menu">They record music.</div>'
+      + '<button hidden>They record music.</button><nav contenteditable="true">They record music.</nav>';
+    const before = document.body.textContent;
+    const button = document.querySelector('#button')!;
+    const clicked = vi.fn(); button.addEventListener('click', clicked);
+    const settings = createDefaultReadingSettings(); settings.enabled = true; settings.syntax.enabled = true;
+    settings.scope.skipStandaloneLinks = false;
+    const v = new ReadingVisual(document.body, settings); active.push(v); v.start();
+    await flush();
+    expect(document.querySelector('[data-pos]')).toBeNull();
+    settings.scope.skipButtons = false; v.update(settings);
+    await vi.waitFor(() => expect(document.querySelector('#button [data-pos]')).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('#role-button [data-pos]')).not.toBeNull());
+    expect(document.querySelector('nav [data-pos],[role="navigation"] [data-pos]')).toBeNull();
+    (button.querySelector('[data-pos]') as HTMLElement).click(); expect(clicked).toHaveBeenCalledOnce();
+    settings.scope.skipButtons = true; settings.scope.skipNavigation = false; v.update(settings);
+    await vi.waitFor(() => {
+      for (const selector of ['#nav-link', '[role="navigation"]', 'header', 'footer', 'aside', '[role="menu"]']) {
+        expect(document.querySelector(`${selector} [data-pos]`), selector).not.toBeNull();
+      }
+    });
+    expect(document.querySelector('button [data-pos],[role="button"] [data-pos],[contenteditable] [data-pos]')).toBeNull();
+    const added = document.createElement('button'); added.textContent = 'They record music.'; document.body.append(added);
+    settings.scope.skipButtons = false; v.update(settings);
+    await vi.waitFor(() => expect(added.querySelector('[data-pos]')).not.toBeNull());
+    const dynamic = document.createElement('button'); dynamic.textContent = 'They record music.'; document.body.append(dynamic);
+    await vi.waitFor(() => expect(dynamic.querySelector('[data-pos]')).not.toBeNull());
+    v.stop();
+    expect(document.body.textContent).toBe(before + 'They record music.They record music.');
+    expect(document.querySelector('hnw-read')).toBeNull();
+    expect(document.querySelector('#button')).toBe(button);
+  });
+
+  it('阅读生命周期即时应用范围修改，不能只保存而保留旧标记', async () => {
+    document.body.innerHTML = '<article><h2>They record music.</h2><p>They record music.</p></article>';
+    const tools = createReadingTools(document); active.push(tools);
+    const settings = createDefaultReadingSettings(); settings.enabled = true; settings.syntax.enabled = true;
+    tools.update(settings);
+    await vi.waitFor(() => expect(document.querySelector('h2 [data-pos]')).not.toBeNull());
+    settings.scope.skipHeadings = true;
+    tools.update(settings);
+    await vi.waitFor(() => expect(document.querySelector('p [data-pos]')).not.toBeNull());
+    expect(document.querySelector('h2 hnw-read')).toBeNull();
+    settings.scope.minWords = 8;
+    tools.update(settings);
+    await flush();
+    expect(document.querySelector('hnw-read')).toBeNull();
+    settings.scope.skipShortBlocks = false;
+    tools.update(settings);
+    await vi.waitFor(() => expect(document.querySelector('p [data-pos]')).not.toBeNull());
+  });
+
+  it('默认跳过孤立单词和整块链接，正文内链接与连字符/斜杠词仍完整标记', async () => {
+    document.body.innerHTML = '<article><p id="single">Settings</p><p id="link"><a href="/docs">Read the full documentation here</a></p>'
+      + '<p id="body">Use a <a href="/hook">pre-review</a> hook with MCP/HTTP/CLI contributors.</p><button>Review this document</button></article>';
+    const before = document.body.textContent;
+    const link = document.querySelector('#body a')!;
+    const v = visual();
+    await vi.waitFor(() => expect(document.querySelector('#body [data-pos]')).not.toBeNull());
+    expect(document.querySelector('#single hnw-read,#link hnw-read,button hnw-read')).toBeNull();
+    for (const word of ['pre', 'review', 'MCP', 'HTTP', 'CLI']) {
+      expect([...document.querySelectorAll('#body [data-pos]')].some(mark => mark.textContent === word), word).toBe(true);
+    }
+    expect(document.querySelector('#body a')).toBe(link);
+    expect(document.body.textContent).toBe(before);
+    v.stop();
+    expect(document.body.textContent).toBe(before);
+    expect(document.querySelector('hnw-read')).toBeNull();
+  });
+
+  it('短文本和独立链接可分别放行，阈值按段而不是行内节点计数', async () => {
+    document.body.innerHTML = '<article><p id="single">Settings</p><p id="link"><a href="/docs">Read the full documentation here</a></p>'
+      + '<p id="split"><span>They </span><a href="/music">record</a><strong> music.</strong></p></article>';
+    const v = visual({}, s => { s.scope.skipShortBlocks = false; });
+    await vi.waitFor(() => expect(document.querySelector('#single [data-pos]')).not.toBeNull());
+    expect(document.querySelector('#link hnw-read')).toBeNull();
+    const settings = createDefaultReadingSettings();
+    settings.enabled = true; settings.syntax.enabled = true; settings.scope.minWords = 3; settings.scope.skipStandaloneLinks = false;
+    v.update(settings);
+    await vi.waitFor(() => expect(document.querySelector('#link [data-pos]')).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelectorAll('#split [data-pos]')).toHaveLength(3));
+    expect(document.querySelector('#single hnw-read')).toBeNull();
+  });
+
+  it('标题与表格过滤可切换，缩短动态正文时撤掉旧标记', async () => {
+    document.body.innerHTML = '<article><h2>They record music.</h2><table><tbody><tr><td>They record music.</td></tr></tbody></table><p>They record music.</p></article>';
+    const v = visual({}, s => { s.scope.skipHeadings = true; s.scope.skipTables = true; });
+    await vi.waitFor(() => expect(document.querySelector('p [data-pos]')).not.toBeNull());
+    expect(document.querySelector('h2 hnw-read,td hnw-read')).toBeNull();
+    const settings = createDefaultReadingSettings(); settings.enabled = true; settings.syntax.enabled = true;
+    v.update(settings);
+    await vi.waitFor(() => expect(document.querySelector('td [data-pos]')).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('h2 [data-pos]')).not.toBeNull());
+    const paragraph = document.querySelector('p')!;
+    paragraph.textContent = 'Settings';
+    await flush();
+    expect(paragraph.querySelector('hnw-read')).toBeNull();
+    expect(paragraph.textContent).toBe('Settings');
+  });
+
+  it('范围过滤不关闭孤立单词的生词本高亮', async () => {
+    document.body.innerHTML = '<p id="isolated">record</p><p>They record music with friends.</p>';
+    engine();
+    const v = visual();
+    await vi.waitFor(() => expect(document.querySelector('#isolated hnw-mark')).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('p:nth-child(2) [data-pos]')).not.toBeNull());
+    expect(document.querySelector('#isolated hnw-read,#isolated [data-hnw-reading-word]')).toBeNull();
+    v.stop();
+    expect(document.querySelector('#isolated hnw-mark')).not.toBeNull();
+    expect(document.getElementById('isolated')!.textContent).toBe('record');
+  });
+
+  it.each([true, false])('按浏览器能力启用内层滚动容器四向预读，并保持真实可见观察与原文还原：%s', async supported => {
     type Callback = (entries: Array<Partial<IntersectionObserverEntry>>) => void;
     let nearby!: Callback;
     const observers: Array<IntersectionObserverInit & { scrollMargin?: string } | undefined> = [];
@@ -84,8 +235,8 @@ describe('ReadingVisual', () => {
     const before = cell.textContent;
     const v = visual();
     await vi.waitFor(() => expect(observed.has(cell)).toBe(true));
-    expect(observers[0]?.rootMargin).toBe('1000px 1600px');
-    expect(observers[0]?.scrollMargin).toBe(supported ? '0px 800px' : undefined);
+    expect(observers[0]?.rootMargin).toBe('1600px 1600px');
+    expect(observers[0]?.scrollMargin).toBe(supported ? '1200px 800px' : undefined);
     // 第二个 observer 始终测量真实可见区，不把水平预读误当可见优先级。
     expect(observers[1]).toBeUndefined();
     nearby([{ target: cell, isIntersecting: true }]);
@@ -422,7 +573,7 @@ describe('ReadingVisual', () => {
     vi.stubGlobal('IntersectionObserver', class {
       constructor(callback: typeof intersect, options?: IntersectionObserverInit) {
         if (options?.rootMargin) {
-          expect(options.rootMargin).toBe('1000px 1600px');
+          expect(options.rootMargin).toBe('1600px 1600px');
           intersect = callback;
         }
       }
@@ -450,7 +601,7 @@ describe('ReadingVisual', () => {
     expect(document.querySelector('hnw-read')).toBeNull();
     expect(document.body.textContent).toBe(before);
   });
-  it('连续滚动期间真实可见段落也暂停写入，停止后恢复标注', async () => {
+  it('有视口观察时连续滚动仍按批次补齐新内容，不等停稳才标注', async () => {
     type Callback = (entries: Array<Partial<IntersectionObserverEntry>>) => void;
     let nearby!: Callback;
     let visible!: Callback;
@@ -471,9 +622,7 @@ describe('ReadingVisual', () => {
     for (let i = 0; i < 4; i++) {
       window.dispatchEvent(new Event('scroll'));
       await new Promise(resolve => setTimeout(resolve, 30));
-      expect(p.querySelector('[data-pos]')).toBeNull();
     }
-    await vi.waitFor(() => expect(p.querySelector('[data-pos]')).not.toBeNull());
     expect(p.querySelector('[data-pos]')).not.toBeNull();
     v.stop();
   });

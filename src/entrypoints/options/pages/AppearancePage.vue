@@ -30,6 +30,7 @@ import ColorRow from '../components/ColorRow.vue';
 import ColorSheet from '../components/ColorSheet.vue';
 import CardTriggerSection from '../sections/CardTriggerSection.vue';
 import LivePreview from '../components/LivePreview.vue';
+import TextScopeFields from '../components/TextScopeFields.vue';
 import PresetCard from '../components/PresetCard.vue';
 import StyleEditor from '../components/StyleEditor.vue';
 import {
@@ -236,6 +237,14 @@ const cardColor = computed({
       展开预览<AppIcon name="down" :size="14" />
     </button>
   </div>
+
+  <SettingsSection id="highlight-scope" title="生词标记范围">
+    <ToggleSwitch v-model="settings.highlightScope.enabled" label="过滤非正文" />
+    <details v-if="settings.highlightScope.enabled" class="advanced">
+      <summary>过滤条件</summary>
+      <TextScopeFields v-model="settings.highlightScope" />
+    </details>
+  </SettingsSection>
 
   <SettingsSection id="presets" title="样式预设" :description="`当前：${currentStyleName(settings)}。点选即生效，可在下方继续微调`">
     <div class="gallery" role="radiogroup" aria-label="组合预设">

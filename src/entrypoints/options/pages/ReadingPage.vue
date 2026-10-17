@@ -11,6 +11,7 @@ import ColorRow from '../components/ColorRow.vue';
 import ReadingPreview from '../components/ReadingPreview.vue';
 import ReadingPresetPicker from '../components/ReadingPresetPicker.vue';
 import ReadingThemePicker from '../components/ReadingThemePicker.vue';
+import TextScopeFields from '../components/TextScopeFields.vue';
 import { useOptions } from '../lib/context';
 import { READING_MARK_ITEMS, readingMarkConfig, updateReadingMark } from '@/core/reading/marking';
 import { READING_MARKING_PRESETS, selectReadingMarkingPreset } from '@/core/reading/presets';
@@ -73,6 +74,10 @@ const markingMode = computed(() => {
     <SettingRow label="生词与阅读样式重叠时" stack>
       <select v-model="reading.wordStylePriority" aria-label="生词与阅读样式优先级"><option value="reading">阅读样式优先，保留译文与查词</option><option value="vocabulary">生词样式优先</option></select>
     </SettingRow>
+  </SettingsSection>
+
+  <SettingsSection id="reading-scope" title="标记范围">
+    <TextScopeFields v-model="reading.scope" />
   </SettingsSection>
 
   <SettingsSection id="reading-syntax" title="词性与语义标记">

@@ -2,6 +2,7 @@ import { analyzeReading, type ReadingToken } from '@/core/reading/analyze';
 import { EMPHASIS_KINDS, type ReadingSettings, type ReadingMarkStyle } from '@/core/reading/settings';
 import { shouldSkipElement } from '@/content/engine/dom';
 import { hasFragments, restoreGroup, ownerTextOf, registerTextDecoration, detachTextDecoration, writeDecoratedText, isDecorationWrite } from '@/content/engine/highlighter';
+import { ignoredReadingRanges, READING_METADATA } from './scope';
 
 // pre 仅允许 shouldSkipElement 已确认的 Medium 响应正文；普通预格式文本和代码仍然排除。
 const STRUCTURED_BLOCKS = 'p,li,blockquote,figcaption,dd,dt,td,th,pre,:is(article,main,[role="main"],.markdown-body,.s-prose) :is(h1,h2,h3,h4,h5,h6),ytd-watch-metadata h1';
@@ -9,17 +10,23 @@ const STRUCTURED_BLOCKS = 'p,li,blockquote,figcaption,dd,dt,td,th,pre,:is(articl
 const VIDEO_BLOCKS = 'ytd-watch-metadata #description yt-attributed-string,ytd-watch-metadata #description yt-formatted-string,ytd-video-secondary-info-renderer #description,ytd-comment-view-model #content-text,ytd-comment-renderer #content-text';
 // 常见文章/讨论区也用 div 分段，仅在语义正文区域发现含实际英文文本的容器。
 const PROSE_BLOCKS = ':is(article,main,[role="main"],[role="article"],.s-prose,.markdown-body,shreddit-comment) :is(div,section),article,main,[role="article"],shreddit-comment';
-const BLOCKS = `${STRUCTURED_BLOCKS},${VIDEO_BLOCKS},${PROSE_BLOCKS}`;
+const BUTTONS = 'button,[role="button"]';
+const NAVIGATION = 'nav,header,footer,aside,[role="navigation"],[role="menu"]';
+// 放行界面文字时，独立控件与导航链接各自作为文本块，避免依赖正文祖先或串联整个菜单。
+const BLOCKS = `${STRUCTURED_BLOCKS},${VIDEO_BLOCKS},${PROSE_BLOCKS},${BUTTONS},${NAVIGATION},${READING_METADATA},:is(${NAVIGATION}) :is(a[href],div,section)`;
 const TAG = 'hnw-read';
-const EXCLUDED = 'nav,header,footer,aside,button,[role="button"],[role="navigation"],[role="menu"],[contenteditable]:not([contenteditable="false"]),[hidden],[aria-hidden="true"],ytd-watch-next-secondary-results-renderer,ytd-rich-grid-renderer';
+const EXCLUDED = '[contenteditable]:not([contenteditable="false"]),[hidden],[aria-hidden="true"],ytd-watch-next-secondary-results-renderer,ytd-rich-grid-renderer';
 const MAX_BLOCK_LENGTH = 6000;
 const MAX_BLOCK_NODES = 800;
 const MAX_PENDING = 32;
 // 四向缓冲兼顾长文上下滚动和宽表格横移；离屏缓存另设上限，避免预读区边界往返反复重建。
-const PREFETCH_MARGIN = '1000px 1600px';
+const PREFETCH_MARGIN = '1600px 1600px';
 const MAX_CACHED_BLOCKS = 64;
 const MAX_CACHED_CHARACTERS = 8000;
 const PREFETCH_SETTLE_MS = 90;
+const SCROLL_RENDER_INTERVAL_MS = 80;
+const MAX_RENDER_BATCH = 8;
+const RENDER_READ_BUDGET_MS = 8;
 // 同一通道由语义强调覆盖词性；不同通道共存，不重置作者已有的字色或装饰。
 const STYLE_CHANNELS = {
   color: 'color', underline: 'line', dotted: 'line', wavy: 'line',
@@ -39,8 +46,10 @@ export class ReadingVisual {
   private timer?: ReturnType<typeof setTimeout>;
   private frame?: number;
   private lastScrollAt = -Infinity;
+  private lastRenderAt = -Infinity;
   private readonly onScroll = () => { this.lastScrollAt = performance.now(); };
   private running = false;
+  private excluded = EXCLUDED;
   private videoTextDocument = false;
   private pending = new Set<Element>();
   private discovery: Array<{ walker: TreeWalker; force: boolean; reset: WeakSet<Element>; parents: WeakSet<Element> }> = [];
@@ -65,9 +74,11 @@ export class ReadingVisual {
   start(): void {
     if (this.running) return;
     this.running = true;
+    this.excluded = [EXCLUDED, ...(this.settings.scope.skipButtons ? [BUTTONS] : []), ...(this.settings.scope.skipNavigation ? [NAVIGATION] : []), ...(this.settings.scope.skipMetadata ? [READING_METADATA] : [])].join(',');
     this.videoTextDocument = /(^|\.)youtube\.com$/i.test(this.root.ownerDocument.location.hostname)
       || !!this.root.querySelector('ytd-watch-metadata,ytd-video-secondary-info-renderer,ytd-comment-view-model,ytd-comment-renderer');
     this.lastScrollAt = -Infinity;
+    this.lastRenderAt = -Infinity;
     this.root.ownerDocument.defaultView?.addEventListener('scroll', this.onScroll, { capture: true, passive: true });
     this.style = this.root.ownerDocument.createElement('style');
     const stroke = { light: 0.25, medium: 0.45, strong: 0.65 }[this.settings.bionic.intensity];
@@ -80,8 +91,8 @@ export class ReadingVisual {
     const IO = this.root.ownerDocument.defaultView?.IntersectionObserver;
     const prefetchOptions: IntersectionObserverInit & { scrollMargin?: string } = { rootMargin: PREFETCH_MARGIN };
     // rootMargin 不会穿透中间滚动容器的裁剪；支持 scrollMargin 时为宽表格预读左右邻列。
-    // 仅扩水平裁剪，避免同时放大文章的纵向预渲染范围；旧浏览器沿用视口预读和往返缓存。
-    if (IO && 'scrollMargin' in IO.prototype) prefetchOptions.scrollMargin = '0px 800px';
+    // 内嵌长表格也会纵向裁剪，四向预读才能在进入可见区之前完成标记；旧浏览器沿用视口预读和往返缓存。
+    if (IO && 'scrollMargin' in IO.prototype) prefetchOptions.scrollMargin = '1200px 800px';
     if (IO) this.intersections = new IO((entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting) {
@@ -217,7 +228,7 @@ export class ReadingVisual {
         if (node.nodeType === Node.TEXT_NODE) return NodeFilter.FILTER_ACCEPT;
         const el = node as Element;
         if (el.matches('hnw-mark,hnw-w')) return NodeFilter.FILTER_SKIP;
-        if (el.tagName.startsWith('HNW-') || el.matches(EXCLUDED) || shouldSkipElement(el)) return NodeFilter.FILTER_REJECT;
+        if (el.tagName.startsWith('HNW-') || el.matches(this.excluded) || shouldSkipElement(el)) return NodeFilter.FILTER_REJECT;
         // 接受普通元素，让发现阶段也能按节点数/时间主动让出线程。
         return NodeFilter.FILTER_ACCEPT;
       },
@@ -249,7 +260,7 @@ export class ReadingVisual {
       if (!this.intersections) this.enqueueBlock(block);
       return;
     }
-    if (block.closest(EXCLUDED) || shouldSkipElement(block)) return;
+    if (block.closest(this.excluded) || shouldSkipElement(block)) return;
     if (force) this.analyzed.delete(block);
     if (!this.observed.has(block)) {
       this.observed.add(block);
@@ -260,7 +271,7 @@ export class ReadingVisual {
   }
 
   private discover(root: Element, force = false): void {
-    if (root.closest(EXCLUDED)) return;
+    if (root.closest(this.excluded)) return;
     // TreeWalker 不会对根节点调用过滤器，增量扫描必须先检查它和祖先的站点/编辑器排除规则。
     for (let el: Element | null = root; el; el = el.parentElement) {
       if (shouldSkipElement(el)) return;
@@ -311,35 +322,54 @@ export class ReadingVisual {
         else this.enqueueBlock(nearby);
         if (this.pending.size >= MAX_PENDING) break;
       }
-      // 连续滚动期间暂停所有视觉写入；已缓存段落保持样式，停止后优先补齐当前视口。
-      // 可见段落也不例外：滚轮动画期间插入逐词 DOM 会反复触发布局，放大长文滚动长任务。
+      // 连续滚动也需补齐预读区；限制批次频率，并先完成整批读取再写入，避免每段都触发全页重算。
       const settled = performance.now() - this.lastScrollAt >= PREFETCH_SETTLE_MS;
-      let block = settled ? this.pending.values().next().value as Element | undefined : undefined;
+      const canRender = settled || !!this.intersections && performance.now() - this.lastRenderAt >= SCROLL_RENDER_INTERVAL_MS;
+      let block = canRender ? this.pending.values().next().value as Element | undefined : undefined;
       // 预读区内优先补当前视口，再处理上下左右缓冲区。
-      if (settled) {
+      if (canRender) {
         for (const candidate of this.pending) {
           if (this.visible.has(candidate)) { block = candidate; break; }
         }
       }
       if (block) {
-        this.pending.delete(block);
-        if (this.root.contains(block)) {
+        const batch = [block, ...[...this.pending].filter(candidate => candidate !== block && this.visible.has(candidate)),
+          ...[...this.pending].filter(candidate => candidate !== block && !this.visible.has(candidate))].slice(0, MAX_RENDER_BATCH);
+        if (batch.some(candidate => this.root.contains(candidate))) {
           // 取走尚未派发的外部记录，避免 disconnect 丢失同时到达的页面更新。
           const records = this.observer?.takeRecords() ?? [];
           if (records.length) this.handleMutations(records);
           this.observer?.disconnect();
-          this.render(block);
-          this.pendingVocabulary.delete(block);
-          this.analyzed.add(block);
+          for (const candidate of batch) if (this.root.contains(candidate)) this.restore(candidate);
+          // 站点可能用 body:has(...) 等规则；交错读写会让每个单元格都重算同一棵大子树。
+          const writes: Array<(() => void) | undefined> = [];
+          const readStarted = performance.now();
+          for (const candidate of batch) {
+            this.pending.delete(candidate);
+            if (!this.root.contains(candidate)) continue;
+            const write = this.render(candidate, false, true);
+            this.pendingVocabulary.delete(candidate);
+            this.analyzed.add(candidate);
+            writes.push(write);
+            // 短单元格可合批；长段落达到预算后立即让出线程。
+            if (performance.now() - readStarted >= RENDER_READ_BUDGET_MS) break;
+          }
+          for (const write of writes) write?.();
+          this.lastRenderAt = performance.now();
           this.observe();
-        }
+        } else for (const candidate of batch) this.pending.delete(candidate);
       }
       else {
-        const vocabularyBlock = settled ? this.pendingVocabulary.values().next().value as Element | undefined : undefined;
+        const vocabularyBlock = canRender ? this.pendingVocabulary.values().next().value as Element | undefined : undefined;
         if (vocabularyBlock) {
-          this.pendingVocabulary.delete(vocabularyBlock);
           this.observer?.disconnect();
-          if (this.root.contains(vocabularyBlock) && (!this.intersections || this.nearby.has(vocabularyBlock))) this.render(vocabularyBlock, true);
+          const batch = [...this.pendingVocabulary].sort((a, b) => Number(this.visible.has(b)) - Number(this.visible.has(a))).slice(0, MAX_RENDER_BATCH);
+          const writes = batch.map(candidate => {
+            this.pendingVocabulary.delete(candidate);
+            if (this.root.contains(candidate) && (!this.intersections || this.nearby.has(candidate))) return this.render(candidate, true, true);
+          });
+          for (const write of writes) write?.();
+          this.lastRenderAt = performance.now();
           this.observe();
         }
       }
@@ -413,7 +443,7 @@ export class ReadingVisual {
 
   private safe(block: Element): boolean {
     for (let el: Element | null = block; el; el = el.parentElement) {
-      if (el.matches(EXCLUDED) || shouldSkipElement(el)) return false;
+      if (el.matches(this.excluded) || shouldSkipElement(el)) return false;
       const style = el.ownerDocument.defaultView?.getComputedStyle(el);
       if (style?.display === 'none' || style?.visibility === 'hidden' || style?.visibility === 'collapse') return false;
       if (el === this.root) break;
@@ -421,10 +451,15 @@ export class ReadingVisual {
     return true;
   }
 
-  private render(block: Element, wordsOnly = false): void {
-    if (!wordsOnly) this.restore(block);
+  private render(block: Element, wordsOnly = false, deferWrite = false): (() => void) | undefined {
+    if (!wordsOnly && !deferWrite) this.restore(block);
     if (!this.safe(block)) return;
+    const scope = this.settings.scope;
+    if (scope.skipHeadings && block.closest('h1,h2,h3,h4,h5,h6,[role="heading"]')
+      || scope.skipTables && block.closest('table,[role="table"],[role="grid"]')) return;
     const slices: TextSlice[] = [];
+    const lineBreaks: number[] = [];
+    const preservedWhitespace = new WeakMap<Element, boolean>();
     let text = '';
     const walker = block.ownerDocument.createTreeWalker(block, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
       acceptNode: (node) => {
@@ -434,8 +469,10 @@ export class ReadingVisual {
           if (el.matches('hnw-mark,hnw-w')) return NodeFilter.FILTER_SKIP;
           // 自有视觉层的可见性继承正文，不逐词读取计算样式；仅同步生词时尤其重要。
           if (el.localName === TAG) return NodeFilter.FILTER_SKIP;
-          if (el.matches(EXCLUDED) || shouldSkipElement(el)) { text += ' '; return NodeFilter.FILTER_REJECT; }
+          if (el.localName === 'br') { lineBreaks.push(text.length); text += '\n'; return NodeFilter.FILTER_REJECT; }
+          if (el.matches(this.excluded) || shouldSkipElement(el)) { text += ' '; return NodeFilter.FILTER_REJECT; }
           const style = el.ownerDocument.defaultView?.getComputedStyle(el);
+          preservedWhitespace.set(el, /pre|break-spaces/.test(style?.whiteSpace ?? ''));
           if (style?.display === 'none' || style?.visibility === 'hidden' || style?.visibility === 'collapse') { text += ' '; return NodeFilter.FILTER_REJECT; }
           if (el !== block && el.matches(BLOCKS)) return NodeFilter.FILTER_REJECT;
           return NodeFilter.FILTER_ACCEPT;
@@ -449,13 +486,32 @@ export class ReadingVisual {
       if (++visited > MAX_BLOCK_NODES) return;
       if (node.nodeType !== Node.TEXT_NODE) continue;
       const t = node as Text;
+      const parent = t.parentElement!;
+      let preserve = preservedWhitespace.get(parent);
+      if (preserve === undefined) {
+        preserve = /pre|break-spaces/.test(parent.ownerDocument.defaultView?.getComputedStyle(parent).whiteSpace ?? '');
+        preservedWhitespace.set(parent, preserve);
+      }
+      if (preserve) for (const match of t.data.matchAll(/\n/g)) lineBreaks.push(text.length + match.index);
       slices.push({ node: t, start: text.length, end: text.length + t.length, protected: !!t.parentElement?.closest('hnw-mark') });
       text += t.data;
       // 病态的单段/虚拟列表避免 NLP 同步工作无限增长，整段保持原样。
       if (text.length > MAX_BLOCK_LENGTH) return;
     }
     this.blockLengths.set(block, text.length);
-    const tokens = analyzeReading(text, this.settings.syntax.enabled || this.settings.emphasis.properNouns);
+    // 先过滤界面短标签和整块链接，再调用 NLP；行内链接仍保留在完整段落上下文中。
+    if (scope.skipShortBlocks) {
+      let words = 0;
+      for (const _match of text.matchAll(/[A-Za-z]+(?:['’][A-Za-z]+)?/g)) {
+        if (++words >= scope.minWords) break;
+      }
+      if (words < scope.minWords) return;
+    }
+    if (scope.skipStandaloneLinks && slices.some(slice => /[A-Za-z]/.test(slice.node.data))
+      && slices.every(slice => !/[A-Za-z0-9]/.test(slice.node.data) || slice.node.parentElement?.closest('a[href]'))) return;
+    const ignored = ignoredReadingRanges(text, lineBreaks, slices.map(slice => ({ start: slice.start, end: slice.end, link: !!slice.node.parentElement?.closest('a[href]') })), scope);
+    const tokens = analyzeReading(text, this.settings.syntax.enabled || this.settings.emphasis.properNouns)
+      .filter(token => !ignored.some(range => token.start < range.end && token.end > range.start));
     const bionicTokens = new Set<ReadingToken>();
     let englishIndex = 0;
     for (const token of tokens) {
@@ -498,55 +554,60 @@ export class ReadingVisual {
         }
       }
     }
-    const wordStyles = this.decoratedWords.get(block) ?? new Map<HTMLElement, WordSnapshot>();
-    for (const [word] of wordStyles) if (!word.isConnected) wordStyles.delete(word);
-    for (const slice of slices) {
-      if (slice.protected) {
-        if (this.settings.wordStylePriority !== 'reading') continue;
-        const word = slice.node.parentElement?.closest<HTMLElement>('hnw-w');
-        const token = tokensBySlice.get(slice)?.find(token => token.start <= slice.start && token.end >= slice.end);
-        if (!word || !token || !slice.node.length) continue;
-        const decorated = this.decorate(token, slice.node.data, slice.start, wrappedTokens.has(token), bionicTokens.has(token));
-        if (!decorated) continue;
-        if (!wordStyles.has(word)) wordStyles.set(word, { style: word.getAttribute('style'), attributes: WORD_ATTRIBUTES.map(name => word.getAttribute(name)) });
-        // 覆盖生词的视觉通道，保留 DOM、事件、译文和词条属性；不在生词内部插入包装。
-        word.style.cssText = 'color:inherit!important;background:transparent!important;box-shadow:none!important;outline:none!important;text-decoration:none!important;font-weight:inherit!important;font-style:inherit!important;-webkit-text-stroke:inherit!important';
-        for (const property of Array.from(decorated.style)) word.style.setProperty(property, decorated.style.getPropertyValue(property), 'important');
-        for (const name of WORD_ATTRIBUTES) word.removeAttribute(name);
-        for (const name of WORD_ATTRIBUTES.slice(0, -1)) if (decorated.hasAttribute(name)) word.setAttribute(name, decorated.getAttribute(name)!);
-        word.setAttribute('data-hnw-reading-word', '');
-        continue;
+    const write = () => {
+      const wordStyles = this.decoratedWords.get(block) ?? new Map<HTMLElement, WordSnapshot>();
+      for (const [word] of wordStyles) if (!word.isConnected) wordStyles.delete(word);
+      for (const slice of slices) {
+        if (slice.protected) {
+          if (this.settings.wordStylePriority !== 'reading') continue;
+          const word = slice.node.parentElement?.closest<HTMLElement>('hnw-w');
+          const token = tokensBySlice.get(slice)?.find(token => token.start <= slice.start && token.end >= slice.end);
+          if (!word || !token || !slice.node.length) continue;
+          const decorated = this.decorate(token, slice.node.data, slice.start, wrappedTokens.has(token), bionicTokens.has(token));
+          if (!decorated) continue;
+          if (!wordStyles.has(word)) wordStyles.set(word, { style: word.getAttribute('style'), attributes: WORD_ATTRIBUTES.map(name => word.getAttribute(name)) });
+          // 覆盖生词的视觉通道，保留 DOM、事件、译文和词条属性；不在生词内部插入包装。
+          // 阅读样式须一次呈现；沿用生词背景过渡会让预读单元格持续触发动画和样式重算。
+          word.style.cssText = 'transition:none!important;color:inherit!important;background:transparent!important;box-shadow:none!important;outline:none!important;text-decoration:none!important;font-weight:inherit!important;font-style:inherit!important;-webkit-text-stroke:inherit!important';
+          for (const property of Array.from(decorated.style)) word.style.setProperty(property, decorated.style.getPropertyValue(property), 'important');
+          for (const name of WORD_ATTRIBUTES) word.removeAttribute(name);
+          for (const name of WORD_ATTRIBUTES.slice(0, -1)) if (decorated.hasAttribute(name)) word.setAttribute(name, decorated.getAttribute(name)!);
+          word.setAttribute('data-hnw-reading-word', '');
+          continue;
+        }
+        if (wordsOnly) continue;
+        const applicable = tokensBySlice.get(slice)!;
+        if (!applicable.length) continue;
+        const fragment = block.ownerDocument.createDocumentFragment();
+        let cursor = 0;
+        for (const token of applicable) {
+          const start = Math.max(token.start, slice.start) - slice.start;
+          const end = Math.min(token.end, slice.end) - slice.start;
+          fragment.append(slice.node.data.slice(cursor, start));
+          const value = slice.node.data.slice(start, end);
+          const span = this.decorate(token, value, slice.start + start, wrappedTokens.has(token), bionicTokens.has(token));
+          fragment.append(span ?? value);
+          cursor = end;
+        }
+        fragment.append(slice.node.data.slice(cursor));
+        if (!fragment.querySelector(TAG)) continue;
+        // 原 Text 永远留在原位，页面框架仍可改写/删除其持有的节点。
+        const wrapper = block.ownerDocument.createElement(TAG);
+        wrapper.dataset.group = '';
+        wrapper.append(fragment);
+        writeDecoratedText(slice.node, '');
+        slice.node.after(wrapper);
+        this.groups.set(slice.node, wrapper);
+        let entries = this.groupsByBlock.get(block);
+        if (!entries) { entries = new Set(); this.groupsByBlock.set(block, entries); }
+        entries.add(slice.node);
+        this.blockOf.set(slice.node, block);
+        registerTextDecoration(slice.node, wrapper);
       }
-      if (wordsOnly) continue;
-      const applicable = tokensBySlice.get(slice)!;
-      if (!applicable.length) continue;
-      const fragment = block.ownerDocument.createDocumentFragment();
-      let cursor = 0;
-      for (const token of applicable) {
-        const start = Math.max(token.start, slice.start) - slice.start;
-        const end = Math.min(token.end, slice.end) - slice.start;
-        fragment.append(slice.node.data.slice(cursor, start));
-        const value = slice.node.data.slice(start, end);
-        const span = this.decorate(token, value, slice.start + start, wrappedTokens.has(token), bionicTokens.has(token));
-        fragment.append(span ?? value);
-        cursor = end;
-      }
-      fragment.append(slice.node.data.slice(cursor));
-      if (!fragment.querySelector(TAG)) continue;
-      // 原 Text 永远留在原位，页面框架仍可改写/删除其持有的节点。
-      const wrapper = block.ownerDocument.createElement(TAG);
-      wrapper.dataset.group = '';
-      wrapper.append(fragment);
-      writeDecoratedText(slice.node, '');
-      slice.node.after(wrapper);
-      this.groups.set(slice.node, wrapper);
-      let entries = this.groupsByBlock.get(block);
-      if (!entries) { entries = new Set(); this.groupsByBlock.set(block, entries); }
-      entries.add(slice.node);
-      this.blockOf.set(slice.node, block);
-      registerTextDecoration(slice.node, wrapper);
-    }
-    if (wordStyles.size) this.decoratedWords.set(block, wordStyles);
+      if (wordStyles.size) this.decoratedWords.set(block, wordStyles);
+    };
+    if (deferWrite) return write;
+    write();
   }
 
   private decorate(token: ReadingToken, value: string, offset: number, wrapped: boolean, emphasizePrefix: boolean): HTMLElement | undefined {

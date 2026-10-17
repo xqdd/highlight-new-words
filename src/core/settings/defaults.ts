@@ -34,6 +34,7 @@ export function createDefaultSettings(): Settings {
   return {
     schemaVersion: SETTINGS_SCHEMA_VERSION,
     reading: createDefaultReadingSettings(),
+    highlightScope: { ...createDefaultReadingSettings().scope, enabled: false },
     readingPresets: createReadingPresetState(),
     updatedAt: 0,
     enabled: true,

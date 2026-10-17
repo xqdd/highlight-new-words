@@ -223,6 +223,8 @@ export type TtsSource = 'system' | 'youdao-us' | 'youdao-uk' | 'eudic-us' | 'eud
 export interface Settings {
   /** 本地阅读辅助：词性线索、词首加粗、语义强调和短语释义。 */
   reading: ReadingSettings;
+  /** 生词范围独立保存；总开关默认关闭，避免改变原有全页匹配习惯。 */
+  highlightScope: ReadingSettings['scope'] & { enabled: boolean };
   /** 预设选择与自定义快照，不参与正文渲染配置。 */
   readingPresets: ReadingPresetState;
   schemaVersion: number;

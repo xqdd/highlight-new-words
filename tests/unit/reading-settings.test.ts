@@ -8,6 +8,31 @@ import { READING_MARK_ITEMS, readingMarkConfig, updateReadingMark } from '@/core
 import { mergeSyncedSettings, pickSyncedSettings } from '@/core/sync/merge';
 
 describe('阅读设置', () => {
+  it('标记范围有默认值，非法阈值和开关安全归一化', () => {
+    expect(normalizeReadingSettings({}).scope).toEqual({ skipShortBlocks: true, minWords: 3, skipStandaloneLinks: true, skipHeadings: false, skipTables: false, skipButtons: true, skipNavigation: true, skipMetadata: true });
+    expect(normalizeReadingSettings({ scope: { skipShortBlocks: false, minWords: 8.6, skipStandaloneLinks: false, skipHeadings: true, skipTables: true } }).scope)
+      .toEqual({ skipShortBlocks: false, minWords: 9, skipStandaloneLinks: false, skipHeadings: true, skipTables: true, skipButtons: true, skipNavigation: true, skipMetadata: true });
+    expect(normalizeReadingSettings({ scope: { skipButtons: false, skipNavigation: false } }).scope).toMatchObject({ skipButtons: false, skipNavigation: false });
+    expect(normalizeReadingSettings({ scope: { skipButtons: 'false', skipNavigation: 0 } }).scope).toMatchObject({ skipButtons: true, skipNavigation: true });
+    for (const [value, expected] of [[NaN, 3], [Infinity, 3], ['5', 3], [-1, 2], [100, 50]] as const) {
+      expect(normalizeReadingSettings({ scope: { minWords: value, skipShortBlocks: 'false' } }).scope).toMatchObject({ minWords: expected, skipShortBlocks: true });
+    }
+  });
+
+  it('范围自定义可持久化并在全局切换后恢复，切换标记主题不重置范围', () => {
+    let host = createDefaultSettings();
+    const before = normalizeReadingSettings(host.reading);
+    host.reading.scope = { skipShortBlocks: false, minWords: 12, skipStandaloneLinks: false, skipHeadings: true, skipTables: true, skipButtons: false, skipNavigation: false, skipMetadata: false };
+    const custom = { ...host.reading.scope };
+    rememberReadingEdits(host, before);
+    selectReadingMarkingPreset(host, 'ocean');
+    expect(host.reading.scope).toEqual(custom);
+    selectGlobalReadingPreset(host, 'bionic');
+    host = normalizeSettings(JSON.parse(JSON.stringify(host)));
+    selectGlobalReadingPreset(host, 'custom');
+    expect(host.reading.scope).toEqual(custom);
+  });
+
   it('统一主题覆盖十五类条目，单项配置与自定义在全局切换、序列化后保留', () => {
     let host = reactive(createDefaultSettings());
     expect(READING_MARK_ITEMS).toHaveLength(15);

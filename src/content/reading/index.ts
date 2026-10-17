@@ -15,7 +15,7 @@ export function createReadingTools(doc: Document) {
       if (next === signature) return;
       signature = next;
       // 短语开关不影响词性与词首效果，避免无关设置重建正文标记。
-      const nextVisual = JSON.stringify([settings.enabled, settings.wordStylePriority, settings.bionic, settings.syntax, settings.emphasis]);
+      const nextVisual = JSON.stringify([settings.enabled, settings.wordStylePriority, settings.scope, settings.bionic, settings.syntax, settings.emphasis]);
       if (isReadingVisualActive(settings)) {
         if (!visual) {
           visual = new ReadingVisual(doc.body, settings);

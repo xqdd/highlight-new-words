@@ -219,6 +219,11 @@ export function normalizeSettings(raw: unknown): Settings {
   if (readingSites && typeof readingSites === 'object' && !Array.isArray(readingSites)) merged.readingSites = normalizeSiteRules(readingSites);
   else delete merged.readingSites;
   merged.reading = normalizeReadingSettings((raw as Record<string, unknown>).reading);
+  const highlightScope = (raw as Record<string, unknown>).highlightScope;
+  merged.highlightScope = {
+    ...normalizeReadingSettings({ scope: highlightScope }).scope,
+    enabled: !!highlightScope && typeof highlightScope === 'object' && (highlightScope as Record<string, unknown>).enabled === true,
+  };
   merged.readingPresets = normalizeReadingPresetState((raw as Record<string, unknown>).readingPresets, merged.reading);
   // 悬停弹卡延迟只允许固定档位：被写坏或来自未来版本的值按默认处理（缺省时 deepMerge 已补齐）
   if (!CARD_HOVER_DELAYS.includes(merged.card.hoverDelay)) merged.card.hoverDelay = defaults.card.hoverDelay;

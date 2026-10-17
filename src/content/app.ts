@@ -222,6 +222,7 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
     ensureCard();
     if (engine) {
       engine.setCode(settings.code);
+      engine.setScope(settings.highlightScope, false);
       engine.rebuild(matcher, dictionary);
       syncReadingTools();
       return;
@@ -234,6 +235,7 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
       translationBlur: !!settings.inlineTranslation.blur,
       glossOncePerParagraph: settings.inlineTranslation.oncePerParagraph !== false,
       code: settings.code,
+      highlightScope: settings.highlightScope,
       onLemmasChanged: (lemmas) => void sendToBackground('reportPageWords', { lemmas }).catch(() => {}),
     });
     engine.start();
@@ -308,6 +310,12 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
       if (pageSettingsChanged) extras.settingsChanged();
     }
     const wasActive = prev.enabled && !isSiteDisabled(prev, location.href);
+    const highlightScopeChanged = JSON.stringify(prev.highlightScope) !== JSON.stringify(settings.highlightScope);
+    if (highlightScopeChanged) {
+      // 先撤阅读包装再重扫生词，防止旧包装还原时清掉刚创建的生词分组。
+      readingTools?.stop();
+      readingTools = undefined;
+    }
     syncReadingTools();
     if (!active()) {
       if (wasActive) stopEngine();
@@ -341,6 +349,7 @@ export async function startContentApp(appOpts: ContentAppOptions = {}): Promise<
       if (onlyShrinks) engine.refreshMatches(matcher, dictionary);
       else engine.rebuild(matcher, dictionary);
     }
+    if (highlightScopeChanged) engine.setScope(settings.highlightScope);
     applyPageStyle(doc, settings);
     card?.setStyle(resolveCardStyle(settings));
     engine?.setInlineTranslation(settings.inlineTranslation.mode, !!settings.inlineTranslation.blur, settings.inlineTranslation.oncePerParagraph !== false);

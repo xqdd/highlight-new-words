@@ -2,7 +2,7 @@ import { isRubyMode } from '@/core/settings/inline-translation-labels';
 import { collocationShort } from '@/core/dict/collocation';
 import type { Dictionary } from '@/core/dict/types';
 import type { MatchResult, WordMatcher } from '@/core/match/matcher';
-import type { CodeBlockSettings, InlineTranslationMode } from '@/core/settings/schema';
+import type { CodeBlockSettings, InlineTranslationMode, Settings } from '@/core/settings/schema';
 import { isLightText } from './color';
 import {
   ATTR_CODE,
@@ -36,6 +36,7 @@ import {
   type TextHit,
 } from './highlighter';
 import { codeRootOf, createTextWalker, isRootSkipped, isTextCandidate } from './scanner';
+import { HighlightScopeFilter } from './scope';
 
 export interface EngineOptions {
   root: HTMLElement;
@@ -48,6 +49,8 @@ export interface EngineOptions {
   glossOncePerParagraph?: boolean;
   /** 代码块中标注生词（v8）；变化时由调用方 rebuild */
   code?: CodeBlockSettings;
+  /** 生词范围独立于原文阅读；关闭时保持原有全页匹配行为。 */
+  highlightScope?: Settings['highlightScope'];
   /** 已高亮的不同词条集合变化（节流后）回调，用于徽章计数上报 */
   onLemmasChanged?: (lemmas: string[]) => void;
 }
@@ -136,12 +139,14 @@ export class HighlightEngine {
   private recountTimer?: ReturnType<typeof setTimeout>;
   /** 阅读包装通常是新建节点；仅摘下过含 mark 的包装需要恢复译文观察。 */
   private detachedReadingGroups = new WeakSet<Element>();
+  private scopeFilter?: HighlightScopeFilter;
 
   constructor(private opts: EngineOptions) {}
 
   start(): void {
     if (!this.stopped) return;
     this.stopped = false;
+    this.scopeFilter = this.opts.highlightScope?.enabled ? new HighlightScopeFilter(this.opts.highlightScope) : undefined;
     this.observer = new MutationObserver((records) => this.onMutations(records));
     this.observer.observe(this.opts.root, { childList: true, subtree: true, characterData: true });
     this.watchPageTheme();
@@ -227,6 +232,14 @@ export class HighlightEngine {
     this.opts = { ...this.opts, code };
   }
 
+  /** 范围变化重扫生词，沿用词书与词典，不重新加载数据。 */
+  setScope(highlightScope: Settings['highlightScope'], rescan = true): void {
+    this.opts.highlightScope = highlightScope;
+    if (!rescan) return;
+    this.stop();
+    this.start();
+  }
+
   /** 匹配数据（启用词书、用户词书新增词等）变化后：移除全部高亮并按新 matcher 重扫 */
   rebuild(matcher: WordMatcher, dictionary: Dictionary): void {
     this.stop();
@@ -294,6 +307,7 @@ export class HighlightEngine {
 
   /** 还原给定 mark 所在的切分组，并用当前 matcher 重新高亮（同步完成） */
   private redoGroups(marks: Iterable<Element>): void {
+    this.scopeFilter?.invalidate();
     const owners = new Set<Text>();
     for (const m of marks) {
       const o = ownerTextOf(m);
@@ -307,9 +321,14 @@ export class HighlightEngine {
         const hopts = this.highlightOpts(o);
         return { o, hopts, ctx: this.readMarkContext(o.parentElement, !!hopts?.code) };
       });
-      const items = batch.map(({ o, hopts, ctx }) => {
-        this.unobserveMarks(restoreGroup(o));
-        const marks = wrapHits(o, findHits(o, this.matchWord, hopts), (left) => this.processed.add(left), hopts);
+      for (const { o } of batch) this.unobserveMarks(restoreGroup(o));
+      const matched = batch.map(item => {
+        let hits = findHits(item.o, this.matchWord, item.hopts);
+        if (hits.length && this.scopeFilter && !item.hopts?.code) hits = this.scopeFilter.filter(item.o, hits);
+        return { ...item, hits };
+      });
+      const items = matched.map(({ o, hopts, ctx, hits }) => {
+        const marks = wrapHits(o, hits, (left) => this.processed.add(left), hopts);
         newMarks.push(...marks);
         return { marks, ctx };
       });
@@ -324,6 +343,7 @@ export class HighlightEngine {
     // 重新插入文档的、尚未写入译文的 mark（见下方 addedNodes 分支）
     const reattached: HTMLElement[] = [];
     let removedMarks = false;
+    const scopeBlocks = new Set<Element>();
     for (const r of records) {
       if (r.type === 'characterData') {
         const t = r.target as Text;
@@ -337,10 +357,17 @@ export class HighlightEngine {
           continue;
         }
         this.processed.delete(t);
+        const block = this.scopeFilter?.blockOf(t);
+        if (block) scopeBlocks.add(block);
         this.enqueue(t);
         continue;
       }
       for (const n of r.removedNodes) {
+        if (this.scopeFilter && !isInsideOwnNode(r.target) && !ownerTextOf(n)
+          && !(n.nodeType === Node.ELEMENT_NODE && (n as Element).tagName.startsWith('HNW-'))
+          && !(n.nodeType === Node.TEXT_NODE && isDecorationWrite(n as Text))) {
+          const block = this.scopeFilter.blockOf(r.target); if (block) scopeBlocks.add(block);
+        }
         // 原文本节点被页面删除或移动：把片段文字拼回原节点并移除片段，避免残留重复文字
         if (n.nodeType === Node.TEXT_NODE && hasFragments(n as Text)) {
           this.withoutObserving(() => this.unobserveMarks(restoreGroup(n as Text)));
@@ -373,12 +400,37 @@ export class HighlightEngine {
           }
         }
         if (isInsideOwnNode(n) || ownerTextOf(n)) continue;
+        if (this.scopeFilter && !(n.nodeType === Node.ELEMENT_NODE && (n as Element).tagName.startsWith('HNW-'))
+          && !(n.nodeType === Node.TEXT_NODE && isDecorationWrite(n as Text))) {
+          const block = this.scopeFilter.blockOf(r.target); if (block) scopeBlocks.add(block);
+        }
         this.enqueue(n);
       }
     }
     if (reattached.length > 0) void this.fillTranslations(reattached);
     // 阅读包装、普通文字及无关 UI 的撤销不影响徽章，避免滚动阅读时反复扫描整页。
     if (removedMarks) this.scheduleRecount();
+    if (scopeBlocks.size) {
+      // 加字可能让短文本变成正文，删字也可能让整段失去资格；只重扫变化的块，不能只处理新节点。
+      this.withoutObserving(() => {
+        for (const block of scopeBlocks) {
+          if (!block.isConnected) continue;
+          // 嵌套段落各自判断范围；父容器插入评论时不能还原其他整篇正文。
+          const walker = block.ownerDocument.createTreeWalker(block, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+            acceptNode: node => node.nodeType === Node.ELEMENT_NODE
+              ? this.scopeFilter!.blockOf(node) === node ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP
+              : NodeFilter.FILTER_ACCEPT,
+          });
+          const texts: Text[] = [];
+          let node: Node | null; while ((node = walker.nextNode())) texts.push(node as Text);
+          const owners = new Set(texts.map(text => ownerTextOf(text) ?? (hasFragments(text) ? text : null)).filter((text): text is Text => !!text));
+          for (const owner of owners) this.unobserveMarks(restoreGroup(owner));
+          for (const text of [...texts, ...owners]) this.processed.delete(text);
+          this.enqueue(block);
+        }
+      });
+      this.scheduleRecount();
+    }
   }
 
   private enqueue(node: Node): void {
@@ -427,6 +479,7 @@ export class HighlightEngine {
     // 首个切片由 start() 直接调用，此时已登记的空闲回调仍会到来（届时继续处理剩余部分），不能清掉 scheduled
     if (!first) this.scheduled = false;
     if (this.stopped) return;
+    this.scopeFilter?.invalidate();
     const sliceMs = first ? budgetMs : Math.min(Math.max(budgetMs, SLICE_MIN_MS), SLICE_MAX_MS);
     const readDeadline = performance.now() + sliceMs * SLICE_READ_RATIO;
     let newMarks: HTMLElement[] = [];
@@ -445,7 +498,8 @@ export class HighlightEngine {
           continue;
         }
         const hopts = this.highlightOpts(t);
-        const hits = findHits(t, this.matchWord, hopts);
+        let hits = findHits(t, this.matchWord, hopts);
+        if (hits.length && this.scopeFilter && !hopts?.code) hits = this.scopeFilter.filter(t, hits);
         if (hits.length > 0) found.push({ t, hits, hopts });
         // 原节点处理后只剩首个命中词之前的文字，记为已处理；内容被改写时会从集合移除
         this.processed.add(t);
