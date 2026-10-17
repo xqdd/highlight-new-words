@@ -164,7 +164,7 @@ class FloatBallView {
   refresh(s: Settings): void {
     this.overlay.ensureMounted();
     this.overlay.setTheme(s);
-    const active = s.enabled && !isSiteDisabled(s, location.hostname);
+    const active = s.enabled && !isSiteDisabled(s, location.href);
     this.ball.classList.toggle('off', !active);
     this.updateBadge();
     this.menu.refresh();

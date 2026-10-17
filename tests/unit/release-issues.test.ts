@@ -68,9 +68,8 @@ describe('release: 已修复条目的 platform 垫片接入点', () => {
     expect(read('src/entrypoints/options/sections/SourcesSection.vue')).toMatch(/requestDataCollection\(\['authenticationInfo'\]\)/);
   });
 
-  it('FB-2 “更多”页挂载悬浮球与 YouTube 字幕两节', () => {
-    const src = read('src/entrypoints/options/pages/MorePage.vue');
-    expect(src).toMatch(/<FloatBallSection \/>/);
-    expect(src).toMatch(/<YouTubeSection \/>/);
+  it('FB-2 查词页挂载悬浮球，独立分组挂载 YouTube 字幕', () => {
+    expect(read('src/entrypoints/options/pages/LookupPage.vue')).toMatch(/<FloatBallSection \/>/);
+    expect(read('src/entrypoints/options/App.vue')).toMatch(/<YouTubeSection v-else-if="route.page === 'youtube'" \/>/);
   });
 });

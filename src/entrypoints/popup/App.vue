@@ -8,6 +8,7 @@ import { speakOnline } from '@/content/card/speak';
 import { INLINE_MODE_LABELS, INLINE_TRANSLATION_NAME, INLINE_TRANSLATION_SHORT_NAME } from '@/core/settings/inline-translation-labels';
 import type { BookId, InlineTranslationMode } from '@/core/settings/schema';
 import { isSiteDisabled } from '@/core/settings/store';
+import { setSiteEnabled } from '@/core/sites/rules';
 import { SOURCE_PROVIDER_INFOS, getProviderInfo } from '@/core/source/providers';
 import { resolveMarkStyle } from '@/core/theme/resolve';
 import { CUSTOM_THEME_ID } from '@/core/theme/themes';
@@ -48,7 +49,6 @@ import {
   solidSwatch,
   newBookChoices,
   setNewBookEnabled,
-  toggleSiteRule,
   type StatusText,
   type SyncChannel,
   type WordRow,
@@ -87,7 +87,7 @@ watch(
 
 // ---------------- 页面状态 ----------------
 
-const siteDisabled = computed(() => !!settings.value && !!data.hostname.value && isSiteDisabled(settings.value, data.hostname.value));
+const siteDisabled = computed(() => !!settings.value && !!data.url.value && isSiteDisabled(settings.value, data.url.value));
 const pageStatus = computed(() =>
   resolvePageStatus({
     loaded: data.loaded.value && !!settings.value,
@@ -102,7 +102,7 @@ const siteEnabled = computed({
   get: () => !siteDisabled.value,
   set: (on: boolean) => {
     if (!settings.value || !data.hostname.value) return;
-    settings.value.sites.disabled = toggleSiteRule(settings.value.sites.disabled, data.hostname.value, on);
+    settings.value.sites = setSiteEnabled(settings.value.sites, data.url.value ?? data.hostname.value, on);
   },
 });
 const pageStatusText = computed<StatusText>(() => {

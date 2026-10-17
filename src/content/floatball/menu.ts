@@ -9,7 +9,8 @@ import { DefaultWordBookRegistry, createExtensionLoaders } from '@/core/wordbook
 import type { BookMeta } from '@/core/wordbook/types';
 // 与 popup / 选项页共用的纯逻辑：预设切换（含按词书重新着色）、站点规则、词书启用切换、释义截短
 import { applyPreset, presetGroups } from '../../entrypoints/options/lib/appearance';
-import { oneLineMeaning, setNewBookEnabled, solidSwatch, toggleSiteRule } from '../../entrypoints/popup/model';
+import { oneLineMeaning, setNewBookEnabled, solidSwatch } from '../../entrypoints/popup/model';
+import { setSiteEnabled } from '@/core/sites/rules';
 import { h } from '../card/h';
 import { ATTR_BOOK, ATTR_LEMMA, TAG_MARK } from '../engine/dom';
 import { markSurface } from '../engine/highlighter';
@@ -140,7 +141,7 @@ export class FloatMenu {
   private renderTiles(): HTMLElement {
     const doc = this.deps.ctx.doc;
     const s = this.deps.ctx.getSettings();
-    const siteOn = s.enabled && !isSiteDisabled(s, location.hostname);
+    const siteOn = s.enabled && !isSiteDisabled(s, location.href);
     const tile = (icon: FloatIcon, title: string, sub: string, on: boolean, onclick: () => void) =>
       h(doc, 'button', { type: 'button', class: `tile${on ? ' on' : ''}`, 'aria-pressed': String(on), onclick },
         h(doc, 'span', { class: 'ic' }, svgIcon(doc, icon)),
@@ -165,7 +166,7 @@ export class FloatMenu {
       tile('logo', '本站高亮', !s.enabled ? '已全局暂停' : siteOn ? '已开启' : '已关闭', siteOn, () =>
         this.update((n) => {
           if (!n.enabled) n.enabled = true;
-          else n.sites.disabled = toggleSiteRule(n.sites.disabled, location.hostname, !siteOn);
+          n.sites = setSiteEnabled(n.sites, location.href, !siteOn);
         }),
       ),
     );

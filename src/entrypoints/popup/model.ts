@@ -6,6 +6,7 @@ import type { StatusItem, StatusLevel } from '@/core/messaging/protocol';
 import { SOURCE_NOT_CONNECTED_TEXT } from '@/core/source/connect-status';
 import type { BackendSyncStatus, SyncStatus } from '@/core/sync/types';
 import type { BookId, Settings } from '@/core/settings/schema';
+import { setSiteEnabled } from '@/core/sites/rules';
 
 /**
  * popup 的纯逻辑（无 DOM / browser 依赖，便于单测）：页面状态判定、同步状态文案、词书分组与启用切换等。
@@ -103,13 +104,7 @@ export function resolvePageStatus(input: {
  * 关闭：追加精确 hostname。与 isSiteDisabled 的匹配规则保持一致。
  */
 export function toggleSiteRule(disabled: string[], hostname: string, enable: boolean): string[] {
-  const host = hostname.toLowerCase();
-  const matches = (rule: string) => {
-    const r = rule.trim().toLowerCase();
-    return !!r && (host === r || host.endsWith('.' + r));
-  };
-  const rest = disabled.filter((r) => !matches(r));
-  return enable ? rest : [...rest, host];
+  return setSiteEnabled({ mode: 'all', disabled, allowed: [] }, hostname, enable).disabled;
 }
 
 // ---------------- 词书 ----------------

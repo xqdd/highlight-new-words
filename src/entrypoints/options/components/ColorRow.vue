@@ -18,6 +18,15 @@ const parsed = computed(() => (model.value ? parseColor(model.value) : null));
 const hex = computed(() => parsed.value?.hex ?? '');
 const isPreset = computed(() => HIGHLIGHT_PALETTE.some((c) => c.hex === hex.value));
 
+/** 按相对亮度选择勾选颜色，白色等浅色自定义也必须能看清选中标记。 */
+function indicatorColor(color: string) {
+  const [r, g, b] = [1, 3, 5].map(offset => {
+    const channel = parseInt(color.slice(offset, offset + 2), 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b! > 0.179 ? '#000000' : '#ffffff';
+}
+
 function pick(c: string) {
   const a = parsed.value?.alpha;
   model.value = props.alpha ? formatHexAlpha(c, a !== undefined && a < 1 ? a : props.defaultAlpha) : c;
@@ -35,7 +44,7 @@ const sheetColor = computed({ get: () => model.value || formatHexAlpha('#ff7008'
       type="button"
       role="radio"
       class="sw"
-      :style="{ '--c': c.hex }"
+      :style="{ '--c': c.hex, color: indicatorColor(c.hex) }"
       :aria-checked="hex === c.hex"
       :aria-label="c.name"
       :title="c.name"
@@ -47,12 +56,14 @@ const sheetColor = computed({ get: () => model.value || formatHexAlpha('#ff7008'
       type="button"
       class="sw more"
       :class="{ on: !!model && !isPreset }"
-      :style="{ '--c': hex || '#ff7008' }"
+      :style="{ '--c': hex || '#ff7008', color: indicatorColor(hex || '#ff7008') }"
+      :aria-pressed="!!model && !isPreset"
+      aria-haspopup="dialog"
       :aria-label="label + '：自定义颜色'"
       title="自定义颜色"
       @click="sheetOpen = true"
     >
-      <AppIcon name="plus" :size="14" />
+      <AppIcon :name="!!model && !isPreset ? 'check' : 'plus'" :size="14" />
     </button>
     <ColorSheet v-if="sheetOpen" v-model:open="sheetOpen" v-model:color="sheetColor" :title="label" :alpha="alpha" />
   </div>
@@ -66,5 +77,5 @@ const sheetColor = computed({ get: () => model.value || formatHexAlpha('#ff7008'
 .sw.none { background: repeating-linear-gradient(45deg, var(--surface) 0 4px, var(--border) 4px 6px); border: 1px solid var(--border); --c: var(--text-2); }
 .sw.more { background: conic-gradient(#f43f5e, #f59e0b, #84cc16, #10b981, #0ea5e9, #6366f1, #d946ef, #f43f5e); }
 .sw.more.on { background: var(--c); }
-@media (max-width: 560px) { .color-row { grid-template-columns: repeat(7, 1fr); gap: 10px; } .sw { min-height: 34px; } }
+@media (max-width: 560px) { .color-row { grid-template-columns: repeat(auto-fit, minmax(34px, 1fr)); gap: 10px; } .sw { min-height: 34px; } }
 </style>
